@@ -141,7 +141,6 @@ function EquityView() {
   const [players, setPlayers] = useState(() => defaultPlayers());
   const [boardCards, setBoardCards] = useState(() => boardTemplate());
   const [pickerTarget, setPickerTarget] = useState(null);
-  const [iterations, setIterations] = useState(4000);
   const [result, setResult] = useState(null);
   const [status, setStatus] = useState('idle');
   const counterRef = useRef(2);
@@ -150,6 +149,8 @@ function EquityView() {
     ...boardCards,
     ...players.flatMap((player) => player.cards)
   ].filter(Boolean)), [boardCards, players]);
+
+  const iterations = 5000;
 
   const openPicker = (target) => {
     const currentValue = target.type === 'board'
@@ -265,11 +266,46 @@ function EquityView() {
         </header>
 
         {result?.status === 'ok' && (
-          <div className="hero-summary">
-            <p>Hero 胜率</p>
-            <strong>{(heroEquity * 100).toFixed(1)}%</strong>
+          <div className="result-stack">
+            <div className="hero-summary">
+              <p>Hero 胜率</p>
+              <strong>{(heroEquity * 100).toFixed(1)}%</strong>
+            </div>
+            <div className="equity-table">
+              {result.players.map((player) => (
+                <div key={player.id}>
+                  <p>{player.label}</p>
+                  <strong>{(player.equity * 100).toFixed(1)}%</strong>
+                </div>
+              ))}
+            </div>
           </div>
         )}
+
+        <div className="board-section">
+          <h4>公共牌</h4>
+          <div className="card-slots">
+            {boardCards.map((card, idx) => (
+              <button
+                key={`board-${idx}`}
+                type="button"
+                className="card-slot"
+                onClick={() => openPicker({ type: 'board', index: idx })}
+              >
+                {formatCard(card)}
+                {card && (
+                  <span
+                    className="slot-clear"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearSlot({ type: 'board', index: idx });
+                    }}
+                  >×</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="players-grid">
           {players.map((player, idx) => (
@@ -308,42 +344,6 @@ function EquityView() {
           )}
         </div>
 
-        <div className="board-section">
-          <h4>公共牌</h4>
-          <div className="card-slots">
-            {boardCards.map((card, idx) => (
-              <button
-                key={`board-${idx}`}
-                type="button"
-                className="card-slot"
-                onClick={() => openPicker({ type: 'board', index: idx })}
-              >
-                {formatCard(card)}
-                {card && (
-                  <span
-                    className="slot-clear"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      clearSlot({ type: 'board', index: idx });
-                    }}
-                  >×</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="equity-controls">
-          <label>
-            <span>模拟次数</span>
-            <select value={iterations} onChange={(e) => setIterations(Number(e.target.value))}>
-              <option value={2000}>2000 次</option>
-              <option value={4000}>4000 次</option>
-              <option value={8000}>8000 次</option>
-            </select>
-          </label>
-        </div>
-
         <div className="equity-actions">
           <button type="button" className="primary" onClick={runSimulation}>开始计算</button>
           <button type="button" className="secondary" onClick={resetAll}>清空</button>
@@ -352,20 +352,10 @@ function EquityView() {
             {status === 'need-cards' && '请先为所有玩家填好两张手牌'}
             {status === 'need-players' && '至少需要 2 位玩家'}
             {status === 'invalid' && '组合无效，请检查选择'}
-            {status === 'done' && result && `已完成 ${result.iterations.toLocaleString()} 次模拟`}
+            {status === 'done' && '已完成 5,000 次模拟'}
           </span>
         </div>
 
-        {result?.status === 'ok' && (
-          <div className="equity-table">
-            {result.players.map((player) => (
-              <div key={player.id}>
-                <p>{player.label}</p>
-                <strong>{(player.equity * 100).toFixed(1)}%</strong>
-              </div>
-            ))}
-          </div>
-        )}
       </section>
 
       <CardPickerModal
