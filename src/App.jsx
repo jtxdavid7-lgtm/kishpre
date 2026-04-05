@@ -19,21 +19,25 @@ const featureCards = [
   {
     label: 'Range Lab',
     title: '实时范围实验室',
-    desc: '查看基准 GTO 范围并按照对手画像自动调整，定位 exploit 机会。'
+    desc: '查看基准 GTO 范围并按照对手画像自动调整。',
+    action: {
+      label: '进入',
+      handler: () => window.location.assign('?tool=range')
+    }
   },
   {
     label: 'Reports',
     title: 'Hand History 工具',
-    desc: '整理关键牌局、输出复盘报告。即将上线。'
+    desc: '整理关键牌局并生成复盘报告（开发中）。'
   },
   {
     label: 'Community',
     title: 'Kish 俱乐部',
-    desc: '和常驻成员一起讨论高压局面，分享策略灵感。'
+    desc: '和常驻成员讨论策略、分享灵感。'
   }
 ];
 
-function App() {
+function RangeLabView() {
   const [sceneKey, setSceneKey] = useState(sceneOptions[0]?.value ?? 'BTN_open_100bb');
   const [profileKey, setProfileKey] = useState(profileOptions[0]?.value ?? 'tag');
   const [viewMode, setViewMode] = useState('adjusted');
@@ -48,53 +52,18 @@ function App() {
     ? payload?.matrices?.adjusted
     : payload?.matrices?.base;
 
-  const scrollToRange = () => {
-    document.querySelector('#range-lab')?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   return (
     <div className="site">
       <nav className="top-nav">
-        <div className="brand">KISHPOKER</div>
-        <ul>
-          <li><a href="#range-lab">Range Lab</a></li>
-          <li><a href="https://github.com/jtxdavid7-lgtm/kishpre" target="_blank" rel="noreferrer">GitHub</a></li>
-        </ul>
+        <div className="brand">KISHPOKER · Range Lab</div>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => window.location.assign('/')}
+        >返回主页</button>
       </nav>
 
-      <header className="hero">
-        <div>
-          <p className="eyebrow">欢迎来到</p>
-          <h1>kishpoker</h1>
-          <p>一个围绕精确决策打造的扑克实验室：从 preflop 范围、对手画像到牌局复盘，所有工具都汇聚在同一个主页。</p>
-        </div>
-        <div className="cta-row">
-          <button type="button" className="primary" onClick={scrollToRange}>打开范围实验室</button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => window.open('https://www.kishpoker.cn', '_blank')}
-          >访问线上站点</button>
-        </div>
-      </header>
-
-      <section>
-        <div className="section-title">
-          <h2>工具入口</h2>
-          <span className="subtext">持续扩展中</span>
-        </div>
-        <div className="feature-grid">
-          {featureCards.map((feature) => (
-            <article key={feature.label} className="feature-card">
-              <span>{feature.label}</span>
-              <h3>{feature.title}</h3>
-              <p>{feature.desc}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section id="range-lab" className="range-panel">
+      <section className="range-panel" style={{ marginTop: 0 }}>
         <header>
           <p className="eyebrow">GG Zoom · 100bb</p>
           <h2>Preflop Range Lab</h2>
@@ -175,6 +144,67 @@ function App() {
       </section>
     </div>
   );
+}
+
+function HomeView() {
+  const openRange = () => window.location.assign('?tool=range');
+
+  return (
+    <div className="site">
+      <nav className="top-nav">
+        <div className="brand">KISHPOKER</div>
+        <ul>
+          <li><a href="?tool=range">Range Lab</a></li>
+          <li><a href="https://github.com/jtxdavid7-lgtm/kishpre" target="_blank" rel="noreferrer">GitHub</a></li>
+        </ul>
+      </nav>
+
+      <header className="hero">
+        <div>
+          <p className="eyebrow">欢迎来到</p>
+          <h1>kishpoker</h1>
+          <p>一个围绕精确决策打造的扑克实验室：范围工具、复盘报告、社群入口都会在这里聚合。</p>
+        </div>
+        <div className="cta-row">
+          <button type="button" className="primary" onClick={openRange}>打开范围实验室</button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => window.open('https://www.kishpoker.cn', '_blank')}
+          >访问线上站点</button>
+        </div>
+      </header>
+
+      <section>
+        <div className="section-title">
+          <h2>工具入口</h2>
+          <span className="subtext">点击打开对应模块</span>
+        </div>
+        <div className="feature-grid">
+          {featureCards.map((feature) => (
+            <article key={feature.label} className="feature-card">
+              <span>{feature.label}</span>
+              <h3>{feature.title}</h3>
+              <p>{feature.desc}</p>
+              {feature.action && (
+                <button type="button" className="card-link" onClick={feature.action.handler}>
+                  {feature.action.label}
+                </button>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function App() {
+  const search = typeof window !== 'undefined' ? window.location.search : '';
+  const params = new URLSearchParams(search);
+  const currentView = params.get('tool') === 'range' ? 'range' : 'home';
+
+  return currentView === 'range' ? <RangeLabView /> : <HomeView />;
 }
 
 export default App;
