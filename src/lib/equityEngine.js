@@ -9,77 +9,63 @@ function getDeck(excluded) {
   return FULL_DECK.filter((card) => !blocked.has(card));
 }
 
-function drawCards(deck, count, startIndex) {
-  return deck.slice(startIndex, startIndex + count);
+function fisherYates(arr) {
+  const deck = arr.slice();
+  for (let j = deck.length - 1; j > 0; j -= 1) {
+    const k = Math.floor(Math.random() * (j + 1));
+    [deck[j], deck[k]] = [deck[k], deck[j]];
+  }
+  return deck;
 }
 
 export function simulateEquity({
-  heroCards,
+  players,
   boardCards,
-  opponents = 1,
-  iterations = 4000
+  iterations = 5000
 }) {
-  const hero = heroCards.filter(Boolean);
   const board = boardCards.filter(Boolean);
-
-  if (hero.length !== 2) {
-    return { status: 'incomplete' };
+  if (!players || players.length < 2) {
+    return { status: 'need-players' };
   }
 
-  const deck = getDeck([...hero, ...board]);
-  if ((opponents * 2) + (5 - board.length) > deck.length) {
+  const allPlayerCards = players.flatMap((player) => player.cards || []).filter(Boolean);
+  if (players.some((player) => (player.cards?.filter(Boolean).length ?? 0) !== 2)) {
+    return { status: 'need-cards' };
+  }
+
+  const deck = getDeck([...board, ...allPlayerCards]);
+  if (deck.length < (5 - board.length)) {
     return { status: 'invalid' };
   }
 
-  let wins = 0;
-  let ties = 0;
-  let losses = 0;
-  const sample = [];
+  const scores = players.map(() => 0);
 
   for (let i = 0; i < iterations; i += 1) {
-    const shuffled = deck.slice();
-    for (let j = shuffled.length - 1; j > 0; j -= 1) {
-      const k = Math.floor(Math.random() * (j + 1));
-      [shuffled[j], shuffled[k]] = [shuffled[k], shuffled[j]];
-    }
+    const shuffled = fisherYates(deck);
     const drawnBoard = [...board];
     const boardNeeded = 5 - drawnBoard.length;
     if (boardNeeded > 0) {
-      drawnBoard.push(...drawCards(shuffled, boardNeeded, 0));
+      drawnBoard.push(...shuffled.slice(0, boardNeeded));
     }
 
-    const heroHand = Hand.solve([...hero, ...drawnBoard]);
-    const villainHands = [];
-    for (let v = 0; v < opponents; v += 1) {
-      const start = boardNeeded + (v * 2);
-      const villainCards = drawCards(shuffled, 2, start);
-      villainHands.push(Hand.solve([...villainCards, ...drawnBoard]));
-    }
-
-    const winners = Hand.winners([heroHand, ...villainHands]);
-    if (winners.includes(heroHand)) {
-      if (winners.length > 1) ties += 1;
-      else wins += 1;
-    } else {
-      losses += 1;
-    }
-
-    if (sample.length < 3) {
-      sample.push({
-        hero: heroHand.descr,
-        villains: villainHands.map((hand) => hand.descr)
-      });
-    }
+    const solvedHands = players.map((player) => Hand.solve([...player.cards, ...drawnBoard]));
+    const winners = Hand.winners(solvedHands);
+    winners.forEach((winnerHand) => {
+      const idx = solvedHands.findIndex((hand) => hand === winnerHand);
+      if (idx >= 0) {
+        scores[idx] += 1 / winners.length;
+      }
+    });
   }
 
-  const total = wins + ties + losses || 1;
   return {
     status: 'ok',
-    iterations: total,
-    winPct: wins / total,
-    tiePct: ties / total,
-    losePct: losses / total,
-    sample
+    iterations,
+    players: players.map((player, idx) => ({
+      id: player.id,
+      label: player.label,
+      equity: scores[idx] / iterations
+    }))
   };
 }
 

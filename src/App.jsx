@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { RangeMatrix } from './components/RangeMatrix.jsx';
 import { BASE_RANGES } from './data/base';
 import { PROFILES } from './data/profiles';
@@ -17,7 +17,7 @@ const profileOptions = Object.values(PROFILES).map((profile) => ({
 }));
 
 const SUIT_ICON = { s: '♠', h: '♥', d: '♦', c: '♣' };
-const heroTemplate = () => Array(2).fill(null);
+const emptyHand = () => Array(2).fill(null);
 const boardTemplate = () => Array(5).fill(null);
 
 const formatCard = (card) => {
@@ -135,72 +135,96 @@ function RangeLabView() {
 }
 
 function EquityView() {
-  const [heroCards, setHeroCards] = useState(() => heroTemplate());
+  const createPlayer = (id, label) => ({ id, label, cards: emptyHand() });
+  const defaultPlayers = () => [createPlayer('hero', 'Hero'), createPlayer('villain-1', '玩家2')];
+
+  const [players, setPlayers] = useState(() => defaultPlayers());
   const [boardCards, setBoardCards] = useState(() => boardTemplate());
-  const [activeSlot, setActiveSlot] = useState({ section: 'hero', index: 0 });
-  const [opponents, setOpponents] = useState(1);
+  const [pickerTarget, setPickerTarget] = useState(null);
   const [iterations, setIterations] = useState(4000);
   const [result, setResult] = useState(null);
   const [status, setStatus] = useState('idle');
+  const counterRef = useRef(2);
 
-  const takenCards = new Set([...heroCards, ...boardCards].filter(Boolean));
+  const takenCards = useMemo(() => new Set([
+    ...boardCards,
+    ...players.flatMap((player) => player.cards)
+  ].filter(Boolean)), [boardCards, players]);
 
-  const updateSlot = (section, index, value) => {
-    if (section === 'hero') {
-      setHeroCards((prev) => {
-        const next = [...prev];
-        next[index] = value;
-        return next;
-      });
+  const openPicker = (target) => {
+    const currentValue = target.type === 'board'
+      ? boardCards[target.index]
+      : players.find((player) => player.id === target.playerId)?.cards[target.index];
+    setPickerTarget({ ...target, currentValue });
+  };
+
+  const updatePlayerCard = (playerId, slotIndex, value) => {
+    setPlayers((prev) => prev.map((player) => (
+      player.id === playerId
+        ? { ...player, cards: player.cards.map((card, idx) => (idx === slotIndex ? value : card)) }
+        : player
+    )));
+  };
+
+  const updateBoardCard = (index, value) => {
+    setBoardCards((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  };
+
+  const handlePick = (card) => {
+    if (!pickerTarget) return;
+    if (takenCards.has(card) && card !== pickerTarget.currentValue) return;
+
+    if (pickerTarget.type === 'board') {
+      updateBoardCard(pickerTarget.index, card);
     } else {
-      setBoardCards((prev) => {
-        const next = [...prev];
-        next[index] = value;
-        return next;
-      });
+      updatePlayerCard(pickerTarget.playerId, pickerTarget.index, card);
     }
+    setPickerTarget(null);
   };
 
-  const handleSlotClick = (section, index) => {
-    const currentList = section === 'hero' ? heroCards : boardCards;
-    if (currentList[index]) {
-      updateSlot(section, index, null);
+  const clearSlot = (target) => {
+    if (target.type === 'board') {
+      updateBoardCard(target.index, null);
+    } else {
+      updatePlayerCard(target.playerId, target.index, null);
     }
-    setActiveSlot({ section, index });
+    setResult(null);
   };
 
-  const advanceSlot = (section, listOverride) => {
-    const list = listOverride ?? (section === 'hero' ? heroCards : boardCards);
-    const emptyIndex = list.findIndex((card) => !card);
-    if (emptyIndex >= 0) {
-      setActiveSlot({ section, index: emptyIndex });
-      return;
-    }
-    if (section === 'hero') {
-      const boardEmpty = boardCards.findIndex((card) => !card);
-      setActiveSlot({ section: 'board', index: boardEmpty >= 0 ? boardEmpty : 0 });
-    }
+  const addPlayer = () => {
+    if (players.length >= 6) return;
+    counterRef.current += 1;
+    setPlayers((prev) => ([
+      ...prev,
+      createPlayer(`villain-${counterRef.current}`, `玩家${prev.length + 1}`)
+    ]));
   };
 
-  const handleCardPick = (card) => {
-    if (takenCards.has(card)) return;
-    const { section, index } = activeSlot;
-    const currentList = section === 'hero' ? heroCards : boardCards;
-    const nextList = [...currentList];
-    nextList[index] = card;
-    updateSlot(section, index, card);
-    advanceSlot(section, nextList);
+  const removePlayer = (playerId) => {
+    if (players.length <= 2) return;
+    setPlayers((prev) => prev.filter((player) => player.id !== playerId));
+    setResult(null);
   };
 
   const resetAll = () => {
-    setHeroCards(heroTemplate());
+    counterRef.current = 2;
+    setPlayers(defaultPlayers());
     setBoardCards(boardTemplate());
     setResult(null);
-    setActiveSlot({ section: 'hero', index: 0 });
+    setStatus('idle');
+    setPickerTarget(null);
   };
 
   const runSimulation = () => {
-    if (heroCards.filter(Boolean).length !== 2) {
+    if (players.length < 2) {
+      setStatus('need-players');
+      return;
+    }
+    if (players.some((player) => player.cards.filter(Boolean).length !== 2)) {
       setStatus('need-cards');
       return;
     }
@@ -208,9 +232,12 @@ function EquityView() {
     setResult(null);
     setTimeout(() => {
       const sim = simulateEquity({
-        heroCards,
+        players: players.map((player, idx) => ({
+          id: player.id,
+          label: idx === 0 ? 'Hero' : player.label,
+          cards: player.cards
+        })),
         boardCards,
-        opponents,
         iterations
       });
       setResult(sim);
@@ -232,64 +259,72 @@ function EquityView() {
         <header>
           <p className="eyebrow">德州计算器</p>
           <h2>胜率计算工具</h2>
-          <p className="subtext">选择你的手牌 / 公共牌，估算与 N 名对手对抗时的胜率。</p>
+          <p className="subtext">为每位玩家指定手牌，点击卡片弹窗选择。</p>
         </header>
 
-        <div className="selection-group">
-          <div>
-            <h4>手牌</h4>
-            <div className="card-slots">
-              {heroCards.map((card, idx) => (
-                <button
-                  key={`hero-${idx}`}
-                  type="button"
-                  className={`card-slot ${activeSlot.section === 'hero' && activeSlot.index === idx ? 'active' : ''}`}
-                  onClick={() => handleSlotClick('hero', idx)}
-                >{formatCard(card)}</button>
-              ))}
+        <div className="players-grid">
+          {players.map((player, idx) => (
+            <div key={player.id} className="player-card">
+              <div className="player-header">
+                <h4>{idx === 0 ? 'Hero' : player.label}</h4>
+                {idx > 0 && players.length > 2 && (
+                  <button type="button" onClick={() => removePlayer(player.id)}>移除</button>
+                )}
+              </div>
+              <div className="card-slots">
+                {player.cards.map((card, slotIdx) => (
+                  <button
+                    key={`${player.id}-${slotIdx}`}
+                    type="button"
+                    className="card-slot"
+                    onClick={() => openPicker({ type: 'player', playerId: player.id, index: slotIdx })}
+                  >
+                    {formatCard(card)}
+                    {card && (
+                      <span
+                        className="slot-clear"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          clearSlot({ type: 'player', playerId: player.id, index: slotIdx });
+                        }}
+                      >×</span>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-
-          <div>
-            <h4>公共牌</h4>
-            <div className="card-slots">
-              {boardCards.map((card, idx) => (
-                <button
-                  key={`board-${idx}`}
-                  type="button"
-                  className={`card-slot ${activeSlot.section === 'board' && activeSlot.index === idx ? 'active' : ''}`}
-                  onClick={() => handleSlotClick('board', idx)}
-                >{formatCard(card)}</button>
-              ))}
-            </div>
-          </div>
+          ))}
+          {players.length < 6 && (
+            <button type="button" className="add-player" onClick={addPlayer}>+ 添加对手</button>
+          )}
         </div>
 
-        <div className="card-grid">
-          {deckList.map((card) => (
-            <button
-              key={card}
-              type="button"
-              className={`card-button ${takenCards.has(card) ? 'disabled' : ''}`}
-              disabled={takenCards.has(card)}
-              onClick={() => handleCardPick(card)}
-            >{formatCard(card)}</button>
-          ))}
+        <div className="board-section">
+          <h4>公共牌</h4>
+          <div className="card-slots">
+            {boardCards.map((card, idx) => (
+              <button
+                key={`board-${idx}`}
+                type="button"
+                className="card-slot"
+                onClick={() => openPicker({ type: 'board', index: idx })}
+              >
+                {formatCard(card)}
+                {card && (
+                  <span
+                    className="slot-clear"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearSlot({ type: 'board', index: idx });
+                    }}
+                  >×</span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="equity-controls">
-          <label>
-            <span>对手人数</span>
-            <input
-              type="range"
-              min="1"
-              max="6"
-              value={opponents}
-              onChange={(e) => setOpponents(Number(e.target.value))}
-            />
-            <strong>{opponents + 1} 人桌</strong>
-          </label>
-
           <label>
             <span>模拟次数</span>
             <select value={iterations} onChange={(e) => setIterations(Number(e.target.value))}>
@@ -305,29 +340,61 @@ function EquityView() {
           <button type="button" className="secondary" onClick={resetAll}>清空</button>
           <span className="status-text">
             {status === 'running' && '正在模拟...'}
-            {status === 'need-cards' && '请先选好两张手牌'}
+            {status === 'need-cards' && '请先为所有玩家填好两张手牌'}
+            {status === 'need-players' && '至少需要 2 位玩家'}
             {status === 'invalid' && '组合无效，请检查选择'}
             {status === 'done' && result && `已完成 ${result.iterations.toLocaleString()} 次模拟`}
           </span>
         </div>
 
         {result?.status === 'ok' && (
-          <div className="equity-result">
-            <div>
-              <p>胜率</p>
-              <strong>{(result.winPct * 100).toFixed(1)}%</strong>
-            </div>
-            <div>
-              <p>平局</p>
-              <strong>{(result.tiePct * 100).toFixed(1)}%</strong>
-            </div>
-            <div>
-              <p>落后</p>
-              <strong>{(result.losePct * 100).toFixed(1)}%</strong>
-            </div>
+          <div className="equity-table">
+            {result.players.map((player) => (
+              <div key={player.id}>
+                <p>{player.label}</p>
+                <strong>{(player.equity * 100).toFixed(1)}%</strong>
+              </div>
+            ))}
           </div>
         )}
       </section>
+
+      <CardPickerModal
+        open={Boolean(pickerTarget)}
+        currentValue={pickerTarget?.currentValue ?? null}
+        takenCards={takenCards}
+        onClose={() => setPickerTarget(null)}
+        onSelect={handlePick}
+        title="选择牌"
+      />
+    </div>
+  );
+}
+
+function CardPickerModal({ open, onClose, onSelect, takenCards, currentValue, title }) {
+  if (!open) return null;
+  return (
+    <div className="picker-backdrop">
+      <div className="picker-panel">
+        <div className="picker-head">
+          <strong>{title}</strong>
+          <button type="button" onClick={onClose}>×</button>
+        </div>
+        <div className="card-grid modal-grid">
+          {deckList.map((card) => {
+            const disabled = takenCards.has(card) && card !== currentValue;
+            return (
+              <button
+                key={card}
+                type="button"
+                className={`card-button ${disabled ? 'disabled' : ''}`}
+                disabled={disabled}
+                onClick={() => onSelect(card)}
+              >{formatCard(card)}</button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
