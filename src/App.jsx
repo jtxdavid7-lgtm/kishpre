@@ -264,6 +264,13 @@ function EquityView() {
           <p className="subtext">为每位玩家指定手牌，点击卡片弹窗选择。</p>
         </header>
 
+        {result?.status === 'ok' && (
+          <div className="hero-summary">
+            <p>Hero 胜率</p>
+            <strong>{(heroEquity * 100).toFixed(1)}%</strong>
+          </div>
+        )}
+
         <div className="players-grid">
           {players.map((player, idx) => (
             <div key={player.id} className="player-card">
@@ -350,20 +357,14 @@ function EquityView() {
         </div>
 
         {result?.status === 'ok' && (
-          <>
-            <div className="hero-summary">
-              <p>Hero 胜率</p>
-              <strong>{(heroEquity * 100).toFixed(1)}%</strong>
-            </div>
-            <div className="equity-table">
-              {result.players.map((player) => (
-                <div key={player.id}>
-                  <p>{player.label}</p>
-                  <strong>{(player.equity * 100).toFixed(1)}%</strong>
-                </div>
-              ))}
-            </div>
-          </>
+          <div className="equity-table">
+            {result.players.map((player) => (
+              <div key={player.id}>
+                <p>{player.label}</p>
+                <strong>{(player.equity * 100).toFixed(1)}%</strong>
+              </div>
+            ))}
+          </div>
         )}
       </section>
 
