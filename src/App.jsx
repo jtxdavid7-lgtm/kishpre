@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { RangeMatrix } from './components/RangeMatrix.jsx';
+import { RangeEditor } from './components/RangeEditor.jsx';
 import { BASE_RANGES } from './data/base';
 import { PROFILES } from './data/profiles';
 import { getRangePayload } from './lib/rangeEngine';
@@ -19,11 +20,31 @@ const profileOptions = Object.values(PROFILES).map((profile) => ({
 const SUIT_ICON = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const emptyHand = () => Array(2).fill(null);
 const boardTemplate = () => Array(5).fill(null);
+const TOTAL_COMBOS = 1326;
 
 const formatCard = (card) => {
   if (!card) return '--';
   const [rank, suit] = [card[0], card[1]];
   return `${rank}${SUIT_ICON[suit] ?? ''}`;
+};
+
+const combosForLabel = (label = '') => {
+  if (label.length === 2) return 6; // pocket pairs
+  if (label.endsWith('s')) return 4; // suited combos
+  return 12; // offsuit combos
+};
+
+const summarizeRange = (range = {}) => {
+  const entries = Object.entries(range);
+  const comboWeight = entries.reduce((sum, [label, value]) => (
+    sum + combosForLabel(label) * (value?.weight ?? 0)
+  ), 0);
+  const coverage = comboWeight / TOTAL_COMBOS;
+  return {
+    cells: entries.length,
+    combos: comboWeight,
+    coverage
+  };
 };
 
 function RangeLabView() {
@@ -135,20 +156,49 @@ function RangeLabView() {
 }
 
 function EquityView() {
-  const createPlayer = (id, label) => ({ id, label, cards: emptyHand() });
+  const createPlayer = (id, label) => ({
+    id,
+    label,
+    mode: 'hand',
+    cards: emptyHand(),
+    range: {}
+  });
   const defaultPlayers = () => [createPlayer('hero', 'Hero'), createPlayer('villain-1', '玩家2')];
 
   const [players, setPlayers] = useState(() => defaultPlayers());
   const [boardCards, setBoardCards] = useState(() => boardTemplate());
   const [pickerTarget, setPickerTarget] = useState(null);
+  const [rangeEditorTarget, setRangeEditorTarget] = useState(null);
   const [result, setResult] = useState(null);
   const [status, setStatus] = useState('idle');
   const counterRef = useRef(2);
 
   const takenCards = useMemo(() => new Set([
     ...boardCards,
-    ...players.flatMap((player) => player.cards)
+    ...players.flatMap((player) => (player.mode === 'hand' ? player.cards : []))
   ].filter(Boolean)), [boardCards, players]);
+
+  const openRangeEditor = (playerId) => setRangeEditorTarget({ playerId, sessionId: Date.now() });
+
+  const applyRangeToPlayer = (playerId, nextRange) => {
+    setPlayers((prev) => prev.map((player) => (
+      player.id === playerId
+        ? { ...player, range: nextRange }
+        : player
+    )));
+    setResult(null);
+    setStatus('idle');
+  };
+
+  const setPlayerMode = (playerId, mode) => {
+    setPlayers((prev) => prev.map((player) => (
+      player.id === playerId
+        ? { ...player, mode }
+        : player
+    )));
+    setResult(null);
+    setStatus('idle');
+  };
 
   const iterations = 5000;
 
@@ -225,8 +275,12 @@ function EquityView() {
       setStatus('need-players');
       return;
     }
-    if (players.some((player) => player.cards.filter(Boolean).length !== 2)) {
+    if (players.some((player) => player.mode === 'hand' && player.cards.filter(Boolean).length !== 2)) {
       setStatus('need-cards');
+      return;
+    }
+    if (players.some((player) => player.mode === 'range' && Object.keys(player.range || {}).length === 0)) {
+      setStatus('need-range');
       return;
     }
     setStatus('running');
@@ -236,7 +290,9 @@ function EquityView() {
         players: players.map((player, idx) => ({
           id: player.id,
           label: idx === 0 ? 'Hero' : player.label,
-          cards: player.cards
+          mode: player.mode,
+          cards: player.cards,
+          range: player.range
         })),
         boardCards,
         iterations
@@ -247,6 +303,9 @@ function EquityView() {
   };
 
   const heroEquity = result?.players?.[0]?.equity ?? 0;
+  const currentRangePlayer = rangeEditorTarget
+    ? players.find((player) => player.id === rangeEditorTarget.playerId)
+    : null;
 
   return (
     <div className="site">
@@ -262,7 +321,7 @@ function EquityView() {
         <header>
           <p className="eyebrow">德州计算器</p>
           <h2>胜率计算工具</h2>
-          <p className="subtext">为每位玩家指定手牌，点击卡片弹窗选择。</p>
+          <p className="subtext">为每位玩家指定手牌，或切换到「范围」用矩阵编辑器点选组合。</p>
         </header>
 
         {result?.status === 'ok' && (
@@ -308,37 +367,66 @@ function EquityView() {
         </div>
 
         <div className="players-grid">
-          {players.map((player, idx) => (
-            <div key={player.id} className="player-card">
-              <div className="player-header">
-                <h4>{idx === 0 ? 'Hero' : player.label}</h4>
-                {idx > 0 && players.length > 2 && (
-                  <button type="button" onClick={() => removePlayer(player.id)}>移除</button>
+          {players.map((player, idx) => {
+            const summary = summarizeRange(player.range);
+            return (
+              <div key={player.id} className="player-card">
+                <div className="player-header">
+                  <div>
+                    <h4>{idx === 0 ? 'Hero' : player.label}</h4>
+                    <div className="mode-switch compact">
+                      <button
+                        type="button"
+                        className={player.mode === 'hand' ? 'active' : ''}
+                        onClick={() => setPlayerMode(player.id, 'hand')}
+                      >手牌</button>
+                      <button
+                        type="button"
+                        className={player.mode === 'range' ? 'active' : ''}
+                        onClick={() => setPlayerMode(player.id, 'range')}
+                      >范围</button>
+                    </div>
+                  </div>
+                  {idx > 0 && players.length > 2 && (
+                    <button type="button" onClick={() => removePlayer(player.id)}>移除</button>
+                  )}
+                </div>
+
+                {player.mode === 'hand' ? (
+                  <div className="card-slots">
+                    {player.cards.map((card, slotIdx) => (
+                      <button
+                        key={`${player.id}-${slotIdx}`}
+                        type="button"
+                        className="card-slot"
+                        onClick={() => openPicker({ type: 'player', playerId: player.id, index: slotIdx })}
+                      >
+                        {formatCard(card)}
+                        {card && (
+                          <span
+                            className="slot-clear"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              clearSlot({ type: 'player', playerId: player.id, index: slotIdx });
+                            }}
+                          >×</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="range-summary">
+                    <p>
+                      {summary.cells > 0
+                        ? `覆盖 ${(summary.coverage * 100).toFixed(1)}% · ${summary.cells} 格`
+                        : '未选择范围'}
+                    </p>
+                    <button type="button" onClick={() => openRangeEditor(player.id)}>编辑范围</button>
+                  </div>
                 )}
               </div>
-              <div className="card-slots">
-                {player.cards.map((card, slotIdx) => (
-                  <button
-                    key={`${player.id}-${slotIdx}`}
-                    type="button"
-                    className="card-slot"
-                    onClick={() => openPicker({ type: 'player', playerId: player.id, index: slotIdx })}
-                  >
-                    {formatCard(card)}
-                    {card && (
-                      <span
-                        className="slot-clear"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          clearSlot({ type: 'player', playerId: player.id, index: slotIdx });
-                        }}
-                      >×</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {players.length < 6 && (
             <button type="button" className="add-player" onClick={addPlayer}>+ 添加对手</button>
           )}
@@ -351,8 +439,10 @@ function EquityView() {
             {status === 'running' && '正在模拟...'}
             {status === 'need-cards' && '请先为所有玩家填好两张手牌'}
             {status === 'need-players' && '至少需要 2 位玩家'}
-            {status === 'invalid' && '组合无效，请检查选择'}
-            {status === 'done' && '已完成 5,000 次模拟'}
+            {status === 'need-range' && '范围模式需要至少选择一个组合'}
+            {status === 'range-conflict' && '所选范围互相阻断，无法生成有效组合'}
+            {status === 'invalid' && '组合或公共牌冲突，请检查选择'}
+            {status === 'done' && `已完成 ${result?.iterations ?? iterations} 次模拟`}
           </span>
         </div>
 
@@ -365,6 +455,19 @@ function EquityView() {
         onClose={() => setPickerTarget(null)}
         onSelect={handlePick}
         title="选择牌"
+      />
+
+      <RangeEditor
+        key={rangeEditorTarget?.sessionId ?? 'range-editor'}
+        open={Boolean(rangeEditorTarget)}
+        title={`${currentRangePlayer?.label ?? '玩家'} · 范围`}
+        range={currentRangePlayer?.range ?? {}}
+        onClose={() => setRangeEditorTarget(null)}
+        onChange={(nextRange) => {
+          if (rangeEditorTarget?.playerId) {
+            applyRangeToPlayer(rangeEditorTarget.playerId, nextRange);
+          }
+        }}
       />
     </div>
   );

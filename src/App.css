@@ -189,6 +189,27 @@ button.secondary {
   cursor: pointer;
 }
 
+.range-summary {
+  border: 1px dashed rgba(148,163,184,0.4);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #cbd5f5;
+}
+
+.range-summary button {
+  border-radius: 999px;
+  border: 1px solid rgba(126,231,135,0.5);
+  background: rgba(16,185,129,0.15);
+  color: #86efac;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
 .card-slots {
   display: flex;
   gap: 12px;
@@ -352,6 +373,60 @@ button.secondary {
   cursor: pointer;
 }
 
+.picker-panel.range-editor {
+  width: min(720px, 95vw);
+}
+
+.picker-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.picker-actions button.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.range-slider {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148,163,184,0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.range-slider label {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  color: #e2e8f0;
+}
+
+.range-slider input[type="range"] {
+  width: 100%;
+}
+
+.quick-weights {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.quick-weights button {
+  border-radius: 999px;
+  padding: 4px 10px;
+  border: 1px solid rgba(148,163,184,0.3);
+  background: transparent;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 12px;
+}
+
 .range-panel header {
   border-bottom: 1px solid rgba(148,163,184,0.14);
   padding-bottom: 16px;
@@ -417,6 +492,16 @@ select {
 .mode-switch button.active {
   background: #2563eb;
   color: #fff;
+}
+
+.mode-switch.compact {
+  padding: 2px;
+  margin-top: 4px;
+}
+
+.mode-switch.compact button {
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .matrix-block {
