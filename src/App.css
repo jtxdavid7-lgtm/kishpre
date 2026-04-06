@@ -398,23 +398,31 @@ button.secondary {
   min-width: 460px;
 }
 
+.coverage-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.coverage-controls label {
+  display: flex;
+  justify-content: space-between;
+  color: #cbd5f5;
+  font-size: 13px;
+}
+
+.coverage-controls input[type="range"] {
+  width: 100%;
+}
+
 .paint-controls {
   margin-bottom: 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.paint-controls label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
+  gap: 8px;
   color: #cbd5f5;
-}
-
-.paint-controls input[type="range"] {
-  width: 100%;
+  font-size: 13px;
 }
 
 .quick-weights.compact {

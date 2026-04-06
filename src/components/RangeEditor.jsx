@@ -2,6 +2,23 @@ import { useMemo, useState } from 'react';
 import './RangeMatrix.css';
 
 const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
+const TOTAL_COMBOS = 1326;
+const RANK_VALUE = Object.fromEntries(RANKS.map((rank, idx) => [rank, RANKS.length - idx]));
+
+function combosForLabel(label = '') {
+  if (label.length === 2) return 6;
+  if (label.endsWith('s')) return 4;
+  return 12;
+}
+
+function handStrengthScore(label = '') {
+  const rankA = label[0];
+  const rankB = label[1];
+  const high = RANK_VALUE[rankA] >= RANK_VALUE[rankB] ? rankA : rankB;
+  const low = high === rankA ? rankB : rankA;
+  const typeBoost = label.length === 2 ? 3 : label.endsWith('s') ? 2 : 1;
+  return typeBoost * 10000 + (RANK_VALUE[high] ?? 0) * 100 + (RANK_VALUE[low] ?? 0);
+}
 
 function buildCells(rangeMap = {}) {
   return RANKS.map((rowRank, rowIdx) => (
@@ -29,16 +46,57 @@ function normalizeRange(rangeMap = {}) {
   );
 }
 
+function calculateCoverage(rangeMap = {}) {
+  const combos = Object.entries(rangeMap).reduce((sum, [label, value]) => (
+    sum + combosForLabel(label) * (value?.weight ?? 0)
+  ), 0);
+  return combos / TOTAL_COMBOS;
+}
+
+function buildCoverageRange(percent, ranking) {
+  const clamp = Math.max(0, Math.min(100, percent));
+  const target = clamp / 100 * TOTAL_COMBOS;
+  if (target === 0) return {};
+  const next = {};
+  let remaining = target;
+  for (let idx = 0; idx < ranking.length && remaining > 0; idx += 1) {
+    const label = ranking[idx].label;
+    const combos = combosForLabel(label);
+    if (remaining >= combos) {
+      next[label] = { weight: 1 };
+      remaining -= combos;
+    } else {
+      next[label] = { weight: remaining / combos };
+      remaining = 0;
+    }
+  }
+  return next;
+}
+
 export function RangeEditor({ open, title = '选择范围', range = {}, onChange, onClose }) {
   const [activeCell, setActiveCell] = useState(null);
   const [internal, setInternal] = useState(() => range ?? {});
   const [paintValue, setPaintValue] = useState(1);
 
   const cells = useMemo(() => buildCells(internal), [internal]);
+  const coveragePercent = Math.round(calculateCoverage(internal) * 100);
+
+  const ranking = useMemo(() => {
+    const labels = [];
+    RANKS.forEach((rowRank, rowIdx) => {
+      RANKS.forEach((colRank, colIdx) => {
+        const isPair = rowIdx === colIdx;
+        const suited = rowIdx < colIdx ? 's' : rowIdx > colIdx ? 'o' : '';
+        const high = rowIdx <= colIdx ? rowRank : colRank;
+        const low = rowIdx <= colIdx ? colRank : rowRank;
+        const label = isPair ? `${rowRank}${rowRank}` : `${high}${low}${suited}`;
+        labels.push({ label, score: handStrengthScore(label) });
+      });
+    });
+    return labels.sort((a, b) => b.score - a.score);
+  }, []);
 
   if (!open) return null;
-
-  const weightValue = activeCell ? (internal[activeCell]?.weight ?? 0) : 0;
 
   const updateWeight = (label, weight) => {
     setInternal((prev) => {
@@ -65,17 +123,18 @@ export function RangeEditor({ open, title = '选择范围', range = {}, onChange
     }
     if (type === 'all') {
       const full = {};
-      RANKS.forEach((rowRank, rowIdx) => {
-        RANKS.forEach((colRank, colIdx) => {
-          const isPair = rowIdx === colIdx;
-          const suited = rowIdx < colIdx ? 's' : rowIdx > colIdx ? 'o' : '';
-          const label = isPair ? `${rowRank}${colRank}` : `${rowRank}${colRank}${suited}`;
-          full[label] = { weight: 1 };
-        });
+      ranking.forEach(({ label }) => {
+        full[label] = { weight: 1 };
       });
       setInternal(full);
       setActiveCell(null);
     }
+  };
+
+  const applyCoverage = (value) => {
+    const next = buildCoverageRange(Number(value), ranking);
+    setInternal(next);
+    setActiveCell(null);
   };
 
   const handleConfirm = () => {
@@ -98,19 +157,22 @@ export function RangeEditor({ open, title = '选择范围', range = {}, onChange
           </div>
         </div>
 
-        <div className="paint-controls">
+        <div className="coverage-controls">
           <label>
-            <span>默认频率</span>
-            <strong>{Math.round(paintValue * 100)}%</strong>
+            <span>范围覆盖</span>
+            <strong>{coveragePercent}%</strong>
           </label>
           <input
             type="range"
             min="0"
             max="100"
-            step="5"
-            value={Math.round(paintValue * 100)}
-            onChange={(e) => setPaintValue(Number(e.target.value) / 100)}
+            value={coveragePercent}
+            onChange={(e) => applyCoverage(e.target.value)}
           />
+        </div>
+
+        <div className="paint-controls">
+          <span>点击牌型时使用的频率</span>
           <div className="quick-weights compact">
             {paintOptions.map((val) => (
               <button
@@ -129,44 +191,29 @@ export function RangeEditor({ open, title = '选择范围', range = {}, onChange
           <div className="matrix">
             {cells.map((row, rIdx) => (
               <div className="matrix-row" key={`row-${rIdx}`}>
-                {row.map((cell) => (
-                  <button
-                    type="button"
-                    key={cell.label}
-                    className={`matrix-cell editable ${activeCell === cell.label ? 'active' : ''}`}
-                    onClick={() => handleCellClick(cell.label)}
-                  >
-                    <span>{cell.label}</span>
-                    <small>{cell.weight > 0 ? cell.display : ''}</small>
-                  </button>
-                ))}
+                {row.map((cell) => {
+                  const fill = Math.max(0, Math.min(cell.weight, 1));
+                  const filledClass = fill > 0 ? 'filled' : '';
+                  const style = fill > 0
+                    ? { backgroundImage: `linear-gradient(180deg, rgba(34,197,94,0.92) ${fill * 100}%, rgba(15,23,42,0.88) ${fill * 100}%)` }
+                    : {};
+                  return (
+                    <button
+                      type="button"
+                      key={cell.label}
+                      className={`matrix-cell editable ${filledClass} ${activeCell === cell.label ? 'active' : ''}`}
+                      style={style}
+                      onClick={() => handleCellClick(cell.label)}
+                    >
+                      <span>{cell.label}</span>
+                      <small>{cell.weight > 0 ? cell.display : ''}</small>
+                    </button>
+                  );
+                })}
               </div>
             ))}
           </div>
         </div>
-
-        {activeCell && (
-          <div className="range-slider">
-            <label>
-              <span>{activeCell}</span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={Math.round(weightValue * 100)}
-                onChange={(e) => updateWeight(activeCell, Number(e.target.value) / 100)}
-              />
-              <strong>{Math.round(weightValue * 100)}%</strong>
-            </label>
-            <div className="quick-weights">
-              {[0, 0.25, 0.5, 0.75, 1].map((val) => (
-                <button key={val} type="button" onClick={() => updateWeight(activeCell, val)}>
-                  {Math.round(val * 100)}%
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

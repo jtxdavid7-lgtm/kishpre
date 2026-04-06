@@ -39,6 +39,11 @@
   border-color: #7ee787;
 }
 
+.matrix-cell.editable.filled {
+  color: #e2f7e1;
+  border-color: rgba(34,197,94,0.5);
+}
+
 @media (max-width: 640px) {
   .matrix-cell {
     width: 30px;
