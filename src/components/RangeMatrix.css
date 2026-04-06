@@ -38,3 +38,20 @@
 .matrix-cell.editable.active {
   border-color: #7ee787;
 }
+
+@media (max-width: 640px) {
+  .matrix-cell {
+    width: 30px;
+    height: 30px;
+    font-size: 10px;
+  }
+
+  .matrix-cell.editable {
+    font-size: 10px;
+    gap: 0;
+  }
+
+  .matrix-cell.editable small {
+    font-size: 8px;
+  }
+}

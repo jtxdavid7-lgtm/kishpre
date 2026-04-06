@@ -8,7 +8,9 @@ function buildCells(rangeMap = {}) {
     RANKS.map((colRank, colIdx) => {
       const isPair = rowIdx === colIdx;
       const suited = rowIdx < colIdx ? 's' : rowIdx > colIdx ? 'o' : '';
-      const label = isPair ? `${rowRank}${colRank}` : `${rowRank}${colRank}${suited}`;
+      const high = rowIdx <= colIdx ? rowRank : colRank;
+      const low = rowIdx <= colIdx ? colRank : rowRank;
+      const label = isPair ? `${rowRank}${rowRank}` : `${high}${low}${suited}`;
       const weight = rangeMap[label]?.weight ?? 0;
       return {
         label,
@@ -30,6 +32,7 @@ function normalizeRange(rangeMap = {}) {
 export function RangeEditor({ open, title = '选择范围', range = {}, onChange, onClose }) {
   const [activeCell, setActiveCell] = useState(null);
   const [internal, setInternal] = useState(() => range ?? {});
+  const [paintValue, setPaintValue] = useState(1);
 
   const cells = useMemo(() => buildCells(internal), [internal]);
 
@@ -47,6 +50,11 @@ export function RangeEditor({ open, title = '选择范围', range = {}, onChange
       }
       return next;
     });
+  };
+
+  const handleCellClick = (label) => {
+    setActiveCell(label);
+    updateWeight(label, paintValue);
   };
 
   const applyPreset = (type) => {
@@ -75,6 +83,8 @@ export function RangeEditor({ open, title = '选择范围', range = {}, onChange
     onClose?.();
   };
 
+  const paintOptions = [1, 0.75, 0.5, 0.25, 0];
+
   return (
     <div className="picker-backdrop">
       <div className="picker-panel range-editor">
@@ -87,23 +97,54 @@ export function RangeEditor({ open, title = '选择范围', range = {}, onChange
             <button type="button" onClick={onClose}>×</button>
           </div>
         </div>
-        <div className="matrix">
-          {cells.map((row, rIdx) => (
-            <div className="matrix-row" key={`row-${rIdx}`}>
-              {row.map((cell) => (
-                <button
-                  type="button"
-                  key={cell.label}
-                  className={`matrix-cell editable ${activeCell === cell.label ? 'active' : ''}`}
-                  onClick={() => setActiveCell(cell.label)}
-                >
-                  <span>{cell.label}</span>
-                  <small>{cell.weight > 0 ? cell.display : ''}</small>
-                </button>
-              ))}
-            </div>
-          ))}
+
+        <div className="paint-controls">
+          <label>
+            <span>默认频率</span>
+            <strong>{Math.round(paintValue * 100)}%</strong>
+          </label>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={Math.round(paintValue * 100)}
+            onChange={(e) => setPaintValue(Number(e.target.value) / 100)}
+          />
+          <div className="quick-weights compact">
+            {paintOptions.map((val) => (
+              <button
+                key={`paint-${val}`}
+                type="button"
+                className={paintValue === val ? 'active' : ''}
+                onClick={() => setPaintValue(val)}
+              >
+                {Math.round(val * 100)}%
+              </button>
+            ))}
+          </div>
         </div>
+
+        <div className="matrix-scroll">
+          <div className="matrix">
+            {cells.map((row, rIdx) => (
+              <div className="matrix-row" key={`row-${rIdx}`}>
+                {row.map((cell) => (
+                  <button
+                    type="button"
+                    key={cell.label}
+                    className={`matrix-cell editable ${activeCell === cell.label ? 'active' : ''}`}
+                    onClick={() => handleCellClick(cell.label)}
+                  >
+                    <span>{cell.label}</span>
+                    <small>{cell.weight > 0 ? cell.display : ''}</small>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
         {activeCell && (
           <div className="range-slider">
             <label>

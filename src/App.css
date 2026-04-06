@@ -374,7 +374,7 @@ button.secondary {
 }
 
 .picker-panel.range-editor {
-  width: min(720px, 95vw);
+  width: min(640px, 92vw);
 }
 
 .picker-actions {
@@ -386,6 +386,45 @@ button.secondary {
 .picker-actions button.primary {
   background: #2563eb;
   border-color: #2563eb;
+}
+
+.matrix-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.matrix-scroll .matrix {
+  min-width: 460px;
+}
+
+.paint-controls {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.paint-controls label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #cbd5f5;
+}
+
+.paint-controls input[type="range"] {
+  width: 100%;
+}
+
+.quick-weights.compact {
+  justify-content: space-between;
+}
+
+.quick-weights button.active {
+  background: #7ee787;
+  border-color: #7ee787;
+  color: #041108;
 }
 
 .range-slider {
