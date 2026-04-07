@@ -348,10 +348,10 @@ function EquityView() {
               <button
                 key={`board-${idx}`}
                 type="button"
-                className="card-slot"
+                className={`card-slot board-slot ${card ? '' : 'empty'}`}
                 onClick={() => openPicker({ type: 'board', index: idx })}
               >
-                {formatCard(card)}
+                <span className="card-face">{formatCard(card)}</span>
                 {card && (
                   <span
                     className="slot-clear"
@@ -401,7 +401,7 @@ function EquityView() {
                         className="card-slot"
                         onClick={() => openPicker({ type: 'player', playerId: player.id, index: slotIdx })}
                       >
-                        {formatCard(card)}
+                        <span className="card-face">{formatCard(card)}</span>
                         {card && (
                           <span
                             className="slot-clear"
