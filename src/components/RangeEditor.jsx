@@ -1,23 +1,15 @@
 import { useMemo, useState } from 'react';
+import handStrength from '../data/handStrength.json';
 import './RangeMatrix.css';
 
 const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
 const TOTAL_COMBOS = 1326;
-const RANK_VALUE = Object.fromEntries(RANKS.map((rank, idx) => [rank, RANKS.length - idx]));
+const HAND_STRENGTH_ORDER = handStrength?.order ?? [];
 
 function combosForLabel(label = '') {
   if (label.length === 2) return 6;
   if (label.endsWith('s')) return 4;
   return 12;
-}
-
-function handStrengthScore(label = '') {
-  const rankA = label[0];
-  const rankB = label[1];
-  const high = RANK_VALUE[rankA] >= RANK_VALUE[rankB] ? rankA : rankB;
-  const low = high === rankA ? rankB : rankA;
-  const typeBoost = label.length === 2 ? 3 : label.endsWith('s') ? 2 : 1;
-  return typeBoost * 10000 + (RANK_VALUE[high] ?? 0) * 100 + (RANK_VALUE[low] ?? 0);
 }
 
 function buildCells(rangeMap = {}) {
@@ -60,7 +52,9 @@ function buildCoverageRange(percent, ranking) {
   const next = {};
   let remaining = target;
   for (let idx = 0; idx < ranking.length && remaining > 0; idx += 1) {
-    const label = ranking[idx].label;
+    const item = ranking[idx];
+    const label = typeof item === 'string' ? item : item?.label;
+    if (!label) continue;
     const combos = combosForLabel(label);
     if (remaining >= combos) {
       next[label] = { weight: 1 };
@@ -82,7 +76,8 @@ export function RangeEditor({ open, title = '选择范围', range = {}, onChange
   const coveragePercent = Math.round(calculateCoverage(internal) * 100);
 
   const ranking = useMemo(() => {
-    const labels = [];
+    if (HAND_STRENGTH_ORDER.length > 0) return HAND_STRENGTH_ORDER;
+    const fallback = [];
     RANKS.forEach((rowRank, rowIdx) => {
       RANKS.forEach((colRank, colIdx) => {
         const isPair = rowIdx === colIdx;
@@ -90,10 +85,10 @@ export function RangeEditor({ open, title = '选择范围', range = {}, onChange
         const high = rowIdx <= colIdx ? rowRank : colRank;
         const low = rowIdx <= colIdx ? colRank : rowRank;
         const label = isPair ? `${rowRank}${rowRank}` : `${high}${low}${suited}`;
-        labels.push({ label, score: handStrengthScore(label) });
+        fallback.push(label);
       });
     });
-    return labels.sort((a, b) => b.score - a.score);
+    return fallback;
   }, []);
 
   if (!open) return null;
@@ -123,8 +118,11 @@ export function RangeEditor({ open, title = '选择范围', range = {}, onChange
     }
     if (type === 'all') {
       const full = {};
-      ranking.forEach(({ label }) => {
-        full[label] = { weight: 1 };
+      ranking.forEach((item) => {
+        const label = typeof item === 'string' ? item : item?.label;
+        if (label) {
+          full[label] = { weight: 1 };
+        }
       });
       setInternal(full);
       setActiveCell(null);
