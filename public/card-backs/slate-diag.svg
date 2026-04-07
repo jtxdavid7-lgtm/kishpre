@@ -1,0 +1,18 @@
+<svg width="200" height="280" viewBox="0 0 200 280" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="slate" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1f2937" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <pattern id="diagonal" width="12" height="12" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="12" height="12" fill="none" />
+      <rect x="0" y="0" width="6" height="12" fill="rgba(148, 163, 184, 0.15)" />
+    </pattern>
+  </defs>
+  <rect x="5" y="5" width="190" height="270" rx="22" fill="#020617" stroke="#1e293b" stroke-width="2" />
+  <rect x="12" y="12" width="176" height="256" rx="18" fill="url(#slate)" stroke="#475569" stroke-width="1.5" />
+  <rect x="28" y="28" width="144" height="224" rx="14" fill="url(#diagonal)" />
+  <rect x="44" y="44" width="112" height="192" rx="12" fill="none" stroke="#94a3b8" stroke-width="1.2" opacity="0.5" />
+  <path d="M60 90 L140 190" stroke="#64748b" stroke-width="1.4" opacity="0.4" />
+  <path d="M140 90 L60 190" stroke="#64748b" stroke-width="1.4" opacity="0.4" />
+</svg>
