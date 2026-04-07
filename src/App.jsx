@@ -306,6 +306,8 @@ function EquityView() {
   const currentRangePlayer = rangeEditorTarget
     ? players.find((player) => player.id === rangeEditorTarget.playerId)
     : null;
+  const flopComplete = boardCards.slice(0, 3).every(Boolean);
+  const turnComplete = Boolean(boardCards[3]);
 
   return (
     <div className="site">
@@ -343,26 +345,37 @@ function EquityView() {
 
         <div className="board-section">
           <h4>公共牌</h4>
-          <div className="card-slots">
-            {boardCards.map((card, idx) => (
-              <button
-                key={`board-${idx}`}
-                type="button"
-                className={`card-slot board-slot ${card ? '' : 'empty'}`}
-                onClick={() => openPicker({ type: 'board', index: idx })}
-              >
-                <span className="card-face">{formatCard(card)}</span>
-                {card && (
-                  <span
-                    className="slot-clear"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      clearSlot({ type: 'board', index: idx });
-                    }}
-                  >×</span>
-                )}
-              </button>
-            ))}
+          <div className="card-slots board-cards">
+            {boardCards.map((card, idx) => {
+              const locked = !card && ((idx >= 3 && !flopComplete) || (idx === 4 && !turnComplete));
+              const classes = ['card-slot', 'board-slot'];
+              if (!card) classes.push('empty');
+              if (locked) classes.push('locked');
+              return (
+                <button
+                  key={`board-${idx}`}
+                  type="button"
+                  className={classes.join(' ')}
+                  onClick={() => {
+                    if (locked) return;
+                    openPicker({ type: 'board', index: idx });
+                  }}
+                  disabled={locked}
+                  title={locked ? (idx >= 3 && !flopComplete ? '请先选好前3张' : '请先选好转牌') : undefined}
+                >
+                  <span className="card-face">{formatCard(card)}</span>
+                  {card && (
+                    <span
+                      className="slot-clear"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearSlot({ type: 'board', index: idx });
+                      }}
+                    >×</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
