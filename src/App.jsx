@@ -18,6 +18,8 @@ const profileOptions = Object.values(PROFILES).map((profile) => ({
 }));
 
 const SUIT_ICON = { s: '♠', h: '♥', d: '♦', c: '♣' };
+const PICKER_RANKS = ['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
+const PICKER_SUITS = ['s', 'h', 'c', 'd'];
 const emptyHand = () => Array(2).fill(null);
 const boardTemplate = () => Array(5).fill(null);
 const TOTAL_COMBOS = 1326;
@@ -500,26 +502,27 @@ function CardPickerModal({ open, onClose, onSelect, takenCards, currentValue, ti
           <button type="button" onClick={onClose}>×</button>
         </div>
         <div className="card-grid modal-grid">
-          {deckList.map((card) => {
-            const disabled = takenCards.has(card) && card !== currentValue;
-            const rank = card[0];
-            const suit = card[1];
-            const suitGlyph = SUIT_ICON[suit] ?? '';
-            const suitClass = `suit-${suit}`;
-            return (
-              <button
-                key={card}
-                type="button"
-                className={`card-button ${suitClass} ${disabled ? 'disabled' : ''}`}
-                disabled={disabled}
-                onClick={() => onSelect(card)}
-                aria-label={`${rank}${suit}`}
-              >
-                <span className="card-rank">{rank}</span>
-                <span className="card-pip">{suitGlyph}</span>
-              </button>
-            );
-          })}
+          {PICKER_SUITS.flatMap((suit) => (
+            PICKER_RANKS.map((rank) => {
+              const card = `${rank}${suit}`;
+              const disabled = takenCards.has(card) && card !== currentValue;
+              const suitGlyph = SUIT_ICON[suit] ?? '';
+              const suitClass = `suit-${suit}`;
+              return (
+                <button
+                  key={card}
+                  type="button"
+                  className={`card-button ${suitClass} ${disabled ? 'disabled' : ''}`}
+                  disabled={disabled}
+                  onClick={() => onSelect(card)}
+                  aria-label={`${rank}${suit}`}
+                >
+                  <span className="card-rank">{rank}</span>
+                  <span className="card-pip">{suitGlyph}</span>
+                </button>
+              );
+            })
+          ))}
         </div>
       </div>
     </div>

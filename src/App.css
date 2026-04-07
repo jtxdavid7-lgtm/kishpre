@@ -313,35 +313,35 @@ button.secondary {
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(13, minmax(36px, 1fr));
+  gap: 6px;
 }
 
 .card-button {
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(15,23,42,0.15);
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,0.12);
   background: #fff;
   color: #0f172a;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 16px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: space-between;
-  min-height: 96px;
+  min-height: 72px;
   aspect-ratio: 63 / 88;
-  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.15);
+  box-shadow: 0 5px 12px rgba(2, 6, 23, 0.15);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 .card-button .card-rank {
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 600;
 }
 
 .card-button .card-pip {
-  font-size: 26px;
+  font-size: 20px;
   align-self: flex-end;
 }
 
