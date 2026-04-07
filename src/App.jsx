@@ -20,6 +20,82 @@ const profileOptions = Object.values(PROFILES).map((profile) => ({
 const SUIT_ICON = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const PICKER_RANKS = ['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
 const PICKER_SUITS = ['s', 'h', 'c', 'd'];
+const FEATURE_BLUEPRINT = [
+  { key: 'range', action: 'range' },
+  { key: 'equity', action: 'equity' },
+  { key: 'reports', action: null }
+];
+const HOMEPAGE_COPY = {
+  zh: {
+    hero: {
+      eyebrow: '欢迎来到',
+      title: 'kishpoker',
+      desc: '一个围绕精确决策打造的扑克实验室：范围工具、胜率计算以及更多模块将在此聚合。',
+      primaryCta: '打开 Range Lab',
+      secondaryCta: '胜率计算工具'
+    },
+    section: {
+      title: '工具入口',
+      subtitle: '点击打开对应模块'
+    },
+    features: {
+      range: {
+        label: 'Range Lab',
+        title: '实时范围实验室',
+        desc: '查看基准 GTO 范围并根据对手画像自动调整。'
+      },
+      equity: {
+        label: '胜率计算工具',
+        title: '德州计算器',
+        desc: '手牌 + 公共牌一键估算，对标 WeChat「德州计算器」。'
+      },
+      reports: {
+        label: 'Reports',
+        title: 'Hand History 工具',
+        desc: '整理关键牌局并生成复盘报告（开发中）。'
+      }
+    },
+    actions: {
+      range: '进入',
+      equity: '进入'
+    }
+  },
+  en: {
+    hero: {
+      eyebrow: 'Welcome to',
+      title: 'kishpoker',
+      desc: 'A poker lab built around precise decisions—range tools, equity sims, and more modules coming soon.',
+      primaryCta: 'Open Range Lab',
+      secondaryCta: 'Run Equity Calculator'
+    },
+    section: {
+      title: 'Toolbox',
+      subtitle: 'Pick a module to launch'
+    },
+    features: {
+      range: {
+        label: 'Range Lab',
+        title: 'Real-time Range Lab',
+        desc: 'Check baseline GTO ranges and auto-adjust them by opponent profile.'
+      },
+      equity: {
+        label: 'Equity Calculator',
+        title: 'Hold’em odds tool',
+        desc: 'Select hole cards or ranges plus the board and simulate equities instantly.'
+      },
+      reports: {
+        label: 'Reports',
+        title: 'Hand-history builder',
+        desc: 'Collect key hands and export review-ready summaries (in progress).'
+      }
+    },
+    actions: {
+      range: 'Launch',
+      equity: 'Launch'
+    }
+  }
+};
+const LANGUAGE_LABELS = { zh: '简体中文', en: 'English' };
 const emptyHand = () => Array(2).fill(null);
 const boardTemplate = () => Array(5).fill(null);
 const TOTAL_COMBOS = 1326;
@@ -549,64 +625,86 @@ function CardPickerModal({ open, onClose, onSelect, takenCards, currentValue, ti
 function HomeView() {
   const openRange = () => window.location.assign('?tool=range');
   const openEquity = () => window.location.assign('?tool=equity');
+  const [language, setLanguage] = useState(() => {
+    if (typeof window === 'undefined') return 'zh';
+    const params = new URLSearchParams(window.location.search);
+    return params.get('lang') === 'en' ? 'en' : 'zh';
+  });
 
-  const featureCards = [
-    {
-      label: 'Range Lab',
-      title: '实时范围实验室',
-      desc: '查看基准 GTO 范围并根据对手画像自动调整。',
-      action: { label: '进入', handler: openRange }
-    },
-    {
-      label: '胜率计算工具',
-      title: '德州计算器',
-      desc: '手牌 + 公共牌一键估算，对标 WeChat「德州计算器」。',
-      action: { label: '进入', handler: openEquity }
-    },
-    {
-      label: 'Reports',
-      title: 'Hand History 工具',
-      desc: '整理关键牌局并生成复盘报告（开发中）。'
+  const copy = HOMEPAGE_COPY[language] ?? HOMEPAGE_COPY.zh;
+
+  const handleLanguageChange = (next) => {
+    setLanguage(next);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (next === 'zh') {
+        params.delete('lang');
+      } else {
+        params.set('lang', next);
+      }
+      const query = params.toString();
+      const nextUrl = `${window.location.pathname}${query ? `?${query}` : ''}`;
+      window.history.replaceState({}, '', nextUrl);
     }
-  ];
+  };
+
+  const featureCards = FEATURE_BLUEPRINT.map((item) => {
+    const meta = copy.features[item.key];
+    const actionHandler = item.action === 'range'
+      ? openRange
+      : item.action === 'equity'
+        ? openEquity
+        : null;
+    return {
+      key: item.key,
+      ...meta,
+      actionHandler,
+      actionLabel: actionHandler ? copy.actions[item.action] : null
+    };
+  });
 
   return (
     <div className="site">
       <nav className="top-nav">
         <div className="brand">KISHPOKER</div>
-        <ul>
-          <li><a href="?tool=range">Range Lab</a></li>
-          <li><a href="?tool=equity">胜率计算</a></li>
-          <li><a href="https://github.com/jtxdavid7-lgtm/kishpre" target="_blank" rel="noreferrer">GitHub</a></li>
-        </ul>
+        <div className="lang-switch">
+          {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
+            <button
+              type="button"
+              key={code}
+              className={language === code ? 'active' : ''}
+              onClick={() => handleLanguageChange(code)}
+            >{label}</button>
+          ))}
+        </div>
       </nav>
 
       <header className="hero">
         <div>
-          <p className="eyebrow">欢迎来到</p>
-          <h1>kishpoker</h1>
-          <p>一个围绕精确决策打造的扑克实验室：范围工具、胜率计算以及更多模块将在此聚合。</p>
+          <p className="eyebrow">{copy.hero.eyebrow}</p>
+          <h1>{copy.hero.title}</h1>
+          <p>{copy.hero.desc}</p>
         </div>
         <div className="cta-row">
-          <button type="button" className="primary" onClick={openRange}>打开 Range Lab</button>
-          <button type="button" className="secondary" onClick={openEquity}>胜率计算工具</button>
+          <button type="button" className="primary" onClick={openRange}>{copy.hero.primaryCta}</button>
+          <button type="button" className="secondary" onClick={openEquity}>{copy.hero.secondaryCta}</button>
         </div>
       </header>
 
       <section>
         <div className="section-title">
-          <h2>工具入口</h2>
-          <span className="subtext">点击打开对应模块</span>
+          <h2>{copy.section.title}</h2>
+          <span className="subtext">{copy.section.subtitle}</span>
         </div>
         <div className="feature-grid">
           {featureCards.map((feature) => (
-            <article key={feature.label} className="feature-card">
+            <article key={feature.key} className="feature-card">
               <span>{feature.label}</span>
               <h3>{feature.title}</h3>
               <p>{feature.desc}</p>
-              {feature.action && (
-                <button type="button" className="card-link" onClick={feature.action.handler}>
-                  {feature.action.label}
+              {feature.actionHandler && (
+                <button type="button" className="card-link" onClick={feature.actionHandler}>
+                  {feature.actionLabel}
                 </button>
               )}
             </article>

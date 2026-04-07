@@ -32,13 +32,26 @@ body {
   letter-spacing: 0.08em;
 }
 
-.top-nav ul {
-  list-style: none;
+.lang-switch {
   display: flex;
-  gap: 16px;
-  margin: 0;
-  padding: 0;
-  font-size: 14px;
+  gap: 8px;
+  align-items: center;
+}
+
+.lang-switch button {
+  border: 1px solid rgba(148,163,184,0.4);
+  border-radius: 999px;
+  background: transparent;
+  color: #cbd5f5;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lang-switch button.active {
+  background: rgba(251, 191, 36, 0.85);
+  border-color: rgba(251, 191, 36, 0.85);
+  color: #0f172a;
 }
 
 .top-nav a {
