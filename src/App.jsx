@@ -353,6 +353,11 @@ function EquityView() {
               const classes = ['card-slot', 'board-slot'];
               if (!card) classes.push('empty');
               if (locked) classes.push('locked');
+              const rank = card ? card[0] : '--';
+              const suit = card ? card[1] : null;
+              if (card && suit) {
+                classes.push('filled', `suit-${suit}`);
+              }
               return (
                 <button
                   key={`board-${idx}`}
@@ -365,7 +370,10 @@ function EquityView() {
                   disabled={locked}
                   title={locked ? (idx >= 3 && !flopComplete ? '请先选好前3张' : '请先选好转牌') : undefined}
                 >
-                  <span className="card-face">{formatCard(card)}</span>
+                  <span className="card-face">
+                    <span className="card-rank">{rank}</span>
+                    <span className="card-pip">{suit ? SUIT_ICON[suit] : ''}</span>
+                  </span>
                   {card && (
                     <span
                       className="slot-clear"
@@ -411,7 +419,13 @@ function EquityView() {
                   <div className="card-slots player-hand">
                     {player.cards.map((card, slotIdx) => {
                       const classes = ['card-slot', 'player-slot'];
-                      if (!card) classes.push('empty');
+                      if (!card) {
+                        classes.push('empty');
+                      } else if (card[1]) {
+                        classes.push('filled', `suit-${card[1]}`);
+                      }
+                      const rank = card ? card[0] : '--';
+                      const suitGlyph = card ? SUIT_ICON[card[1]] : '';
                       return (
                         <button
                           key={`${player.id}-${slotIdx}`}
@@ -419,7 +433,10 @@ function EquityView() {
                           className={classes.join(' ')}
                           onClick={() => openPicker({ type: 'player', playerId: player.id, index: slotIdx })}
                         >
-                          <span className="card-face">{formatCard(card)}</span>
+                          <span className="card-face">
+                            <span className="card-rank">{rank}</span>
+                            <span className="card-pip">{suitGlyph}</span>
+                          </span>
                           {card && (
                             <span
                               className="slot-clear"

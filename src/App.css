@@ -235,6 +235,56 @@ button.secondary {
 
 .card-slot .card-face {
   font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.card-slot.filled {
+  background: #fff;
+  border: 1px solid rgba(15,23,42,0.15);
+  color: #0f172a;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.18);
+}
+
+.card-slot.filled .card-face {
+  width: 100%;
+  height: 100%;
+  padding: 8px 6px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.card-slot.filled .card-rank,
+.card-slot.filled .card-pip {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.card-slot.filled .card-pip {
+  align-self: flex-end;
+}
+
+.card-slot.filled.suit-s {
+  color: #0f172a;
+  border-color: rgba(15,23,42,0.35);
+}
+
+.card-slot.filled.suit-h {
+  color: #dc2626;
+  border-color: rgba(220,38,38,0.35);
+}
+
+.card-slot.filled.suit-c {
+  color: #15803d;
+  border-color: rgba(21,128,61,0.35);
+}
+
+.card-slot.filled.suit-d {
+  color: #2563eb;
+  border-color: rgba(37,99,235,0.35);
 }
 
 .board-cards {
