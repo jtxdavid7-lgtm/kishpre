@@ -242,7 +242,8 @@ button.secondary {
   flex-wrap: nowrap;
 }
 
-.card-slot.board-slot {
+.card-slot.board-slot,
+.card-slot.player-slot {
   flex: 0 0 auto;
   width: 68px;
   aspect-ratio: 63 / 88;
@@ -254,12 +255,13 @@ button.secondary {
   margin-right: 18px;
 }
 
-.card-slot.board-slot .card-face {
+.card-slot.board-slot .card-face,
+.card-slot.player-slot .card-face {
   font-size: 20px;
 }
 
-.card-slot.player-slot .card-face {
-  font-size: 16px;
+.player-hand {
+  gap: 10px;
 }
 
 .card-slot.empty {

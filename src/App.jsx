@@ -408,7 +408,7 @@ function EquityView() {
                 </div>
 
                 {player.mode === 'hand' ? (
-                  <div className="card-slots">
+                  <div className="card-slots player-hand">
                     {player.cards.map((card, slotIdx) => {
                       const classes = ['card-slot', 'player-slot'];
                       if (!card) classes.push('empty');
