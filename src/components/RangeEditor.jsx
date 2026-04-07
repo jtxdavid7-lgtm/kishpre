@@ -192,8 +192,11 @@ export function RangeEditor({ open, title = '选择范围', range = {}, onChange
                 {row.map((cell) => {
                   const fill = Math.max(0, Math.min(cell.weight, 1));
                   const filledClass = fill > 0 ? 'filled' : '';
+                  const emptyPct = (1 - fill) * 100;
                   const style = fill > 0
-                    ? { backgroundImage: `linear-gradient(180deg, rgba(34,197,94,0.92) ${fill * 100}%, rgba(15,23,42,0.88) ${fill * 100}%)` }
+                    ? {
+                        backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.9) ${emptyPct}%, rgba(34,197,94,0.92) ${emptyPct}%, rgba(34,197,94,0.92) 100%)`
+                      }
                     : {};
                   return (
                     <button

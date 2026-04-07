@@ -33,7 +33,9 @@
 }
 .matrix-cell.editable small {
   font-size: 10px;
-  color: #94a3b8;
+  color: #e2e8f0;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(2, 6, 23, 0.6);
 }
 .matrix-cell.editable.active {
   border-color: #7ee787;
@@ -42,6 +44,9 @@
 .matrix-cell.editable.filled {
   color: #e2f7e1;
   border-color: rgba(34,197,94,0.5);
+}
+.matrix-cell.editable.filled small {
+  color: #f8fafc;
 }
 
 @media (max-width: 640px) {
