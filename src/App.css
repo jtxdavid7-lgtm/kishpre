@@ -258,6 +258,10 @@ button.secondary {
   font-size: 20px;
 }
 
+.card-slot.player-slot .card-face {
+  font-size: 16px;
+}
+
 .card-slot.empty {
   border: 1px solid rgba(94,234,212,0.55);
   background: #020817;

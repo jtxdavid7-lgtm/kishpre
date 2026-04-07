@@ -407,25 +407,29 @@ function EquityView() {
 
                 {player.mode === 'hand' ? (
                   <div className="card-slots">
-                    {player.cards.map((card, slotIdx) => (
-                      <button
-                        key={`${player.id}-${slotIdx}`}
-                        type="button"
-                        className="card-slot"
-                        onClick={() => openPicker({ type: 'player', playerId: player.id, index: slotIdx })}
-                      >
-                        <span className="card-face">{formatCard(card)}</span>
-                        {card && (
-                          <span
-                            className="slot-clear"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              clearSlot({ type: 'player', playerId: player.id, index: slotIdx });
-                            }}
-                          >×</span>
-                        )}
-                      </button>
-                    ))}
+                    {player.cards.map((card, slotIdx) => {
+                      const classes = ['card-slot', 'player-slot'];
+                      if (!card) classes.push('empty');
+                      return (
+                        <button
+                          key={`${player.id}-${slotIdx}`}
+                          type="button"
+                          className={classes.join(' ')}
+                          onClick={() => openPicker({ type: 'player', playerId: player.id, index: slotIdx })}
+                        >
+                          <span className="card-face">{formatCard(card)}</span>
+                          {card && (
+                            <span
+                              className="slot-clear"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                clearSlot({ type: 'player', playerId: player.id, index: slotIdx });
+                              }}
+                            >×</span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="range-summary">
