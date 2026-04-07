@@ -313,23 +313,67 @@ button.secondary {
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 10px;
 }
 
 .card-button {
-  padding: 10px 0;
-  border-radius: 12px;
-  border: 1px solid rgba(148,163,184,0.2);
-  background: rgba(15,23,42,0.8);
-  color: #f5f5f5;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(15,23,42,0.15);
+  background: #fff;
+  color: #0f172a;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-height: 96px;
+  aspect-ratio: 63 / 88;
+  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.15);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.card-button .card-rank {
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.card-button .card-pip {
+  font-size: 26px;
+  align-self: flex-end;
+}
+
+.card-button.suit-s {
+  color: #0f172a;
+  border-color: rgba(15,23,42,0.25);
+}
+
+.card-button.suit-h {
+  color: #dc2626;
+  border-color: rgba(220,38,38,0.3);
+}
+
+.card-button.suit-c {
+  color: #16a34a;
+  border-color: rgba(22,163,74,0.3);
+}
+
+.card-button.suit-d {
+  color: #2563eb;
+  border-color: rgba(37,99,235,0.3);
 }
 
 .card-button.disabled {
-  opacity: 0.3;
+  opacity: 0.25;
   cursor: not-allowed;
+  box-shadow: none;
+}
+
+.card-button:not(.disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 24px rgba(2, 6, 23, 0.25);
 }
 
 .modal-grid {

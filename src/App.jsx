@@ -502,14 +502,22 @@ function CardPickerModal({ open, onClose, onSelect, takenCards, currentValue, ti
         <div className="card-grid modal-grid">
           {deckList.map((card) => {
             const disabled = takenCards.has(card) && card !== currentValue;
+            const rank = card[0];
+            const suit = card[1];
+            const suitGlyph = SUIT_ICON[suit] ?? '';
+            const suitClass = `suit-${suit}`;
             return (
               <button
                 key={card}
                 type="button"
-                className={`card-button ${disabled ? 'disabled' : ''}`}
+                className={`card-button ${suitClass} ${disabled ? 'disabled' : ''}`}
                 disabled={disabled}
                 onClick={() => onSelect(card)}
-              >{formatCard(card)}</button>
+                aria-label={`${rank}${suit}`}
+              >
+                <span className="card-rank">{rank}</span>
+                <span className="card-pip">{suitGlyph}</span>
+              </button>
             );
           })}
         </div>
