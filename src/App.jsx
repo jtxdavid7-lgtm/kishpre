@@ -47,7 +47,7 @@ const HOMEPAGE_COPY = {
       equity: {
         label: '胜率计算工具',
         title: '德州计算器',
-        desc: '手牌 + 公共牌一键估算，对标 WeChat「德州计算器」。'
+        desc: '手牌 + 公共牌一键估算。'
       },
       reports: {
         label: 'Reports',
