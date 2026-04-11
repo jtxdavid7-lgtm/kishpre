@@ -23,6 +23,7 @@ const PICKER_SUITS = ['s', 'h', 'c', 'd'];
 const FEATURE_BLUEPRINT = [
   { key: 'range', action: 'range' },
   { key: 'equity', action: 'equity' },
+  { key: 'rng', action: 'download' },
   { key: 'reports', action: null }
 ];
 const RNG_DOWNLOAD_PATH = '/downloads/kish-rng-win-x64.zip';
@@ -34,9 +35,7 @@ const HOMEPAGE_COPY = {
       title: 'kishpoker',
       desc: '一个围绕精确决策打造的扑克实验室：范围工具、胜率计算以及更多模块将在此聚合。',
       primaryCta: '打开 Range Lab',
-      secondaryCta: '胜率计算工具',
-      downloadCta: '下载随机数插件',
-      downloadNote: 'Windows 版本 · 85 MB'
+      secondaryCta: '胜率计算工具'
     },
     section: {
       title: '工具入口',
@@ -53,6 +52,11 @@ const HOMEPAGE_COPY = {
         title: '德州计算器',
         desc: '手牌 + 公共牌一键估算。'
       },
+      rng: {
+        label: '随机数插件',
+        title: '牌桌随机数助手',
+        desc: '下载 Windows 插件，在直播或桌边一键生成随机数。'
+      },
       reports: {
         label: 'Reports',
         title: 'Hand History 工具',
@@ -61,7 +65,8 @@ const HOMEPAGE_COPY = {
     },
     actions: {
       range: '进入',
-      equity: '进入'
+      equity: '进入',
+      download: '下载'
     }
   },
   en: {
@@ -70,9 +75,7 @@ const HOMEPAGE_COPY = {
       title: 'kishpoker',
       desc: 'A poker lab built around precise decisions—range tools, equity sims, and more modules coming soon.',
       primaryCta: 'Open Range Lab',
-      secondaryCta: 'Run Equity Calculator',
-      downloadCta: 'Download RNG plugin',
-      downloadNote: 'Windows build · 85 MB'
+      secondaryCta: 'Run Equity Calculator'
     },
     section: {
       title: 'Toolbox',
@@ -89,6 +92,11 @@ const HOMEPAGE_COPY = {
         title: 'Hold’em odds tool',
         desc: 'Select hole cards or ranges plus the board and simulate equities instantly.'
       },
+      rng: {
+        label: 'RNG Plugin',
+        title: 'Table-side RNG helper',
+        desc: 'Download the Windows helper to generate quick random numbers mid-session.'
+      },
       reports: {
         label: 'Reports',
         title: 'Hand-history builder',
@@ -97,7 +105,8 @@ const HOMEPAGE_COPY = {
     },
     actions: {
       range: 'Launch',
-      equity: 'Launch'
+      equity: 'Launch',
+      download: 'Download'
     }
   }
 };
@@ -660,11 +669,12 @@ function HomeView() {
 
   const featureCards = FEATURE_BLUEPRINT.map((item) => {
     const meta = copy.features[item.key];
-    const actionHandler = item.action === 'range'
-      ? openRange
-      : item.action === 'equity'
-        ? openEquity
-        : null;
+    const actionHandler = (() => {
+      if (item.action === 'range') return openRange;
+      if (item.action === 'equity') return openEquity;
+      if (item.action === 'download') return downloadPlugin;
+      return null;
+    })();
     return {
       key: item.key,
       ...meta,
@@ -698,12 +708,6 @@ function HomeView() {
         <div className="cta-row">
           <button type="button" className="primary" onClick={openRange}>{copy.hero.primaryCta}</button>
           <button type="button" className="secondary" onClick={openEquity}>{copy.hero.secondaryCta}</button>
-          <div className="download-stack">
-            <button type="button" className="secondary" onClick={downloadPlugin}>
-              {copy.hero.downloadCta}
-            </button>
-            <span className="download-note">{copy.hero.downloadNote}</span>
-          </div>
         </div>
       </header>
 
