@@ -23,10 +23,18 @@ const PICKER_SUITS = ['s', 'h', 'c', 'd'];
 const FEATURE_BLUEPRINT = [
   { key: 'range', action: 'range' },
   { key: 'equity', action: 'equity' },
+  { key: 'variance', action: 'variance' },
   { key: 'rng', action: 'download' },
   { key: 'reports', action: null }
 ];
 const RNG_DOWNLOAD_PATH = '/downloads/kish-rng-win-x64.zip';
+const PERCENTILE_POINTS = [
+  { key: 'p05', label: '5% 最差', z: -1.6448536269514722 },
+  { key: 'p25', label: '25% 偏低', z: -0.674489750196082 },
+  { key: 'p50', label: '50% 中位', z: 0 },
+  { key: 'p75', label: '75% 偏高', z: 0.674489750196082 },
+  { key: 'p95', label: '95% 最好', z: 1.6448536269514722 }
+];
 
 const HOMEPAGE_COPY = {
   zh: {
@@ -35,7 +43,8 @@ const HOMEPAGE_COPY = {
       title: 'kishpoker',
       desc: '一个围绕精确决策打造的扑克实验室：范围工具、胜率计算以及更多模块将在此聚合。',
       primaryCta: '打开 Range Lab',
-      secondaryCta: '胜率计算工具'
+      secondaryCta: '胜率计算工具',
+      varianceCta: '波动计算器'
     },
     section: {
       title: '工具入口',
@@ -52,6 +61,11 @@ const HOMEPAGE_COPY = {
         title: '德州计算器',
         desc: '手牌 + 公共牌一键估算。'
       },
+      variance: {
+        label: 'Variance',
+        title: '波动计算器',
+        desc: '估算在指定手数下的收益分布、破产概率与极端下行。'
+      },
       rng: {
         label: '随机数插件',
         title: '牌桌随机数助手',
@@ -66,6 +80,7 @@ const HOMEPAGE_COPY = {
     actions: {
       range: '进入',
       equity: '进入',
+      variance: '进入',
       download: '下载'
     }
   },
@@ -75,7 +90,8 @@ const HOMEPAGE_COPY = {
       title: 'kishpoker',
       desc: 'A poker lab built around precise decisions—range tools, equity sims, and more modules coming soon.',
       primaryCta: 'Open Range Lab',
-      secondaryCta: 'Run Equity Calculator'
+      secondaryCta: 'Run Equity Calculator',
+      varianceCta: 'Variance Calculator'
     },
     section: {
       title: 'Toolbox',
@@ -92,6 +108,11 @@ const HOMEPAGE_COPY = {
         title: 'Hold’em odds tool',
         desc: 'Select hole cards or ranges plus the board and simulate equities instantly.'
       },
+      variance: {
+        label: 'Variance',
+        title: 'Variance calculator',
+        desc: 'Project expected value, sigma bands, and risk of ruin for a given sample size.'
+      },
       rng: {
         label: 'RNG Plugin',
         title: 'Table-side RNG helper',
@@ -106,6 +127,7 @@ const HOMEPAGE_COPY = {
     actions: {
       range: 'Launch',
       equity: 'Launch',
+      variance: 'Launch',
       download: 'Download'
     }
   }
@@ -114,6 +136,23 @@ const LANGUAGE_LABELS = { zh: '简体中文', en: 'English' };
 const emptyHand = () => Array(2).fill(null);
 const boardTemplate = () => Array(5).fill(null);
 const TOTAL_COMBOS = 1326;
+
+const erf = (x) => {
+  const sign = Math.sign(x);
+  const absX = Math.abs(x);
+  const a1 = 0.254829592;
+  const a2 = -0.284496736;
+  const a3 = 1.421413741;
+  const a4 = -1.453152027;
+  const a5 = 1.061405429;
+  const p = 0.3275911;
+  const t = 1 / (1 + p * absX);
+  const expComponent = Math.exp(-absX * absX);
+  const poly = (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t;
+  return sign * (1 - poly * expComponent);
+};
+
+const normalCdf = (x) => 0.5 * (1 + erf(x / Math.SQRT2));
 
 const formatCard = (card) => {
   if (!card) return '--';
@@ -162,6 +201,7 @@ function RangeLabView() {
         <div className="cta-row">
           <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
           <button type="button" className="secondary" onClick={() => window.location.assign('?tool=equity')}>胜率计算</button>
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=variance')}>波动计算</button>
         </div>
       </nav>
 
@@ -409,6 +449,7 @@ function EquityView() {
         <div className="cta-row">
           <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
           <button type="button" className="secondary" onClick={() => window.location.assign('?tool=range')}>Range Lab</button>
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=variance')}>波动计算</button>
         </div>
       </nav>
 
@@ -637,9 +678,242 @@ function CardPickerModal({ open, onClose, onSelect, takenCards, currentValue, ti
   );
 }
 
+function VarianceView() {
+  const [winrate, setWinrate] = useState(5);
+  const [stdev, setStdev] = useState(80);
+  const [hands, setHands] = useState(50000);
+  const [bankroll, setBankroll] = useState(1000);
+  const [bbValue, setBbValue] = useState(10);
+  const [currencySymbol, setCurrencySymbol] = useState('¥');
+
+  const parseNumber = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const symbol = currencySymbol?.trim() || '¥';
+
+  const analysis = useMemo(() => {
+    const safeHands = Math.max(parseNumber(hands, 0), 0);
+    const safeWinrate = parseNumber(winrate, 0);
+    const safeStd = Math.max(Math.abs(parseNumber(stdev, 0)), 0);
+    const safeBankroll = Math.max(parseNumber(bankroll, 0), 0);
+    const safeBbValue = Math.max(parseNumber(bbValue, 0), 0);
+
+    const blocks = safeHands / 100;
+    const expectedBb = safeWinrate * blocks;
+    const sigmaBb = safeStd * Math.sqrt(blocks);
+    const expectedCurrency = expectedBb * safeBbValue;
+    const sigmaCurrency = sigmaBb * safeBbValue;
+
+    const probabilityDown = sigmaBb > 0
+      ? normalCdf(-expectedBb / sigmaBb)
+      : expectedBb < 0 ? 1 : 0;
+
+    const ruinProbability = sigmaBb > 0
+      ? normalCdf((-safeBankroll - expectedBb) / sigmaBb)
+      : expectedBb <= -safeBankroll ? 1 : 0;
+
+    const buildBand = (multiplier) => {
+      const lowerBb = expectedBb - multiplier * sigmaBb;
+      const upperBb = expectedBb + multiplier * sigmaBb;
+      return {
+        lowerBb,
+        upperBb,
+        lowerCurrency: lowerBb * safeBbValue,
+        upperCurrency: upperBb * safeBbValue
+      };
+    };
+
+    const percentiles = PERCENTILE_POINTS.map((row) => {
+      const bbPoint = expectedBb + row.z * sigmaBb;
+      return {
+        ...row,
+        bb: bbPoint,
+        currency: bbPoint * safeBbValue
+      };
+    });
+
+    return {
+      expectedBb,
+      sigmaBb,
+      expectedCurrency,
+      sigmaCurrency,
+      probabilityDown,
+      ruinProbability,
+      percentiles,
+      hands: safeHands,
+      winrate: safeWinrate,
+      stdev: safeStd,
+      bankroll: safeBankroll,
+      bbValue: safeBbValue,
+      band1: buildBand(1),
+      band2: buildBand(2)
+    };
+  }, [hands, winrate, stdev, bankroll, bbValue]);
+
+  const formatNumber = (value, digits = 0) => {
+    if (!Number.isFinite(value)) return '—';
+    return value.toLocaleString('en-US', {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    });
+  };
+
+  const formatBb = (value, digits = 0) => {
+    if (!Number.isFinite(value)) return '—';
+    const sign = value > 0 ? '+' : value < 0 ? '−' : '';
+    const absValue = Math.abs(value);
+    const formatted = absValue.toLocaleString('en-US', {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    });
+    return sign ? `${sign}${formatted} bb` : `0 bb`;
+  };
+
+  const formatCurrency = (value, digits = 0, options = {}) => {
+    if (!Number.isFinite(value)) return '—';
+    const { signed = true } = options;
+    const absValue = Math.abs(value);
+    const formatted = absValue.toLocaleString('en-US', {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    });
+    const sign = value > 0 ? (signed ? '+' : '') : value < 0 ? '−' : '';
+    return sign ? `${sign}${symbol}${formatted}` : `${symbol}${formatted}`;
+  };
+
+  const formatPercent = (value) => {
+    if (!Number.isFinite(value)) return '—';
+    return `${(value * 100).toFixed(1)}%`;
+  };
+
+  const formatRange = (lower, upper, formatter) => `${formatter(lower)} ~ ${formatter(upper)}`;
+
+  return (
+    <div className="site">
+      <nav className="top-nav">
+        <div className="brand">KISHPOKER · 波动计算</div>
+        <div className="cta-row">
+          <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=range')}>Range Lab</button>
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=equity')}>胜率计算</button>
+        </div>
+      </nav>
+
+      <section className="range-panel" style={{ marginTop: 0 }}>
+        <header>
+          <p className="eyebrow">Variance</p>
+          <h2>德州扑克波动 & 下行风险</h2>
+          <p className="subtext">参考 Primedope 计算逻辑，利用胜率与标准差估算指定手数下的收益分布与破产概率。</p>
+        </header>
+
+        <div className="controls variance-inputs">
+          <label>
+            <span>胜率 (bb / 100)</span>
+            <input type="number" step="0.1" value={winrate} onChange={(e) => setWinrate(parseNumber(e.target.value, 0))} />
+            <span className="input-note">常见范围 2~8 bb/100</span>
+          </label>
+          <label>
+            <span>标准差 (bb / 100)</span>
+            <input type="number" step="1" value={stdev} onChange={(e) => setStdev(parseNumber(e.target.value, 0))} />
+            <span className="input-note">现金桌常见 70~120 bb/100</span>
+          </label>
+          <label>
+            <span>样本手数</span>
+            <input type="number" step="100" value={hands} onChange={(e) => setHands(parseNumber(e.target.value, 0))} />
+            <span className="input-note">以 100 手牌为一个区块</span>
+          </label>
+          <label>
+            <span>银行滚仓 (bb)</span>
+            <input type="number" step="10" value={bankroll} onChange={(e) => setBankroll(parseNumber(e.target.value, 0))} />
+            <span className="input-note">用大盲衡量的可承受下行</span>
+          </label>
+          <label>
+            <span>大盲面值</span>
+            <input type="number" step="1" value={bbValue} onChange={(e) => setBbValue(parseNumber(e.target.value, 0))} />
+            <span className="input-note">换算货币：单个大盲的金额</span>
+          </label>
+          <label>
+            <span>货币符号</span>
+            <input type="text" maxLength={3} value={currencySymbol} onChange={(e) => setCurrencySymbol(e.target.value)} />
+            <span className="input-note">例如 ¥ / ￥ / $</span>
+          </label>
+        </div>
+
+        <section className="variance-summary">
+          <div>
+            <p>样本</p>
+            <strong>{formatNumber(analysis.hands, 0)} 手牌</strong>
+            <span className="input-note">胜率 {formatNumber(analysis.winrate, 1)} · σ {formatNumber(analysis.stdev, 0)} bb/100</span>
+          </div>
+          <div>
+            <p>期望收益</p>
+            <strong>{formatBb(analysis.expectedBb)}</strong>
+            <span className="input-note">≈ {formatCurrency(analysis.expectedCurrency)}</span>
+          </div>
+          <div>
+            <p>亏损概率</p>
+            <strong>{formatPercent(analysis.probabilityDown)}</strong>
+            <span className="input-note">结果 &lt; 0 bb</span>
+          </div>
+        </section>
+
+        <section className="variance-grid">
+          <article className="variance-card">
+            <p>1σ 区间</p>
+            <strong>{formatRange(analysis.band1.lowerBb, analysis.band1.upperBb, formatBb)}</strong>
+            <span>≈ {formatRange(analysis.band1.lowerCurrency, analysis.band1.upperCurrency, formatCurrency)}</span>
+          </article>
+          <article className="variance-card">
+            <p>2σ 区间</p>
+            <strong>{formatRange(analysis.band2.lowerBb, analysis.band2.upperBb, formatBb)}</strong>
+            <span>≈ {formatRange(analysis.band2.lowerCurrency, analysis.band2.upperCurrency, formatCurrency)}</span>
+          </article>
+          <article className="variance-card">
+            <p>破产概率</p>
+            <strong>{formatPercent(analysis.ruinProbability)}</strong>
+            <span>结果 ≤ -{formatNumber(analysis.bankroll, 0)} bb</span>
+          </article>
+          <article className="variance-card">
+            <p>货币标准差</p>
+            <strong>±{formatCurrency(analysis.sigmaCurrency, 0, { signed: false })}</strong>
+            <span>每个 σ ≈ {formatBb(analysis.sigmaBb)}</span>
+          </article>
+        </section>
+
+        <section className="variance-table">
+          <h4>分位数估算</h4>
+          <table>
+            <thead>
+              <tr>
+                <th>分位</th>
+                <th>bb</th>
+                <th>货币</th>
+              </tr>
+            </thead>
+            <tbody>
+              {analysis.percentiles.map((row) => (
+                <tr key={row.key}>
+                  <td>{row.label}</td>
+                  <td>{formatBb(row.bb)}</td>
+                  <td>{formatCurrency(row.currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="variance-footnote">假设收益满足近似正态分布（Primedope 同款模型）。</p>
+        </section>
+      </section>
+    </div>
+  );
+}
+
+
 function HomeView() {
   const openRange = () => window.location.assign('?tool=range');
   const openEquity = () => window.location.assign('?tool=equity');
+  const openVariance = () => window.location.assign('?tool=variance');
   const downloadPlugin = () => {
     if (typeof window === 'undefined') return;
     window.open(RNG_DOWNLOAD_PATH, '_blank');
@@ -672,6 +946,7 @@ function HomeView() {
     const actionHandler = (() => {
       if (item.action === 'range') return openRange;
       if (item.action === 'equity') return openEquity;
+      if (item.action === 'variance') return openVariance;
       if (item.action === 'download') return downloadPlugin;
       return null;
     })();
@@ -708,6 +983,7 @@ function HomeView() {
         <div className="cta-row">
           <button type="button" className="primary" onClick={openRange}>{copy.hero.primaryCta}</button>
           <button type="button" className="secondary" onClick={openEquity}>{copy.hero.secondaryCta}</button>
+          <button type="button" className="secondary" onClick={openVariance}>{copy.hero.varianceCta ?? 'Variance calculator'}</button>
         </div>
       </header>
 
@@ -742,6 +1018,7 @@ function App() {
 
   if (tool === 'range') return <RangeLabView />;
   if (tool === 'equity') return <EquityView />;
+  if (tool === 'variance') return <VarianceView />;
   return <HomeView />;
 }
 
