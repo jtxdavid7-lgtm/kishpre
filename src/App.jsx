@@ -1039,8 +1039,9 @@ function buildRangeTicks(minValue, maxValue, step) {
 }
 
 const HISTORY_CURVE_LINES = [
-  { key: 'profitBB', label: '总盈亏', color: '#22c55e' },
-  { key: 'beforeRakeBB', label: '水前盈亏', color: '#facc15' },
+  { key: 'beforeRakeBB', label: '水前实际盈利', color: '#22c55e' },
+  { key: 'evBB', label: '水前 EV', color: '#facc15' },
+  { key: 'profitBB', label: '水后盈利', color: '#a78bfa' },
   { key: 'nonShowdownBB', label: '非摊牌', color: '#ef4444' },
   { key: 'showdownBB', label: '摊牌', color: '#38bdf8' }
 ];
@@ -1116,7 +1117,7 @@ function HistoryCurve({ data = [] }) {
             .join(' ');
           const last = data[data.length - 1]?.[line.key] ?? 0;
           const bbPer100 = hands ? (last / hands) * 100 : 0;
-          const labelY = Math.min(height - 42, Math.max(18, y(last) + (lineIndex - 1.5) * 11));
+          const labelY = Math.min(height - 42, Math.max(18, y(last) + (lineIndex - 2) * 11));
           return (
             <g key={line.key}>
               <path d={path} className="history-profit-line" style={{ stroke: line.color }} />
