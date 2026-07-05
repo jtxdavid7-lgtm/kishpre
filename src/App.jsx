@@ -28,11 +28,11 @@ const SUIT_ICON = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const PICKER_RANKS = ['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
 const PICKER_SUITS = ['s', 'h', 'c', 'd'];
 const FEATURE_BLUEPRINT = [
-  { key: 'range', action: 'range' },
+  { key: 'reports', action: 'history' },
   { key: 'equity', action: 'equity' },
   { key: 'variance', action: 'variance' },
   { key: 'rng', action: 'download' },
-  { key: 'reports', action: 'history' }
+  { key: 'range', action: 'range' }
 ];
 const RNG_DOWNLOAD_PATH = '/downloads/kish-rng-win-x64-0.1.1.zip';
 const PERCENTILE_POINTS = [
@@ -48,8 +48,8 @@ const HOMEPAGE_COPY = {
     hero: {
       eyebrow: '欢迎来到',
       title: 'kishpoker',
-      desc: '一个围绕精确决策打造的扑克实验室：范围工具、胜率计算以及更多模块将在此聚合。',
-      primaryCta: '打开 Range Lab',
+      desc: '一个围绕精确决策打造的扑克实验室：牌谱统计、胜率计算以及更多模块将在此聚合。',
+      primaryCta: '打开牌谱统计',
       secondaryCta: '胜率计算工具',
       varianceCta: '波动计算器'
     },
@@ -59,9 +59,9 @@ const HOMEPAGE_COPY = {
     },
     features: {
       range: {
-        label: 'Range Lab',
+        label: 'Range Lab · 施工中',
         title: '实时范围实验室',
-        desc: '查看基准 GTO 范围并根据对手画像自动调整。'
+        desc: '范围编辑和对手画像功能仍在完善中。'
       },
       equity: {
         label: '胜率计算工具',
@@ -79,9 +79,9 @@ const HOMEPAGE_COPY = {
         desc: '下载 Windows 插件，在直播或桌边一键生成随机数。'
       },
       reports: {
-        label: 'Reports',
-        title: 'Hand History 工具',
-        desc: '导入 GGPoker 手牌历史，查看基础盈亏、资金曲线和翻前数据。'
+        label: '牌谱统计',
+        title: 'GG 手牌数据报表',
+        desc: '导入 GGPoker 手牌历史，查看盈亏、资金曲线、翻前和摊牌数据。'
       }
     },
     actions: {
@@ -96,8 +96,8 @@ const HOMEPAGE_COPY = {
     hero: {
       eyebrow: 'Welcome to',
       title: 'kishpoker',
-      desc: 'A poker lab built around precise decisions—range tools, equity sims, and more modules coming soon.',
-      primaryCta: 'Open Range Lab',
+      desc: 'A poker lab built around precise decisions—hand-history reports, equity sims, and more modules coming soon.',
+      primaryCta: 'Open Hand History',
       secondaryCta: 'Run Equity Calculator',
       varianceCta: 'Variance Calculator'
     },
@@ -107,9 +107,9 @@ const HOMEPAGE_COPY = {
     },
     features: {
       range: {
-        label: 'Range Lab',
+        label: 'Range Lab · WIP',
         title: 'Real-time Range Lab',
-        desc: 'Check baseline GTO ranges and auto-adjust them by opponent profile.'
+        desc: 'Range editing and opponent profiling are still under construction.'
       },
       equity: {
         label: 'Equity Calculator',
@@ -127,9 +127,9 @@ const HOMEPAGE_COPY = {
         desc: 'Download the Windows helper to generate quick random numbers mid-session.'
       },
       reports: {
-        label: 'Reports',
-        title: 'Hand-history builder',
-        desc: 'Import GGPoker hand histories and review profit, curve, and preflop stats.'
+        label: 'Hand History',
+        title: 'GG hand-history reports',
+        desc: 'Import GGPoker hand histories and review profit, curves, preflop, and showdown stats.'
       }
     },
     actions: {
@@ -1501,7 +1501,7 @@ function HomeView() {
           <p>{copy.hero.desc}</p>
         </div>
         <div className="cta-row">
-          <button type="button" className="primary" onClick={openRange}>{copy.hero.primaryCta}</button>
+          <button type="button" className="primary" onClick={openHistory}>{copy.hero.primaryCta}</button>
           <button type="button" className="secondary" onClick={openEquity}>{copy.hero.secondaryCta}</button>
           <button type="button" className="secondary" onClick={openVariance}>{copy.hero.varianceCta ?? 'Variance calculator'}</button>
         </div>
