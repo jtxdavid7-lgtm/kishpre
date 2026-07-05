@@ -1,4 +1,4 @@
-const MONEY_RE = /\$(-?\d+(?:\.\d+)?)/;
+const MONEY_RE = /\$(-?[\d,]+(?:\.\d+)?)/;
 const HAND_SPLIT_RE = /(?=Poker Hand #)/g;
 
 export const POSITIONS = ['BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO', 'MP', 'EP'];
@@ -13,7 +13,11 @@ export function splitHandHistories(text) {
 
 function money(line) {
   const match = line.match(MONEY_RE);
-  return match ? Number(match[1]) : 0;
+  return match ? parseMoney(match[1]) : 0;
+}
+
+function parseMoney(value) {
+  return Number(String(value).replaceAll(',', ''));
 }
 
 function playerFromAction(line) {
@@ -23,9 +27,9 @@ function playerFromAction(line) {
 
 function actionAmount(line, committed) {
   if (line.includes(' raises ')) {
-    const toMatch = line.match(/\bto \$(-?\d+(?:\.\d+)?)/);
+    const toMatch = line.match(/\bto \$(-?[\d,]+(?:\.\d+)?)/);
     if (toMatch) {
-      const target = Number(toMatch[1]);
+      const target = parseMoney(toMatch[1]);
       return Math.max(0, target - committed);
     }
   }
@@ -61,7 +65,7 @@ function inferPreflopStats(lines, hero) {
   let callersAfterOpen = 0;
 
   for (const line of lines) {
-    if (line.startsWith('*** FLOP ***')) break;
+    if (/^\*\*\* (?:FIRST |SECOND )?FLOP \*\*\*/.test(line)) break;
     if (!line.includes(': ')) continue;
     const player = playerFromAction(line);
     if (!player) continue;
@@ -114,7 +118,7 @@ export function parseGgHand(raw) {
   let jackpot = 0;
 
   for (const line of lines) {
-    const seatMatch = line.match(/^Seat (\d+): (.+?) \(\$[-\d.]+ in chips\)/);
+    const seatMatch = line.match(/^Seat (\d+): (.+?) \(\$[-\d,.]+ in chips\)/);
     if (seatMatch) {
       const seat = Number(seatMatch[1]);
       const name = seatMatch[2];
@@ -124,18 +128,18 @@ export function parseGgHand(raw) {
     }
     const dealtMatch = line.match(/^Dealt to (.+?) \[/);
     if (dealtMatch) heroCandidates.push(dealtMatch[1]);
-    const potMatch = line.match(/^Total pot \$([\d.]+).* Rake \$([\d.]+).* Jackpot \$([\d.]+)/);
+    const potMatch = line.match(/^Total pot \$([\d,.]+).* Rake \$([\d,.]+).* Jackpot \$([\d,.]+)/);
     if (potMatch) {
-      rake = Number(potMatch[2]);
-      jackpot = Number(potMatch[3]);
+      rake = parseMoney(potMatch[2]);
+      jackpot = parseMoney(potMatch[3]);
     }
-    if (line.startsWith('*** FLOP ***')) {
+    if (/^\*\*\* (?:FIRST |SECOND )?FLOP \*\*\*/.test(line)) {
       currentStreet = 'flop';
       streetCommit = new Map();
-    } else if (line.startsWith('*** TURN ***')) {
+    } else if (/^\*\*\* (?:FIRST |SECOND )?TURN \*\*\*/.test(line)) {
       currentStreet = 'turn';
       streetCommit = new Map();
-    } else if (line.startsWith('*** RIVER ***')) {
+    } else if (/^\*\*\* (?:FIRST |SECOND )?RIVER \*\*\*/.test(line)) {
       currentStreet = 'river';
       streetCommit = new Map();
     }
@@ -152,15 +156,15 @@ export function parseGgHand(raw) {
       }
     }
 
-    const returned = line.match(/^Uncalled bet \(\$([\d.]+)\) returned to (.+)$/);
+    const returned = line.match(/^Uncalled bet \(\$([\d,.]+)\) returned to (.+)$/);
     if (returned) {
-      const amount = Number(returned[1]);
+      const amount = parseMoney(returned[1]);
       const player = returned[2];
       invested.set(player, (invested.get(player) ?? 0) - amount);
     }
 
-    const collected = line.match(/^Seat \d+: (.+?) .*?(?:collected|won) \(\$([\d.]+)\)/);
-    if (collected) won.set(collected[1], (won.get(collected[1]) ?? 0) + Number(collected[2]));
+    const collected = line.match(/^(.+?) collected \$([\d,.]+) from (?:the )?(?:main |side )?pot$/);
+    if (collected) won.set(collected[1], (won.get(collected[1]) ?? 0) + parseMoney(collected[2]));
 
     const summaryMatch = line.match(/^Seat \d+: (.+?)(?: \((?:button|small blind|big blind)\))? (.+)$/);
     if (summaryMatch) {
@@ -237,11 +241,11 @@ export function summarizeHeroResults(results) {
   const gameRake = results.reduce((sum, hand) => sum + hand.rake, 0);
   const totalJackpot = results.reduce((sum, hand) => sum + hand.jackpot, 0);
   const totalRake = gameRake + totalJackpot;
-  const totalProfit = rawProfit + totalJackpot;
   const totalRakeBB = results.reduce((sum, hand) => sum + (hand.rake + hand.jackpot) / hand.bb, 0);
   const gameRakeBB = results.reduce((sum, hand) => sum + hand.rake / hand.bb, 0);
   const jackpotRakeBB = results.reduce((sum, hand) => sum + hand.jackpot / hand.bb, 0);
-  const totalProfitBB = results.reduce((sum, hand) => sum + (hand.profit + hand.jackpot) / hand.bb, 0);
+  const totalProfit = rawProfit;
+  const totalProfitBB = results.reduce((sum, hand) => sum + hand.profit / hand.bb, 0);
   const vpipCount = results.filter((hand) => hand.heroVoluntary).length;
   const pfrCount = results.filter((hand) => hand.heroRaise).length;
   const facingThreeBet = results.filter((hand) => hand.heroThreeBetOpportunity || hand.heroFacingRaise).length;
@@ -258,7 +262,7 @@ export function summarizeHeroResults(results) {
   let runningNonShowdown = 0;
   let runningShowdown = 0;
   const curve = results.map((hand, index) => {
-    const displayProfitBB = (hand.profit + hand.jackpot) / hand.bb;
+    const displayProfitBB = hand.profit / hand.bb;
     running += displayProfitBB;
     const rakeBB = (hand.rake + hand.jackpot) / hand.bb;
     runningBeforeRake += displayProfitBB + rakeBB;
