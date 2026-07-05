@@ -27,7 +27,7 @@ const FEATURE_BLUEPRINT = [
   { key: 'rng', action: 'download' },
   { key: 'reports', action: null }
 ];
-const RNG_DOWNLOAD_PATH = '/downloads/kish-rng-win-x64.zip';
+const RNG_DOWNLOAD_PATH = '/downloads/kish-rng-win-x64-0.1.1.zip';
 const PERCENTILE_POINTS = [
   { key: 'p05', label: '5% 最差', z: -1.6448536269514722 },
   { key: 'p25', label: '25% 偏低', z: -0.674489750196082 },
