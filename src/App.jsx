@@ -1070,7 +1070,7 @@ function HistoryCurve({ data = [] }) {
   const width = 760;
   const height = 300;
   const padLeft = 46;
-  const padRight = 98;
+  const padRight = 126;
   const padTop = 24;
   const padBottom = 48;
   const visibleLines = HISTORY_CURVE_LINES.filter((line) => visibleLineKeys.has(line.key));
@@ -1159,7 +1159,7 @@ function HistoryCurve({ data = [] }) {
                 className="history-line-end-label"
                 style={{ fill: line.color }}
               >
-                {formatNumber(bbPer100, 2)}
+                {formatNumber(bbPer100, 2)} BB/100
               </text>
             </g>
           );
