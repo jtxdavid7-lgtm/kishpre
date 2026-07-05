@@ -2,15 +2,6 @@ import { simulateEquity } from '../src/lib/equityEngine.js';
 import { writeFile } from 'node:fs/promises';
 
 const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
-const SUFFIXES = ['s', 'o'];
-
-function buildLabel(rowRank, colRank) {
-  if (rowRank === colRank) return `${rowRank}${colRank}`;
-  const suited = RANKS.indexOf(rowRank) < RANKS.indexOf(colRank) ? 's' : 'o';
-  const high = RANKS.indexOf(rowRank) <= RANKS.indexOf(colRank) ? rowRank : colRank;
-  const low = high === rowRank ? colRank : rowRank;
-  return `${high}${low}${suited}`;
-}
 
 function buildAllLabels() {
   const labels = [];

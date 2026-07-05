@@ -4,7 +4,7 @@ import { RangeEditor } from './components/RangeEditor.jsx';
 import { BASE_RANGES } from './data/base';
 import { PROFILES } from './data/profiles';
 import { getRangePayload } from './lib/rangeEngine';
-import { deckList, simulateEquity } from './lib/equityEngine';
+import { simulateEquity } from './lib/equityEngine';
 import './App.css';
 
 const sceneOptions = Object.values(BASE_RANGES).map((range) => ({
@@ -153,12 +153,6 @@ const erf = (x) => {
 };
 
 const normalCdf = (x) => 0.5 * (1 + erf(x / Math.SQRT2));
-
-const formatCard = (card) => {
-  if (!card) return '--';
-  const [rank, suit] = [card[0], card[1]];
-  return `${rank}${SUIT_ICON[suit] ?? ''}`;
-};
 
 const combosForLabel = (label = '') => {
   if (label.length === 2) return 6; // pocket pairs
