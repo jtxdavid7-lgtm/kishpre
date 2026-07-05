@@ -998,6 +998,13 @@ function statTone(value) {
   return value >= 0 ? 'win' : 'loss';
 }
 
+function wwsfTone(value) {
+  if (!Number.isFinite(value)) return '';
+  if (value > 52) return 'win';
+  if (value < 48) return 'loss';
+  return '';
+}
+
 function stakeLabel(stakes) {
   const bb = Number(String(stakes).split('/')[1]?.replace('$', ''));
   return bb ? `NL${Math.round(bb * 100)}` : stakes;
@@ -1138,9 +1145,14 @@ function HistoryCurve({ data = [] }) {
   );
 }
 
-function HistoryStatCard({ label, value, tone }) {
+function HistoryStatCard({ label, value, tone, size }) {
+  const className = [
+    'history-stat-card',
+    tone ? `history-stat-card--${tone}` : '',
+    size ? `history-stat-card--${size}` : ''
+  ].filter(Boolean).join(' ');
   return (
-    <article className={`history-stat-card ${tone ? `history-stat-card--${tone}` : ''}`}>
+    <article className={className}>
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
@@ -1303,33 +1315,39 @@ function HandHistoryView() {
                 <span>终止 TP</span>
                 <input type="number" value={endTp} onChange={(event) => setEndTp(event.target.value)} />
               </label>
-              <div>
-                <span>PVI</span>
-                <strong>{formatPercent(pvi, 2)}</strong>
-              </div>
             </section>
 
             <section className="history-stat-grid">
-              <HistoryStatCard label="总手数" value={summary.totalHands.toLocaleString()} />
-              <HistoryStatCard label="常驻级别" value={mainStake} />
-              <HistoryStatCard label="水后 $" value={formatMoney(summary.totalProfit)} tone={statTone(summary.totalProfit)} />
-              <HistoryStatCard label="水前 $" value={formatMoney(summary.beforeRakeProfit)} tone={statTone(summary.beforeRakeProfit)} />
-              <HistoryStatCard label="盈利 bb" value={formatNumber(summary.totalProfitBB, 1)} tone={statTone(summary.totalProfitBB)} />
-              <HistoryStatCard label="水后百手" value={formatNumber(summary.bbPer100, 2)} tone={statTone(summary.bbPer100)} />
-              <HistoryStatCard label="水前百手" value={formatNumber(summary.beforeRakeBBPer100, 2)} tone={statTone(summary.beforeRakeBBPer100)} />
-              <HistoryStatCard label="总抽水" value={formatMoney(summary.totalRake)} />
-              <HistoryStatCard label="游戏抽水" value={formatMoney(summary.gameRake)} />
-              <HistoryStatCard label="JP抽水" value={formatMoney(summary.totalJackpot)} />
-              <HistoryStatCard label="总抽水百手" value={formatNumber(summary.rakeBBPer100, 2)} />
-              <HistoryStatCard label="抽水百手" value={formatNumber(summary.gameRakeBBPer100, 2)} />
-              <HistoryStatCard label="JP抽水百手" value={formatNumber(summary.jackpotRakeBBPer100, 2)} />
-              <HistoryStatCard label="VPIP" value={formatPercent(summary.vpip, 1)} />
-              <HistoryStatCard label="PFR" value={formatPercent(summary.pfr, 1)} />
-              <HistoryStatCard label="3Bet" value={formatPercent(summary.threeBet, 1)} />
-              <HistoryStatCard label="3Bet 机会" value={summary.facingThreeBet.toLocaleString()} />
-              <HistoryStatCard label="WTSD" value={formatPercent(summary.wtsd, 1)} />
-              <HistoryStatCard label="WWSF" value={formatPercent(summary.wwsf, 1)} />
-              <HistoryStatCard label="W$SD" value={formatPercent(summary.wsd, 1)} />
+              <div className="history-stat-row history-stat-row--basic">
+                <HistoryStatCard label="总手数" value={summary.totalHands.toLocaleString()} />
+                <HistoryStatCard label="常驻级别" value={mainStake} />
+                <HistoryStatCard label="PVI" value={formatPercent(pvi, 2)} />
+              </div>
+              <div className="history-stat-row history-stat-row--profit">
+                <HistoryStatCard label="水后 $" value={formatMoney(summary.totalProfit)} tone={statTone(summary.totalProfit)} />
+                <HistoryStatCard label="水前 $" value={formatMoney(summary.beforeRakeProfit)} tone={statTone(summary.beforeRakeProfit)} />
+                <HistoryStatCard label="盈利 bb" value={formatNumber(summary.totalProfitBB, 1)} tone={statTone(summary.totalProfitBB)} />
+                <HistoryStatCard label="水后百手" value={formatNumber(summary.bbPer100, 2)} tone={statTone(summary.bbPer100)} />
+                <HistoryStatCard label="水前百手" value={formatNumber(summary.beforeRakeBBPer100, 2)} tone={statTone(summary.beforeRakeBBPer100)} />
+              </div>
+              <div className="history-stat-row history-stat-row--rake">
+                <HistoryStatCard label="总抽水" value={formatMoney(summary.totalRake)} />
+                <HistoryStatCard label="游戏抽水" value={formatMoney(summary.gameRake)} />
+                <HistoryStatCard label="JP抽水" value={formatMoney(summary.totalJackpot)} />
+                <HistoryStatCard label="总抽水百手" value={formatNumber(summary.rakeBBPer100, 2)} />
+                <HistoryStatCard label="抽水百手" value={formatNumber(summary.gameRakeBBPer100, 2)} />
+                <HistoryStatCard label="JP抽水百手" value={formatNumber(summary.jackpotRakeBBPer100, 2)} />
+              </div>
+              <div className="history-stat-row history-stat-row--preflop">
+                <HistoryStatCard label="VPIP" value={formatPercent(summary.vpip, 1)} />
+                <HistoryStatCard label="PFR" value={formatPercent(summary.pfr, 1)} />
+                <HistoryStatCard label="3Bet" value={formatPercent(summary.threeBet, 1)} />
+              </div>
+              <div className="history-stat-row history-stat-row--showdown">
+                <HistoryStatCard label="WTSD" value={formatPercent(summary.wtsd, 1)} size="large" />
+                <HistoryStatCard label="WWSF" value={formatPercent(summary.wwsf, 1)} tone={wwsfTone(summary.wwsf)} size="large" />
+                <HistoryStatCard label="W$SD" value={formatPercent(summary.wsd, 1)} size="large" />
+              </div>
             </section>
 
             <section className="history-chart-card">

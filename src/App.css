@@ -981,9 +981,35 @@ input:focus {
 }
 
 .history-stat-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.history-stat-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 12px;
+}
+
+.history-stat-row--basic {
+  grid-template-columns: repeat(3, minmax(132px, 1fr));
+}
+
+.history-stat-row--profit {
+  grid-template-columns: repeat(5, minmax(132px, 1fr));
+}
+
+.history-stat-row--rake {
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+}
+
+.history-stat-row--preflop {
+  grid-template-columns: repeat(3, minmax(132px, 1fr));
+}
+
+.history-stat-row--showdown {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .history-stat-card {
@@ -1016,6 +1042,21 @@ input:focus {
 
 .history-stat-card--loss strong {
   color: #fca5a5;
+}
+
+.history-stat-card--large {
+  min-height: 108px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.history-stat-card--large span {
+  color: #bfdbfe;
+}
+
+.history-stat-card--large strong {
+  font-size: 30px;
 }
 
 .history-chart-card,
@@ -1205,6 +1246,15 @@ input:focus {
   }
 
   .history-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .history-stat-row,
+  .history-stat-row--basic,
+  .history-stat-row--profit,
+  .history-stat-row--rake,
+  .history-stat-row--preflop,
+  .history-stat-row--showdown {
     grid-template-columns: 1fr;
   }
 }
