@@ -1024,19 +1024,35 @@ function HistoryCurve({ data = [] }) {
   const x = (index) => pad + (index / (data.length - 1)) * (width - pad * 2);
   const y = (value) => height - pad - ((value - minY) / span) * (height - pad * 2);
   const zeroY = y(0);
+  const hands = data.length;
 
   return (
     <svg className="history-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="资金曲线">
       <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} className="history-zero-line" />
-      {HISTORY_CURVE_LINES.map((line) => {
+      {HISTORY_CURVE_LINES.map((line, lineIndex) => {
         const path = data
           .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index).toFixed(1)} ${y(point[line.key] ?? 0).toFixed(1)}`)
           .join(' ');
         const last = data[data.length - 1]?.[line.key] ?? 0;
+        const bbPer100 = hands ? (last / hands) * 100 : 0;
+        const tooltip = `${line.label}: 总 ${formatNumber(last, 1)} BB，${formatNumber(bbPer100, 2)} bb/100`;
+        const labelY = Math.min(height - 34, Math.max(18, y(last) + (lineIndex - 1.5) * 10));
         return (
           <g key={line.key}>
-            <path d={path} className="history-profit-line" style={{ stroke: line.color }} />
-            <circle cx={x(data.length - 1)} cy={y(last)} r="3.5" className="history-profit-dot" style={{ fill: line.color }} />
+            <path d={path} className="history-profit-line" style={{ stroke: line.color }}>
+              <title>{tooltip}</title>
+            </path>
+            <circle cx={x(data.length - 1)} cy={y(last)} r="3.5" className="history-profit-dot" style={{ fill: line.color }}>
+              <title>{tooltip}</title>
+            </circle>
+            <text
+              x={width - pad + 6}
+              y={labelY}
+              className="history-line-end-label"
+              style={{ fill: line.color }}
+            >
+              {formatNumber(bbPer100, 2)}
+            </text>
           </g>
         );
       })}
