@@ -52,11 +52,10 @@ function positionMap(seats, buttonSeat) {
 }
 
 function inferPreflopStats(lines, hero) {
-  let facingRaise = false;
-  let heroFacingRaise = false;
   let heroVoluntary = false;
   let heroRaise = false;
   let heroThreeBet = false;
+  let heroThreeBetOpportunity = false;
   let heroActed = false;
   let raiseCount = 0;
 
@@ -68,8 +67,8 @@ function inferPreflopStats(lines, hero) {
     const isVoluntary = line.includes(' calls ') || line.includes(' raises ') || line.includes(' bets ');
     const isRaise = line.includes(' raises ');
 
-    if (player === hero && isVoluntary && !heroActed) {
-      heroFacingRaise = facingRaise;
+    if (player === hero && !heroActed && (isVoluntary || line.includes(': folds') || line.includes(': checks'))) {
+      heroThreeBetOpportunity = raiseCount === 1;
       heroActed = true;
     }
     if (player === hero && isVoluntary) heroVoluntary = true;
@@ -79,11 +78,16 @@ function inferPreflopStats(lines, hero) {
     }
     if (isRaise) {
       raiseCount += 1;
-      facingRaise = true;
     }
   }
 
-  return { heroFacingRaise, heroVoluntary, heroRaise, heroThreeBet };
+  return {
+    heroFacingRaise: heroThreeBetOpportunity,
+    heroThreeBetOpportunity,
+    heroVoluntary,
+    heroRaise,
+    heroThreeBet
+  };
 }
 
 export function parseGgHand(raw) {
@@ -201,7 +205,7 @@ export function summarizeHeroResults(results) {
   const totalProfitBB = results.reduce((sum, hand) => sum + hand.profitBB, 0);
   const vpipCount = results.filter((hand) => hand.heroVoluntary).length;
   const pfrCount = results.filter((hand) => hand.heroRaise).length;
-  const facingThreeBet = results.filter((hand) => hand.heroFacingRaise).length;
+  const facingThreeBet = results.filter((hand) => hand.heroThreeBetOpportunity || hand.heroFacingRaise).length;
   const threeBetCount = results.filter((hand) => hand.heroThreeBet).length;
   const byPosition = new Map();
   const byStakes = new Map();

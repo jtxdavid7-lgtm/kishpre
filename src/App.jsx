@@ -202,15 +202,22 @@ async function readZipTexts(fileName, data, depth = 0) {
   return chunks;
 }
 
+function isZipPayload(name, data) {
+  const lower = name.toLowerCase();
+  const bytes = new Uint8Array(data, 0, Math.min(4, data.byteLength));
+  return lower.endsWith('.zip') || (bytes[0] === 0x50 && bytes[1] === 0x4b);
+}
+
 async function readHistoryFiles(fileList) {
   const files = Array.from(fileList ?? []);
   const chunks = [];
   for (const file of files) {
-    const lower = file.name.toLowerCase();
-    if (lower.endsWith('.txt')) {
-      chunks.push({ name: file.webkitRelativePath || file.name, text: await file.text() });
-    } else if (lower.endsWith('.zip')) {
-      chunks.push(...await readZipTexts(file.webkitRelativePath || file.name, await file.arrayBuffer()));
+    const name = file.webkitRelativePath || file.name;
+    const data = await file.arrayBuffer();
+    if (isZipPayload(name, data)) {
+      chunks.push(...await readZipTexts(name, data));
+    } else {
+      chunks.push({ name, text: new TextDecoder('utf-8').decode(data) });
     }
   }
   return chunks;
@@ -1082,7 +1089,6 @@ function HandHistoryView() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".txt,.zip"
           multiple
           hidden
           onChange={(event) => {
