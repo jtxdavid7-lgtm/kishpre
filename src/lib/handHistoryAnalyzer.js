@@ -107,7 +107,6 @@ export function parseGgHand(raw) {
   const preflopLines = [];
   let currentStreet = 'preflop';
   let streetCommit = new Map();
-  let totalPot = 0;
   let rake = 0;
   let jackpot = 0;
 
@@ -124,7 +123,6 @@ export function parseGgHand(raw) {
     if (dealtMatch) heroCandidates.push(dealtMatch[1]);
     const potMatch = line.match(/^Total pot \$([\d.]+).* Rake \$([\d.]+).* Jackpot \$([\d.]+)/);
     if (potMatch) {
-      totalPot = Number(potMatch[1]);
       rake = Number(potMatch[2]);
       jackpot = Number(potMatch[3]);
     }
@@ -195,9 +193,11 @@ export function parseGgHand(raw) {
     getHeroResult(hero) {
       const player = players.get(hero);
       if (!player) return null;
-      const heroInvested = invested.get(hero) ?? 0;
-      const rakeShare = totalPot ? rake * (heroInvested / totalPot) : 0;
-      const jackpotShare = totalPot ? jackpot * (heroInvested / totalPot) : 0;
+      const heroWon = won.get(hero) ?? 0;
+      const totalWon = [...won.values()].reduce((sum, amount) => sum + amount, 0);
+      const winnerShare = totalWon ? heroWon / totalWon : 0;
+      const rakeShare = rake * winnerShare;
+      const jackpotShare = jackpot * winnerShare;
       const profit = (won.get(hero) ?? 0) - (invested.get(hero) ?? 0);
       const heroSummary = summary.get(hero) ?? {};
       const sawFlop = lines.some((line) => line.startsWith('*** FLOP ***')) && !heroSummary.detail?.includes('folded before Flop');
