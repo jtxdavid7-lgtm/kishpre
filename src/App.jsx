@@ -1010,6 +1010,34 @@ function stakeLabel(stakes) {
   return bb ? `NL${Math.round(bb * 100)}` : stakes;
 }
 
+function niceStep(value) {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  const exponent = Math.floor(Math.log10(value));
+  const base = 10 ** exponent;
+  const fraction = value / base;
+  if (fraction <= 1) return base;
+  if (fraction <= 2) return 2 * base;
+  if (fraction <= 5) return 5 * base;
+  return 10 * base;
+}
+
+function handTickStep(hands) {
+  if (hands <= 1000) return 100;
+  if (hands <= 10000) return 1000;
+  if (hands <= 100000) return 10000;
+  return niceStep(hands / 8);
+}
+
+function buildRangeTicks(minValue, maxValue, step) {
+  const start = Math.floor(minValue / step) * step;
+  const end = Math.ceil(maxValue / step) * step;
+  const ticks = [];
+  for (let tick = start; tick <= end + step * 0.001; tick += step) {
+    ticks.push(Math.abs(tick) < step * 0.001 ? 0 : tick);
+  }
+  return ticks;
+}
+
 const HISTORY_CURVE_LINES = [
   { key: 'profitBB', label: '总盈亏', color: '#22c55e' },
   { key: 'beforeRakeBB', label: '水前盈亏', color: '#facc15' },
@@ -1029,15 +1057,20 @@ function HistoryCurve({ data = [] }) {
   const padTop = 24;
   const padBottom = 48;
   const values = data.flatMap((point) => HISTORY_CURVE_LINES.map((line) => point[line.key] ?? 0));
-  const minY = Math.min(0, ...values);
-  const maxY = Math.max(0, ...values);
+  const rawMinY = Math.min(0, ...values);
+  const rawMaxY = Math.max(0, ...values);
+  const yStep = niceStep(Math.max(1, rawMaxY - rawMinY) / 4);
+  const minY = Math.floor(rawMinY / yStep) * yStep;
+  const maxY = Math.max(yStep, Math.ceil(rawMaxY / yStep) * yStep);
   const span = maxY - minY || 1;
   const x = (index) => padLeft + (index / (data.length - 1)) * (width - padLeft - padRight);
   const y = (value) => height - padBottom - ((value - minY) / span) * (height - padTop - padBottom);
   const zeroY = y(0);
   const hands = data.length;
-  const xTicks = [0, Math.floor((hands - 1) * 0.25), Math.floor((hands - 1) * 0.5), Math.floor((hands - 1) * 0.75), hands - 1];
-  const yTicks = [maxY, maxY - span * 0.25, maxY - span * 0.5, maxY - span * 0.75, minY];
+  const xStep = handTickStep(hands);
+  const xTicks = [0];
+  for (let tick = xStep; tick < hands; tick += xStep) xTicks.push(tick);
+  const yTicks = buildRangeTicks(minY, maxY, yStep).reverse();
   const hoverIndex = hoveredPoint?.index ?? null;
   const hoverData = hoverIndex == null ? null : data[hoverIndex];
 
@@ -1072,8 +1105,8 @@ function HistoryCurve({ data = [] }) {
           </g>
         ))}
         {xTicks.map((tick) => (
-          <text key={tick} x={x(tick)} y={height - 14} textAnchor="middle" className="history-axis-label">
-            {data[tick]?.hand ?? tick + 1}
+          <text key={tick} x={x(tick === 0 ? 0 : tick - 1)} y={height - 14} textAnchor="middle" className="history-axis-label">
+            {tick}
           </text>
         ))}
         <line x1={padLeft} y1={zeroY} x2={width - padRight} y2={zeroY} className="history-zero-line" />
