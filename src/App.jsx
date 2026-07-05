@@ -1011,16 +1011,16 @@ const HISTORY_CURVE_LINES = [
 ];
 
 function HistoryCurve({ data = [] }) {
-  const [hoveredLine, setHoveredLine] = useState(null);
+  const [hoveredPoint, setHoveredPoint] = useState(null);
   if (data.length < 2) {
     return <div className="history-empty-chart">上传牌谱后生成资金曲线</div>;
   }
   const width = 760;
-  const height = 260;
-  const padLeft = 28;
-  const padRight = 94;
-  const padTop = 22;
-  const padBottom = 34;
+  const height = 300;
+  const padLeft = 46;
+  const padRight = 98;
+  const padTop = 24;
+  const padBottom = 48;
   const values = data.flatMap((point) => HISTORY_CURVE_LINES.map((line) => point[line.key] ?? 0));
   const minY = Math.min(0, ...values);
   const maxY = Math.max(0, ...values);
@@ -1029,10 +1029,46 @@ function HistoryCurve({ data = [] }) {
   const y = (value) => height - padBottom - ((value - minY) / span) * (height - padTop - padBottom);
   const zeroY = y(0);
   const hands = data.length;
+  const xTicks = [0, Math.floor((hands - 1) * 0.25), Math.floor((hands - 1) * 0.5), Math.floor((hands - 1) * 0.75), hands - 1];
+  const yTicks = [maxY, maxY - span * 0.25, maxY - span * 0.5, maxY - span * 0.75, minY];
+  const hoverIndex = hoveredPoint?.index ?? null;
+  const hoverData = hoverIndex == null ? null : data[hoverIndex];
+
+  const updateHover = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const svgX = ((event.clientX - rect.left) / rect.width) * width;
+    const rawIndex = ((svgX - padLeft) / (width - padLeft - padRight)) * (hands - 1);
+    const index = Math.max(0, Math.min(hands - 1, Math.round(rawIndex)));
+    setHoveredPoint({
+      index,
+      clientX: event.clientX,
+      clientY: event.clientY
+    });
+  };
 
   return (
     <div className="history-curve-wrap">
-      <svg className="history-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="资金曲线">
+      <svg
+        className="history-curve"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="资金曲线"
+        onMouseMove={updateHover}
+        onMouseLeave={() => setHoveredPoint(null)}
+      >
+        {yTicks.map((tick) => (
+          <g key={tick.toFixed(3)}>
+            <line x1={padLeft} y1={y(tick)} x2={width - padRight} y2={y(tick)} className="history-grid-line" />
+            <text x={padLeft - 8} y={y(tick) + 4} textAnchor="end" className="history-axis-label">
+              {formatNumber(tick, 0)}
+            </text>
+          </g>
+        ))}
+        {xTicks.map((tick) => (
+          <text key={tick} x={x(tick)} y={height - 14} textAnchor="middle" className="history-axis-label">
+            {data[tick]?.hand ?? tick + 1}
+          </text>
+        ))}
         <line x1={padLeft} y1={zeroY} x2={width - padRight} y2={zeroY} className="history-zero-line" />
         {HISTORY_CURVE_LINES.map((line, lineIndex) => {
           const path = data
@@ -1040,19 +1076,9 @@ function HistoryCurve({ data = [] }) {
             .join(' ');
           const last = data[data.length - 1]?.[line.key] ?? 0;
           const bbPer100 = hands ? (last / hands) * 100 : 0;
-          const tooltip = `${line.label}: 总 ${formatNumber(last, 1)} BB，${formatNumber(bbPer100, 2)} bb/100`;
           const labelY = Math.min(height - 42, Math.max(18, y(last) + (lineIndex - 1.5) * 11));
-          const setHover = (event) => {
-            setHoveredLine({
-              x: event.clientX,
-              y: event.clientY,
-              color: line.color,
-              text: tooltip
-            });
-          };
           return (
-            <g key={line.key} onMouseMove={setHover} onMouseLeave={() => setHoveredLine(null)}>
-              <path d={path} className="history-profit-hit" />
+            <g key={line.key}>
               <path d={path} className="history-profit-line" style={{ stroke: line.color }} />
               <circle cx={x(data.length - 1)} cy={y(last)} r="3.5" className="history-profit-dot" style={{ fill: line.color }} />
               <text
@@ -1066,9 +1092,23 @@ function HistoryCurve({ data = [] }) {
             </g>
           );
         })}
-        <text x={padLeft} y={16} className="history-axis-label">{Math.round(maxY)} bb</text>
-        <text x={padLeft} y={height - 8} className="history-axis-label">{Math.round(minY)} bb</text>
-        <text x={width - padRight} y={height - 8} textAnchor="end" className="history-axis-label">{data.length} hands</text>
+        {hoverData && (
+          <g>
+            <line x1={x(hoverIndex)} y1={padTop} x2={x(hoverIndex)} y2={height - padBottom} className="history-hover-line" />
+            {HISTORY_CURVE_LINES.map((line) => (
+              <circle
+                key={line.key}
+                cx={x(hoverIndex)}
+                cy={y(hoverData[line.key] ?? 0)}
+                r="4"
+                className="history-hover-dot"
+                style={{ fill: line.color }}
+              />
+            ))}
+          </g>
+        )}
+        <text x={padLeft} y={13} className="history-axis-title">盈利 (BB)</text>
+        <text x={(width + padLeft - padRight) / 2} y={height - 2} textAnchor="middle" className="history-axis-title">手数</text>
       </svg>
       <div className="history-curve-footer">
         <div className="history-curve-legend">
@@ -1077,12 +1117,21 @@ function HistoryCurve({ data = [] }) {
           ))}
         </div>
       </div>
-      {hoveredLine && (
+      {hoverData && (
         <div
           className="history-curve-tooltip"
-          style={{ left: hoveredLine.x + 12, top: hoveredLine.y + 12, borderColor: hoveredLine.color }}
+          style={{ left: hoveredPoint.clientX + 12, top: hoveredPoint.clientY + 12 }}
         >
-          {hoveredLine.text}
+          <strong>第 {hoverData.hand.toLocaleString()} 手</strong>
+          {HISTORY_CURVE_LINES.map((line) => {
+            const total = hoverData[line.key] ?? 0;
+            const bbPer100 = hoverData.hand ? (total / hoverData.hand) * 100 : 0;
+            return (
+              <span key={line.key} style={{ color: line.color }}>
+                {line.label}: {formatNumber(total, 1)} BB / {formatNumber(bbPer100, 2)} bb/100
+              </span>
+            );
+          })}
         </div>
       )}
     </div>

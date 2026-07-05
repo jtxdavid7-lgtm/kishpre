@@ -1070,15 +1070,6 @@ input:focus {
   stroke-dasharray: 5 5;
 }
 
-.history-profit-hit {
-  fill: none;
-  stroke: transparent;
-  stroke-width: 14;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  cursor: crosshair;
-}
-
 .history-profit-line {
   fill: none;
   stroke-width: 3;
@@ -1095,6 +1086,28 @@ input:focus {
 .history-axis-label {
   fill: #94a3b8;
   font-size: 12px;
+}
+
+.history-grid-line {
+  stroke: rgba(148, 163, 184, 0.12);
+  stroke-width: 1;
+}
+
+.history-hover-line {
+  stroke: rgba(226, 232, 240, 0.5);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.history-hover-dot {
+  stroke: #030712;
+  stroke-width: 2;
+}
+
+.history-axis-title {
+  fill: #bfdbfe;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .history-line-end-label {
@@ -1145,7 +1158,15 @@ input:focus {
   padding: 8px 10px;
   font-size: 12px;
   pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   white-space: nowrap;
+}
+
+.history-curve-tooltip strong {
+  color: #f8fafc;
+  margin-bottom: 2px;
 }
 
 .history-breakdown {
