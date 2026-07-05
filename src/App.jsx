@@ -223,6 +223,20 @@ async function readHistoryFiles(fileList) {
   return chunks;
 }
 
+function handDateValue(hand) {
+  const match = String(hand.date ?? '').match(/^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+  if (!match) return 0;
+  const [, year, month, day, hour, minute, second] = match.map(Number);
+  return Date.UTC(year, month - 1, day, hour, minute, second);
+}
+
+function sortHandsByTime(hands) {
+  return [...hands].sort((a, b) => (
+    handDateValue(a) - handDateValue(b)
+    || String(a.id).localeCompare(String(b.id))
+  ));
+}
+
 function rankedPlayers(hands) {
   const counts = new Map();
   const auto = new Map();
@@ -1229,7 +1243,7 @@ function HandHistoryView() {
       const parsed = chunks.flatMap((chunk) => parseGgHands(chunk.text));
       const unique = new Map();
       for (const hand of parsed) unique.set(hand.id, hand);
-      const nextHands = [...unique.values()];
+      const nextHands = sortHandsByTime([...unique.values()]);
       const nextPlayers = rankedPlayers(nextHands);
       setHands(nextHands);
       setFileMeta({
