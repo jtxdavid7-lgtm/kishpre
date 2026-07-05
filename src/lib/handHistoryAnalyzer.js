@@ -58,6 +58,7 @@ function inferPreflopStats(lines, hero) {
   let heroThreeBetOpportunity = false;
   let heroActed = false;
   let raiseCount = 0;
+  let callersAfterOpen = 0;
 
   for (const line of lines) {
     if (line.startsWith('*** FLOP ***')) break;
@@ -68,16 +69,18 @@ function inferPreflopStats(lines, hero) {
     const isRaise = line.includes(' raises ');
 
     if (player === hero && !heroActed && (isVoluntary || line.includes(': folds') || line.includes(': checks'))) {
-      heroThreeBetOpportunity = raiseCount === 1;
+      heroThreeBetOpportunity = raiseCount === 1 && callersAfterOpen === 0;
       heroActed = true;
     }
     if (player === hero && isVoluntary) heroVoluntary = true;
     if (player === hero && isRaise) {
       heroRaise = true;
-      if (raiseCount >= 1) heroThreeBet = true;
+      if (raiseCount === 1 && callersAfterOpen === 0) heroThreeBet = true;
     }
     if (isRaise) {
       raiseCount += 1;
+    } else if (line.includes(' calls ') && raiseCount === 1 && player !== hero) {
+      callersAfterOpen += 1;
     }
   }
 
@@ -230,14 +233,15 @@ export function parseGgHands(text) {
 
 export function summarizeHeroResults(results) {
   const totalHands = results.length;
-  const totalProfit = results.reduce((sum, hand) => sum + hand.profit, 0);
-  const totalProfitBB = results.reduce((sum, hand) => sum + hand.profitBB, 0);
+  const rawProfit = results.reduce((sum, hand) => sum + hand.profit, 0);
   const gameRake = results.reduce((sum, hand) => sum + hand.rake, 0);
   const totalJackpot = results.reduce((sum, hand) => sum + hand.jackpot, 0);
   const totalRake = gameRake + totalJackpot;
+  const totalProfit = rawProfit + totalJackpot;
   const totalRakeBB = results.reduce((sum, hand) => sum + (hand.rake + hand.jackpot) / hand.bb, 0);
   const gameRakeBB = results.reduce((sum, hand) => sum + hand.rake / hand.bb, 0);
   const jackpotRakeBB = results.reduce((sum, hand) => sum + hand.jackpot / hand.bb, 0);
+  const totalProfitBB = results.reduce((sum, hand) => sum + (hand.profit + hand.jackpot) / hand.bb, 0);
   const vpipCount = results.filter((hand) => hand.heroVoluntary).length;
   const pfrCount = results.filter((hand) => hand.heroRaise).length;
   const facingThreeBet = results.filter((hand) => hand.heroThreeBetOpportunity || hand.heroFacingRaise).length;
@@ -254,10 +258,11 @@ export function summarizeHeroResults(results) {
   let runningNonShowdown = 0;
   let runningShowdown = 0;
   const curve = results.map((hand, index) => {
-    running += hand.profitBB;
+    const displayProfitBB = (hand.profit + hand.jackpot) / hand.bb;
+    running += displayProfitBB;
     const rakeBB = (hand.rake + hand.jackpot) / hand.bb;
-    runningBeforeRake += hand.profitBB + rakeBB;
-    runningEv += hand.profitBB + rakeBB * 0.36;
+    runningBeforeRake += displayProfitBB + rakeBB;
+    runningEv += displayProfitBB + rakeBB * 0.36;
     if (hand.wentToShowdown) {
       runningShowdown += hand.profitBB;
     } else {
