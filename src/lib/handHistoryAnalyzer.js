@@ -1,5 +1,8 @@
 const MONEY_RE = /\$(-?[\d,]+(?:\.\d+)?)/;
 const HAND_SPLIT_RE = /(?=Poker Hand #)/g;
+const FLOP_RE = /^\*\*\* (?:FIRST |SECOND )?FLOP \*\*\*/;
+const TURN_RE = /^\*\*\* (?:FIRST |SECOND )?TURN \*\*\*/;
+const RIVER_RE = /^\*\*\* (?:FIRST |SECOND )?RIVER \*\*\*/;
 
 export const POSITIONS = ['BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO', 'MP', 'EP'];
 
@@ -62,10 +65,9 @@ function inferPreflopStats(lines, hero) {
   let heroThreeBetOpportunity = false;
   let heroActed = false;
   let raiseCount = 0;
-  let callersAfterOpen = 0;
 
   for (const line of lines) {
-    if (/^\*\*\* (?:FIRST |SECOND )?FLOP \*\*\*/.test(line)) break;
+    if (FLOP_RE.test(line)) break;
     if (!line.includes(': ')) continue;
     const player = playerFromAction(line);
     if (!player) continue;
@@ -73,18 +75,16 @@ function inferPreflopStats(lines, hero) {
     const isRaise = line.includes(' raises ');
 
     if (player === hero && !heroActed && (isVoluntary || line.includes(': folds') || line.includes(': checks'))) {
-      heroThreeBetOpportunity = raiseCount === 1 && callersAfterOpen === 0;
+      heroThreeBetOpportunity = raiseCount === 1;
       heroActed = true;
     }
     if (player === hero && isVoluntary) heroVoluntary = true;
     if (player === hero && isRaise) {
       heroRaise = true;
-      if (raiseCount === 1 && callersAfterOpen === 0) heroThreeBet = true;
+      if (raiseCount === 1) heroThreeBet = true;
     }
     if (isRaise) {
       raiseCount += 1;
-    } else if (line.includes(' calls ') && raiseCount === 1 && player !== hero) {
-      callersAfterOpen += 1;
     }
   }
 
@@ -133,13 +133,13 @@ export function parseGgHand(raw) {
       rake = parseMoney(potMatch[2]);
       jackpot = parseMoney(potMatch[3]);
     }
-    if (/^\*\*\* (?:FIRST |SECOND )?FLOP \*\*\*/.test(line)) {
+    if (FLOP_RE.test(line)) {
       currentStreet = 'flop';
       streetCommit = new Map();
-    } else if (/^\*\*\* (?:FIRST |SECOND )?TURN \*\*\*/.test(line)) {
+    } else if (TURN_RE.test(line)) {
       currentStreet = 'turn';
       streetCommit = new Map();
-    } else if (/^\*\*\* (?:FIRST |SECOND )?RIVER \*\*\*/.test(line)) {
+    } else if (RIVER_RE.test(line)) {
       currentStreet = 'river';
       streetCommit = new Map();
     }
@@ -207,10 +207,10 @@ export function parseGgHand(raw) {
       const jackpotShare = jackpot * winnerShare;
       const profit = (won.get(hero) ?? 0) - (invested.get(hero) ?? 0);
       const heroSummary = summary.get(hero) ?? {};
-      const sawFlop = lines.some((line) => line.startsWith('*** FLOP ***')) && !heroSummary.detail?.includes('folded before Flop');
+      const sawFlop = lines.some((line) => FLOP_RE.test(line)) && !heroSummary.detail?.includes('folded before Flop');
       const wentToShowdown = Boolean(heroSummary.showed);
       const wonAtShowdown = Boolean(heroSummary.showed && heroSummary.won);
-      const wonWhenSawFlop = sawFlop && profit > 0;
+      const wonWhenSawFlop = Boolean(sawFlop && heroSummary.won);
       return {
         id,
         date,
@@ -251,8 +251,8 @@ export function summarizeHeroResults(results) {
   const facingThreeBet = results.filter((hand) => hand.heroThreeBetOpportunity || hand.heroFacingRaise).length;
   const threeBetCount = results.filter((hand) => hand.heroThreeBet).length;
   const sawFlopCount = results.filter((hand) => hand.sawFlop).length;
-  const showdownCount = results.filter((hand) => hand.wentToShowdown).length;
-  const wonAtShowdownCount = results.filter((hand) => hand.wonAtShowdown).length;
+  const showdownCount = results.filter((hand) => hand.sawFlop && hand.wentToShowdown).length;
+  const wonAtShowdownCount = results.filter((hand) => hand.sawFlop && hand.wentToShowdown && hand.wonAtShowdown).length;
   const wonWhenSawFlopCount = results.filter((hand) => hand.wonWhenSawFlop).length;
   const byPosition = new Map();
   const byStakes = new Map();

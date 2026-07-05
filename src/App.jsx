@@ -1387,13 +1387,13 @@ function HandHistoryView() {
                 <HistoryStatCard label="JP抽水百手" value={formatNumber(summary.jackpotRakeBBPer100, 2)} />
               </div>
               <div className="history-stat-row history-stat-row--preflop">
-                <HistoryStatCard label="VPIP" value={formatPercent(summary.vpip, 1)} />
-                <HistoryStatCard label="PFR" value={formatPercent(summary.pfr, 1)} />
+                <HistoryStatCard label="VPIP" value={formatPercent(summary.vpip, 0)} />
+                <HistoryStatCard label="PFR" value={formatPercent(summary.pfr, 0)} />
                 <HistoryStatCard label="3Bet" value={formatPercent(summary.threeBet, 1)} />
               </div>
               <div className="history-stat-row history-stat-row--showdown">
                 <HistoryStatCard label="WTSD" value={formatPercent(summary.wtsd, 1)} size="large" />
-                <HistoryStatCard label="WWSF" value={formatPercent(summary.wwsf, 1)} tone={wwsfTone(summary.wwsf)} size="large" />
+                <HistoryStatCard label="WWSF" value={formatPercent(summary.wwsf, 0)} tone={wwsfTone(summary.wwsf)} size="large" />
                 <HistoryStatCard label="W$SD" value={formatPercent(summary.wsd, 1)} size="large" />
               </div>
             </section>
