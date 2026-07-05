@@ -5,6 +5,13 @@ import { BASE_RANGES } from './data/base';
 import { PROFILES } from './data/profiles';
 import { getRangePayload } from './lib/rangeEngine';
 import { simulateEquity } from './lib/equityEngine';
+import JSZip from 'jszip';
+import {
+  POSITIONS,
+  exportSummaryCsv,
+  parseGgHands,
+  summarizeHeroResults
+} from './lib/handHistoryAnalyzer';
 import './App.css';
 
 const sceneOptions = Object.values(BASE_RANGES).map((range) => ({
@@ -25,7 +32,7 @@ const FEATURE_BLUEPRINT = [
   { key: 'equity', action: 'equity' },
   { key: 'variance', action: 'variance' },
   { key: 'rng', action: 'download' },
-  { key: 'reports', action: null }
+  { key: 'reports', action: 'history' }
 ];
 const RNG_DOWNLOAD_PATH = '/downloads/kish-rng-win-x64-0.1.1.zip';
 const PERCENTILE_POINTS = [
@@ -74,13 +81,14 @@ const HOMEPAGE_COPY = {
       reports: {
         label: 'Reports',
         title: 'Hand History 工具',
-        desc: '整理关键牌局并生成复盘报告（开发中）。'
+        desc: '导入 GGPoker 手牌历史，查看基础盈亏、资金曲线和翻前数据。'
       }
     },
     actions: {
       range: '进入',
       equity: '进入',
       variance: '进入',
+      history: '进入',
       download: '下载'
     }
   },
@@ -121,13 +129,14 @@ const HOMEPAGE_COPY = {
       reports: {
         label: 'Reports',
         title: 'Hand-history builder',
-        desc: 'Collect key hands and export review-ready summaries (in progress).'
+        desc: 'Import GGPoker hand histories and review profit, curve, and preflop stats.'
       }
     },
     actions: {
       range: 'Launch',
       equity: 'Launch',
       variance: 'Launch',
+      history: 'Launch',
       download: 'Download'
     }
   }
@@ -172,6 +181,62 @@ const summarizeRange = (range = {}) => {
     coverage
   };
 };
+
+async function readZipTexts(fileName, data, depth = 0) {
+  if (depth > 2) return [];
+  const zip = await JSZip.loadAsync(data);
+  const entries = Object.values(zip.files).filter((entry) => !entry.dir);
+  const chunks = [];
+  for (const entry of entries) {
+    const lower = entry.name.toLowerCase();
+    if (lower.endsWith('.txt')) {
+      chunks.push({
+        name: `${fileName}/${entry.name}`,
+        text: await entry.async('string')
+      });
+    } else if (lower.endsWith('.zip')) {
+      const nested = await entry.async('arraybuffer');
+      chunks.push(...await readZipTexts(`${fileName}/${entry.name}`, nested, depth + 1));
+    }
+  }
+  return chunks;
+}
+
+async function readHistoryFiles(fileList) {
+  const files = Array.from(fileList ?? []);
+  const chunks = [];
+  for (const file of files) {
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith('.txt')) {
+      chunks.push({ name: file.webkitRelativePath || file.name, text: await file.text() });
+    } else if (lower.endsWith('.zip')) {
+      chunks.push(...await readZipTexts(file.webkitRelativePath || file.name, await file.arrayBuffer()));
+    }
+  }
+  return chunks;
+}
+
+function rankedPlayers(hands) {
+  const counts = new Map();
+  const auto = new Map();
+  for (const hand of hands) {
+    for (const name of hand.players.keys()) counts.set(name, (counts.get(name) ?? 0) + 1);
+    for (const name of hand.heroCandidates) auto.set(name, (auto.get(name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count, auto: auto.get(name) ?? 0 }))
+    .sort((a, b) => b.auto - a.auto || b.count - a.count || a.name.localeCompare(b.name));
+}
+
+function downloadText(filename, content, type = 'text/csv;charset=utf-8') {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 function RangeLabView() {
   const [sceneKey, setSceneKey] = useState(sceneOptions[0]?.value ?? 'BTN_open_100bb');
@@ -903,11 +968,233 @@ function VarianceView() {
   );
 }
 
+function HistoryCurve({ data = [] }) {
+  if (data.length < 2) {
+    return <div className="history-empty-chart">上传牌谱后生成资金曲线</div>;
+  }
+  const width = 720;
+  const height = 260;
+  const pad = 28;
+  const minY = Math.min(0, ...data.map((point) => point.profitBB));
+  const maxY = Math.max(0, ...data.map((point) => point.profitBB));
+  const span = maxY - minY || 1;
+  const x = (index) => pad + (index / (data.length - 1)) * (width - pad * 2);
+  const y = (value) => height - pad - ((value - minY) / span) * (height - pad * 2);
+  const path = data.map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index).toFixed(1)} ${y(point.profitBB).toFixed(1)}`).join(' ');
+  const zeroY = y(0);
+  const last = data[data.length - 1];
+
+  return (
+    <svg className="history-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="资金曲线">
+      <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} className="history-zero-line" />
+      <path d={path} className="history-profit-line" />
+      <circle cx={x(data.length - 1)} cy={y(last.profitBB)} r="4" className="history-profit-dot" />
+      <text x={pad} y={18} className="history-axis-label">{Math.round(maxY)} bb</text>
+      <text x={pad} y={height - 8} className="history-axis-label">{Math.round(minY)} bb</text>
+      <text x={width - pad} y={height - 8} textAnchor="end" className="history-axis-label">{data.length} hands</text>
+    </svg>
+  );
+}
+
+function HistoryStatCard({ label, value, tone }) {
+  return (
+    <article className={`history-stat-card ${tone ? `history-stat-card--${tone}` : ''}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function HandHistoryView() {
+  const fileInputRef = useRef(null);
+  const [status, setStatus] = useState('idle');
+  const [message, setMessage] = useState('');
+  const [hands, setHands] = useState([]);
+  const [fileMeta, setFileMeta] = useState(null);
+  const [hero, setHero] = useState('');
+  const [stakeFilter, setStakeFilter] = useState('all');
+  const [positionFilter, setPositionFilter] = useState('all');
+
+  const players = useMemo(() => rankedPlayers(hands), [hands]);
+  const rawResults = useMemo(() => (
+    hero ? hands.map((hand) => hand.getHeroResult(hero)).filter(Boolean) : []
+  ), [hands, hero]);
+  const stakeOptions = useMemo(() => [...new Set(rawResults.map((hand) => hand.stakes))].filter(Boolean), [rawResults]);
+  const positionOptions = useMemo(() => (
+    POSITIONS.filter((pos) => rawResults.some((hand) => hand.position === pos))
+  ), [rawResults]);
+  const filteredResults = useMemo(() => rawResults.filter((hand) => (
+    (stakeFilter === 'all' || hand.stakes === stakeFilter)
+    && (positionFilter === 'all' || hand.position === positionFilter)
+  )), [rawResults, stakeFilter, positionFilter]);
+  const summary = useMemo(() => summarizeHeroResults(filteredResults), [filteredResults]);
+
+  const handleFiles = async (files) => {
+    setStatus('loading');
+    setMessage('正在解析牌谱...');
+    try {
+      const chunks = await readHistoryFiles(files);
+      const parsed = chunks.flatMap((chunk) => parseGgHands(chunk.text));
+      const unique = new Map();
+      for (const hand of parsed) unique.set(hand.id, hand);
+      const nextHands = [...unique.values()];
+      const nextPlayers = rankedPlayers(nextHands);
+      setHands(nextHands);
+      setFileMeta({
+        files: chunks.length,
+        hands: nextHands.length,
+        duplicates: parsed.length - nextHands.length
+      });
+      setHero(nextPlayers[0]?.name ?? '');
+      setStakeFilter('all');
+      setPositionFilter('all');
+      setStatus(nextHands.length ? 'ready' : 'empty');
+      setMessage(nextHands.length ? '' : '没有识别到 GGPoker 手牌。');
+    } catch (error) {
+      setStatus('error');
+      setMessage(error instanceof Error ? error.message : '解析失败');
+    }
+  };
+
+  const exportCsv = () => {
+    if (!filteredResults.length) return;
+    downloadText(`kishpoker-${hero || 'hero'}-hands.csv`, exportSummaryCsv(filteredResults));
+  };
+
+  return (
+    <div className="site">
+      <nav className="top-nav">
+        <div className="brand">KISHPOKER · Hand History</div>
+        <div className="cta-row">
+          <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=range')}>Range Lab</button>
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=variance')}>波动计算</button>
+        </div>
+      </nav>
+
+      <section className="range-panel history-panel" style={{ marginTop: 0 }}>
+        <header>
+          <p className="eyebrow">GGPoker · Local parser</p>
+          <h2>牌谱统计</h2>
+          <p className="subtext">上传 GG 手牌历史，浏览器本地解析，不上传服务器。第一版支持基础盈亏、资金曲线、VPIP/PFR/3Bet、级别和位置筛选。</p>
+        </header>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.zip"
+          multiple
+          hidden
+          onChange={(event) => {
+            if (event.target.files?.length) handleFiles(event.target.files);
+            event.target.value = '';
+          }}
+        />
+
+        <section
+          className="history-upload"
+          onDragOver={(event) => {
+            event.preventDefault();
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            if (event.dataTransfer.files?.length) handleFiles(event.dataTransfer.files);
+          }}
+        >
+          <div>
+            <strong>{status === 'loading' ? '正在解析...' : '拖入或选择牌谱文件'}</strong>
+            <span>支持 .txt 和 .zip。大文件会在你的电脑本地处理。</span>
+          </div>
+          <button type="button" className="primary" onClick={() => fileInputRef.current?.click()} disabled={status === 'loading'}>
+            选择文件
+          </button>
+        </section>
+
+        {message && <div className={`history-message history-message--${status}`}>{message}</div>}
+
+        {hands.length > 0 && (
+          <>
+            <section className="history-controls">
+              <label>
+                <span>Hero</span>
+                <select value={hero} onChange={(event) => setHero(event.target.value)}>
+                  {players.map((player) => (
+                    <option key={player.name} value={player.name}>
+                      {player.name} · {player.count} hands{player.auto ? ' · auto' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>级别</span>
+                <select value={stakeFilter} onChange={(event) => setStakeFilter(event.target.value)}>
+                  <option value="all">全部</option>
+                  {stakeOptions.map((stake) => <option key={stake} value={stake}>{stake}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>位置</span>
+                <select value={positionFilter} onChange={(event) => setPositionFilter(event.target.value)}>
+                  <option value="all">全部</option>
+                  {positionOptions.map((position) => <option key={position} value={position}>{position}</option>)}
+                </select>
+              </label>
+              <button type="button" className="secondary" onClick={exportCsv} disabled={!filteredResults.length}>导出 CSV</button>
+            </section>
+
+            <section className="history-meta">
+              <span>导入 {fileMeta?.files ?? 0} 个文本源</span>
+              <span>识别 {fileMeta?.hands?.toLocaleString() ?? 0} 手牌</span>
+              {!!fileMeta?.duplicates && <span>去重 {fileMeta.duplicates.toLocaleString()} 手牌</span>}
+              <span>当前筛选 {filteredResults.length.toLocaleString()} 手牌</span>
+            </section>
+
+            <section className="history-stat-grid">
+              <HistoryStatCard label="总手数" value={summary.totalHands.toLocaleString()} />
+              <HistoryStatCard label="盈利 $/¥" value={summary.totalProfit.toFixed(2)} tone={summary.totalProfit >= 0 ? 'win' : 'loss'} />
+              <HistoryStatCard label="盈利 bb" value={summary.totalProfitBB.toFixed(1)} tone={summary.totalProfitBB >= 0 ? 'win' : 'loss'} />
+              <HistoryStatCard label="bb / 100" value={summary.bbPer100.toFixed(2)} tone={summary.bbPer100 >= 0 ? 'win' : 'loss'} />
+              <HistoryStatCard label="VPIP" value={`${summary.vpip.toFixed(1)}%`} />
+              <HistoryStatCard label="PFR" value={`${summary.pfr.toFixed(1)}%`} />
+              <HistoryStatCard label="3Bet" value={`${summary.threeBet.toFixed(1)}%`} />
+              <HistoryStatCard label="3Bet 机会" value={summary.facingThreeBet.toLocaleString()} />
+            </section>
+
+            <section className="history-chart-card">
+              <div className="history-chart-head">
+                <h3>资金曲线</h3>
+                <span>单位：bb</span>
+              </div>
+              <HistoryCurve data={summary.curve} />
+            </section>
+
+            <section className="history-breakdown">
+              <div>
+                <h4>位置分布</h4>
+                {summary.positions.map((item) => (
+                  <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
+                ))}
+              </div>
+              <div>
+                <h4>级别分布</h4>
+                {summary.stakes.map((item) => (
+                  <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
 
 function HomeView() {
   const openRange = () => window.location.assign('?tool=range');
   const openEquity = () => window.location.assign('?tool=equity');
   const openVariance = () => window.location.assign('?tool=variance');
+  const openHistory = () => window.location.assign('?tool=history');
   const downloadPlugin = () => {
     if (typeof window === 'undefined') return;
     window.open(RNG_DOWNLOAD_PATH, '_blank');
@@ -941,6 +1228,7 @@ function HomeView() {
       if (item.action === 'range') return openRange;
       if (item.action === 'equity') return openEquity;
       if (item.action === 'variance') return openVariance;
+      if (item.action === 'history') return openHistory;
       if (item.action === 'download') return downloadPlugin;
       return null;
     })();
@@ -1013,6 +1301,7 @@ function App() {
   if (tool === 'range') return <RangeLabView />;
   if (tool === 'equity') return <EquityView />;
   if (tool === 'variance') return <VarianceView />;
+  if (tool === 'history') return <HandHistoryView />;
   return <HomeView />;
 }
 
