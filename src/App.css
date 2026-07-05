@@ -1060,10 +1060,23 @@ input:focus {
   min-height: 180px;
 }
 
+.history-curve-wrap {
+  position: relative;
+}
+
 .history-zero-line {
   stroke: rgba(148, 163, 184, 0.36);
   stroke-width: 1;
   stroke-dasharray: 5 5;
+}
+
+.history-profit-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  cursor: crosshair;
 }
 
 .history-profit-line {
@@ -1089,15 +1102,20 @@ input:focus {
   font-weight: 700;
   paint-order: stroke;
   stroke: #030712;
-  stroke-width: 3px;
+  stroke-width: 4px;
   pointer-events: none;
+}
+
+.history-curve-footer {
+  margin-top: 8px;
+  padding-left: 10px;
 }
 
 .history-curve-legend {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
-  height: 20px;
   color: #cbd5f5;
   font-size: 11px;
 }
@@ -1113,6 +1131,21 @@ input:focus {
   width: 12px;
   height: 3px;
   border-radius: 999px;
+}
+
+.history-curve-tooltip {
+  position: fixed;
+  z-index: 50;
+  max-width: min(320px, calc(100vw - 32px));
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  background: rgba(3, 7, 18, 0.94);
+  color: #f8fafc;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+  padding: 8px 10px;
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 .history-breakdown {

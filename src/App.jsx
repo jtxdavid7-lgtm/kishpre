@@ -1011,62 +1011,81 @@ const HISTORY_CURVE_LINES = [
 ];
 
 function HistoryCurve({ data = [] }) {
+  const [hoveredLine, setHoveredLine] = useState(null);
   if (data.length < 2) {
     return <div className="history-empty-chart">上传牌谱后生成资金曲线</div>;
   }
-  const width = 720;
+  const width = 760;
   const height = 260;
-  const pad = 28;
+  const padLeft = 28;
+  const padRight = 94;
+  const padTop = 22;
+  const padBottom = 34;
   const values = data.flatMap((point) => HISTORY_CURVE_LINES.map((line) => point[line.key] ?? 0));
   const minY = Math.min(0, ...values);
   const maxY = Math.max(0, ...values);
   const span = maxY - minY || 1;
-  const x = (index) => pad + (index / (data.length - 1)) * (width - pad * 2);
-  const y = (value) => height - pad - ((value - minY) / span) * (height - pad * 2);
+  const x = (index) => padLeft + (index / (data.length - 1)) * (width - padLeft - padRight);
+  const y = (value) => height - padBottom - ((value - minY) / span) * (height - padTop - padBottom);
   const zeroY = y(0);
   const hands = data.length;
 
   return (
-    <svg className="history-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="资金曲线">
-      <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} className="history-zero-line" />
-      {HISTORY_CURVE_LINES.map((line, lineIndex) => {
-        const path = data
-          .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index).toFixed(1)} ${y(point[line.key] ?? 0).toFixed(1)}`)
-          .join(' ');
-        const last = data[data.length - 1]?.[line.key] ?? 0;
-        const bbPer100 = hands ? (last / hands) * 100 : 0;
-        const tooltip = `${line.label}: 总 ${formatNumber(last, 1)} BB，${formatNumber(bbPer100, 2)} bb/100`;
-        const labelY = Math.min(height - 34, Math.max(18, y(last) + (lineIndex - 1.5) * 10));
-        return (
-          <g key={line.key}>
-            <path d={path} className="history-profit-line" style={{ stroke: line.color }}>
-              <title>{tooltip}</title>
-            </path>
-            <circle cx={x(data.length - 1)} cy={y(last)} r="3.5" className="history-profit-dot" style={{ fill: line.color }}>
-              <title>{tooltip}</title>
-            </circle>
-            <text
-              x={width - pad + 6}
-              y={labelY}
-              className="history-line-end-label"
-              style={{ fill: line.color }}
-            >
-              {formatNumber(bbPer100, 2)}
-            </text>
-          </g>
-        );
-      })}
-      <text x={pad} y={18} className="history-axis-label">{Math.round(maxY)} bb</text>
-      <text x={pad} y={height - 8} className="history-axis-label">{Math.round(minY)} bb</text>
-      <text x={width - pad} y={height - 8} textAnchor="end" className="history-axis-label">{data.length} hands</text>
-      <foreignObject x={pad} y={height - 24} width="360" height="20">
+    <div className="history-curve-wrap">
+      <svg className="history-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="资金曲线">
+        <line x1={padLeft} y1={zeroY} x2={width - padRight} y2={zeroY} className="history-zero-line" />
+        {HISTORY_CURVE_LINES.map((line, lineIndex) => {
+          const path = data
+            .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index).toFixed(1)} ${y(point[line.key] ?? 0).toFixed(1)}`)
+            .join(' ');
+          const last = data[data.length - 1]?.[line.key] ?? 0;
+          const bbPer100 = hands ? (last / hands) * 100 : 0;
+          const tooltip = `${line.label}: 总 ${formatNumber(last, 1)} BB，${formatNumber(bbPer100, 2)} bb/100`;
+          const labelY = Math.min(height - 42, Math.max(18, y(last) + (lineIndex - 1.5) * 11));
+          const setHover = (event) => {
+            setHoveredLine({
+              x: event.clientX,
+              y: event.clientY,
+              color: line.color,
+              text: tooltip
+            });
+          };
+          return (
+            <g key={line.key} onMouseMove={setHover} onMouseLeave={() => setHoveredLine(null)}>
+              <path d={path} className="history-profit-hit" />
+              <path d={path} className="history-profit-line" style={{ stroke: line.color }} />
+              <circle cx={x(data.length - 1)} cy={y(last)} r="3.5" className="history-profit-dot" style={{ fill: line.color }} />
+              <text
+                x={width - padRight + 8}
+                y={labelY}
+                className="history-line-end-label"
+                style={{ fill: line.color }}
+              >
+                {formatNumber(bbPer100, 2)}
+              </text>
+            </g>
+          );
+        })}
+        <text x={padLeft} y={16} className="history-axis-label">{Math.round(maxY)} bb</text>
+        <text x={padLeft} y={height - 8} className="history-axis-label">{Math.round(minY)} bb</text>
+        <text x={width - padRight} y={height - 8} textAnchor="end" className="history-axis-label">{data.length} hands</text>
+      </svg>
+      <div className="history-curve-footer">
         <div className="history-curve-legend">
           {HISTORY_CURVE_LINES.map((line) => (
             <span key={line.key}><i style={{ background: line.color }} />{line.label}</span>
           ))}
         </div>
-      </foreignObject>
-    </svg>
+      </div>
+      {hoveredLine && (
+        <div
+          className="history-curve-tooltip"
+          style={{ left: hoveredLine.x + 12, top: hoveredLine.y + 12, borderColor: hoveredLine.color }}
+        >
+          {hoveredLine.text}
+        </div>
+      )}
+    </div>
   );
 }
 
