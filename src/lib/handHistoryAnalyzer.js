@@ -232,8 +232,12 @@ export function summarizeHeroResults(results) {
   const totalHands = results.length;
   const totalProfit = results.reduce((sum, hand) => sum + hand.profit, 0);
   const totalProfitBB = results.reduce((sum, hand) => sum + hand.profitBB, 0);
-  const totalRake = results.reduce((sum, hand) => sum + hand.rake, 0);
+  const gameRake = results.reduce((sum, hand) => sum + hand.rake, 0);
   const totalJackpot = results.reduce((sum, hand) => sum + hand.jackpot, 0);
+  const totalRake = gameRake + totalJackpot;
+  const totalRakeBB = results.reduce((sum, hand) => sum + (hand.rake + hand.jackpot) / hand.bb, 0);
+  const gameRakeBB = results.reduce((sum, hand) => sum + hand.rake / hand.bb, 0);
+  const jackpotRakeBB = results.reduce((sum, hand) => sum + hand.jackpot / hand.bb, 0);
   const vpipCount = results.filter((hand) => hand.heroVoluntary).length;
   const pfrCount = results.filter((hand) => hand.heroRaise).length;
   const facingThreeBet = results.filter((hand) => hand.heroThreeBetOpportunity || hand.heroFacingRaise).length;
@@ -251,7 +255,7 @@ export function summarizeHeroResults(results) {
   let runningShowdown = 0;
   const curve = results.map((hand, index) => {
     running += hand.profitBB;
-    const rakeBB = hand.rake / hand.bb;
+    const rakeBB = (hand.rake + hand.jackpot) / hand.bb;
     runningBeforeRake += hand.profitBB + rakeBB;
     runningEv += hand.profitBB + rakeBB * 0.36;
     if (hand.wentToShowdown) {
@@ -281,15 +285,15 @@ export function summarizeHeroResults(results) {
     totalProfit,
     totalProfitBB,
     beforeRakeProfit: totalProfit + totalRake,
-    beforeRakeProfitBB: totalProfitBB + results.reduce((sum, hand) => sum + hand.rake / hand.bb, 0),
+    beforeRakeProfitBB: totalProfitBB + totalRakeBB,
     totalRake,
     totalJackpot,
-    gameRake: Math.max(0, totalRake - totalJackpot),
+    gameRake,
     bbPer100: totalHands ? (totalProfitBB / totalHands) * 100 : 0,
-    beforeRakeBBPer100: totalHands ? ((totalProfitBB + results.reduce((sum, hand) => sum + hand.rake / hand.bb, 0)) / totalHands) * 100 : 0,
-    rakeBBPer100: totalHands ? (results.reduce((sum, hand) => sum + hand.rake / hand.bb, 0) / totalHands) * 100 : 0,
-    gameRakeBBPer100: totalHands ? (results.reduce((sum, hand) => sum + Math.max(0, hand.rake - hand.jackpot) / hand.bb, 0) / totalHands) * 100 : 0,
-    jackpotRakeBBPer100: totalHands ? (results.reduce((sum, hand) => sum + hand.jackpot / hand.bb, 0) / totalHands) * 100 : 0,
+    beforeRakeBBPer100: totalHands ? ((totalProfitBB + totalRakeBB) / totalHands) * 100 : 0,
+    rakeBBPer100: totalHands ? (totalRakeBB / totalHands) * 100 : 0,
+    gameRakeBBPer100: totalHands ? (gameRakeBB / totalHands) * 100 : 0,
+    jackpotRakeBBPer100: totalHands ? (jackpotRakeBB / totalHands) * 100 : 0,
     vpip: totalHands ? (vpipCount / totalHands) * 100 : 0,
     pfr: totalHands ? (pfrCount / totalHands) * 100 : 0,
     threeBet: facingThreeBet ? (threeBetCount / facingThreeBet) * 100 : 0,
