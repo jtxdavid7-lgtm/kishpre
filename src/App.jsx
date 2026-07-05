@@ -1003,6 +1003,13 @@ function stakeLabel(stakes) {
   return bb ? `NL${Math.round(bb * 100)}` : stakes;
 }
 
+const HISTORY_CURVE_LINES = [
+  { key: 'profitBB', label: '总盈亏', color: '#22c55e' },
+  { key: 'beforeRakeBB', label: '水前盈亏', color: '#facc15' },
+  { key: 'nonShowdownBB', label: '非摊牌', color: '#ef4444' },
+  { key: 'showdownBB', label: '摊牌', color: '#38bdf8' }
+];
+
 function HistoryCurve({ data = [] }) {
   if (data.length < 2) {
     return <div className="history-empty-chart">上传牌谱后生成资金曲线</div>;
@@ -1010,23 +1017,39 @@ function HistoryCurve({ data = [] }) {
   const width = 720;
   const height = 260;
   const pad = 28;
-  const minY = Math.min(0, ...data.map((point) => point.profitBB));
-  const maxY = Math.max(0, ...data.map((point) => point.profitBB));
+  const values = data.flatMap((point) => HISTORY_CURVE_LINES.map((line) => point[line.key] ?? 0));
+  const minY = Math.min(0, ...values);
+  const maxY = Math.max(0, ...values);
   const span = maxY - minY || 1;
   const x = (index) => pad + (index / (data.length - 1)) * (width - pad * 2);
   const y = (value) => height - pad - ((value - minY) / span) * (height - pad * 2);
-  const path = data.map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index).toFixed(1)} ${y(point.profitBB).toFixed(1)}`).join(' ');
   const zeroY = y(0);
-  const last = data[data.length - 1];
 
   return (
     <svg className="history-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="资金曲线">
       <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} className="history-zero-line" />
-      <path d={path} className="history-profit-line" />
-      <circle cx={x(data.length - 1)} cy={y(last.profitBB)} r="4" className="history-profit-dot" />
+      {HISTORY_CURVE_LINES.map((line) => {
+        const path = data
+          .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index).toFixed(1)} ${y(point[line.key] ?? 0).toFixed(1)}`)
+          .join(' ');
+        const last = data[data.length - 1]?.[line.key] ?? 0;
+        return (
+          <g key={line.key}>
+            <path d={path} className="history-profit-line" style={{ stroke: line.color }} />
+            <circle cx={x(data.length - 1)} cy={y(last)} r="3.5" className="history-profit-dot" style={{ fill: line.color }} />
+          </g>
+        );
+      })}
       <text x={pad} y={18} className="history-axis-label">{Math.round(maxY)} bb</text>
       <text x={pad} y={height - 8} className="history-axis-label">{Math.round(minY)} bb</text>
       <text x={width - pad} y={height - 8} textAnchor="end" className="history-axis-label">{data.length} hands</text>
+      <foreignObject x={pad} y={height - 24} width="360" height="20">
+        <div className="history-curve-legend">
+          {HISTORY_CURVE_LINES.map((line) => (
+            <span key={line.key}><i style={{ background: line.color }} />{line.label}</span>
+          ))}
+        </div>
+      </foreignObject>
     </svg>
   );
 }

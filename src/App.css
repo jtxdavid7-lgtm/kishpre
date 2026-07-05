@@ -1068,7 +1068,6 @@ input:focus {
 
 .history-profit-line {
   fill: none;
-  stroke: #38bdf8;
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -1083,6 +1082,28 @@ input:focus {
 .history-axis-label {
   fill: #94a3b8;
   font-size: 12px;
+}
+
+.history-curve-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 20px;
+  color: #cbd5f5;
+  font-size: 11px;
+}
+
+.history-curve-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.history-curve-legend i {
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  border-radius: 999px;
 }
 
 .history-breakdown {
