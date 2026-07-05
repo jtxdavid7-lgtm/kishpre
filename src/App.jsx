@@ -1059,9 +1059,11 @@ const HISTORY_CURVE_LINES = [
   { key: 'nonShowdownBB', label: '非摊牌', color: '#ef4444' },
   { key: 'showdownBB', label: '摊牌', color: '#38bdf8' }
 ];
+const DEFAULT_VISIBLE_CURVE_LINES = ['beforeRakeBB', 'evBB', 'profitBB'];
 
 function HistoryCurve({ data = [] }) {
   const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [visibleLineKeys, setVisibleLineKeys] = useState(() => new Set(DEFAULT_VISIBLE_CURVE_LINES));
   if (data.length < 2) {
     return <div className="history-empty-chart">上传牌谱后生成资金曲线</div>;
   }
@@ -1071,7 +1073,8 @@ function HistoryCurve({ data = [] }) {
   const padRight = 98;
   const padTop = 24;
   const padBottom = 48;
-  const values = data.flatMap((point) => HISTORY_CURVE_LINES.map((line) => point[line.key] ?? 0));
+  const visibleLines = HISTORY_CURVE_LINES.filter((line) => visibleLineKeys.has(line.key));
+  const values = data.flatMap((point) => visibleLines.map((line) => point[line.key] ?? 0));
   const rawMinY = Math.min(0, ...values);
   const rawMaxY = Math.max(0, ...values);
   const yStep = niceStep(Math.max(1, rawMaxY - rawMinY) / 4);
@@ -1088,6 +1091,19 @@ function HistoryCurve({ data = [] }) {
   const yTicks = buildRangeTicks(minY, maxY, yStep).reverse();
   const hoverIndex = hoveredPoint?.index ?? null;
   const hoverData = hoverIndex == null ? null : data[hoverIndex];
+
+  const toggleLine = (key) => {
+    setVisibleLineKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        if (next.size === 1) return current;
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const updateHover = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -1125,17 +1141,18 @@ function HistoryCurve({ data = [] }) {
           </text>
         ))}
         <line x1={padLeft} y1={zeroY} x2={width - padRight} y2={zeroY} className="history-zero-line" />
-        {HISTORY_CURVE_LINES.map((line, lineIndex) => {
+        {visibleLines.map((line, lineIndex) => {
           const path = data
             .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index).toFixed(1)} ${y(point[line.key] ?? 0).toFixed(1)}`)
             .join(' ');
           const last = data[data.length - 1]?.[line.key] ?? 0;
           const bbPer100 = hands ? (last / hands) * 100 : 0;
-          const labelY = Math.min(height - 42, Math.max(18, y(last) + (lineIndex - 2) * 11));
+          const centerOffset = (visibleLines.length - 1) / 2;
+          const labelY = Math.min(height - 42, Math.max(18, y(last) + (lineIndex - centerOffset) * 11));
           return (
             <g key={line.key}>
               <path d={path} className="history-profit-line" style={{ stroke: line.color }} />
-              <circle cx={x(data.length - 1)} cy={y(last)} r="3.5" className="history-profit-dot" style={{ fill: line.color }} />
+              <circle cx={x(data.length - 1)} cy={y(last)} r="2.8" className="history-profit-dot" style={{ fill: line.color }} />
               <text
                 x={width - padRight + 8}
                 y={labelY}
@@ -1150,12 +1167,12 @@ function HistoryCurve({ data = [] }) {
         {hoverData && (
           <g>
             <line x1={x(hoverIndex)} y1={padTop} x2={x(hoverIndex)} y2={height - padBottom} className="history-hover-line" />
-            {HISTORY_CURVE_LINES.map((line) => (
+            {visibleLines.map((line) => (
               <circle
                 key={line.key}
                 cx={x(hoverIndex)}
                 cy={y(hoverData[line.key] ?? 0)}
-                r="4"
+                r="3.2"
                 className="history-hover-dot"
                 style={{ fill: line.color }}
               />
@@ -1168,7 +1185,15 @@ function HistoryCurve({ data = [] }) {
       <div className="history-curve-footer">
         <div className="history-curve-legend">
           {HISTORY_CURVE_LINES.map((line) => (
-            <span key={line.key}><i style={{ background: line.color }} />{line.label}</span>
+            <button
+              key={line.key}
+              type="button"
+              className={visibleLineKeys.has(line.key) ? 'active' : ''}
+              onClick={() => toggleLine(line.key)}
+              aria-pressed={visibleLineKeys.has(line.key)}
+            >
+              <i style={{ background: line.color }} />{line.label}
+            </button>
           ))}
         </div>
       </div>
@@ -1178,7 +1203,7 @@ function HistoryCurve({ data = [] }) {
           style={{ left: hoveredPoint.clientX + 12, top: hoveredPoint.clientY + 12 }}
         >
           <strong>第 {hoverData.hand.toLocaleString()} 手</strong>
-          {HISTORY_CURVE_LINES.map((line) => {
+          {visibleLines.map((line) => {
             const total = hoverData[line.key] ?? 0;
             const bbPer100 = hoverData.hand ? (total / hoverData.hand) * 100 : 0;
             return (
