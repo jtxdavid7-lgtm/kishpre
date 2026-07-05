@@ -106,6 +106,7 @@ export function parseGgHand(raw) {
   const preflopLines = [];
   let currentStreet = 'preflop';
   let streetCommit = new Map();
+  let totalPot = 0;
   let rake = 0;
   let jackpot = 0;
 
@@ -120,10 +121,11 @@ export function parseGgHand(raw) {
     }
     const dealtMatch = line.match(/^Dealt to (.+?) \[/);
     if (dealtMatch) heroCandidates.push(dealtMatch[1]);
-    const potMatch = line.match(/^Total pot .* Rake \$([\d.]+).* Jackpot \$([\d.]+)/);
+    const potMatch = line.match(/^Total pot \$([\d.]+).* Rake \$([\d.]+).* Jackpot \$([\d.]+)/);
     if (potMatch) {
-      rake = Number(potMatch[1]);
-      jackpot = Number(potMatch[2]);
+      totalPot = Number(potMatch[1]);
+      rake = Number(potMatch[2]);
+      jackpot = Number(potMatch[3]);
     }
     if (line.startsWith('*** FLOP ***')) {
       currentStreet = 'flop';
@@ -178,6 +180,9 @@ export function parseGgHand(raw) {
     getHeroResult(hero) {
       const player = players.get(hero);
       if (!player) return null;
+      const heroInvested = invested.get(hero) ?? 0;
+      const rakeShare = totalPot ? rake * (heroInvested / totalPot) : 0;
+      const jackpotShare = totalPot ? jackpot * (heroInvested / totalPot) : 0;
       const profit = (won.get(hero) ?? 0) - (invested.get(hero) ?? 0);
       return {
         id,
@@ -187,8 +192,8 @@ export function parseGgHand(raw) {
         position: player.position,
         profit,
         profitBB: profit / bb,
-        rake,
-        jackpot,
+        rake: rakeShare,
+        jackpot: jackpotShare,
         ...inferPreflopStats(preflopLines, hero)
       };
     }
@@ -203,6 +208,8 @@ export function summarizeHeroResults(results) {
   const totalHands = results.length;
   const totalProfit = results.reduce((sum, hand) => sum + hand.profit, 0);
   const totalProfitBB = results.reduce((sum, hand) => sum + hand.profitBB, 0);
+  const totalRake = results.reduce((sum, hand) => sum + hand.rake, 0);
+  const totalJackpot = results.reduce((sum, hand) => sum + hand.jackpot, 0);
   const vpipCount = results.filter((hand) => hand.heroVoluntary).length;
   const pfrCount = results.filter((hand) => hand.heroRaise).length;
   const facingThreeBet = results.filter((hand) => hand.heroThreeBetOpportunity || hand.heroFacingRaise).length;
@@ -210,9 +217,28 @@ export function summarizeHeroResults(results) {
   const byPosition = new Map();
   const byStakes = new Map();
   let running = 0;
+  let runningBeforeRake = 0;
+  let runningEv = 0;
+  let runningNonShowdown = 0;
+  let runningShowdown = 0;
   const curve = results.map((hand, index) => {
     running += hand.profitBB;
-    return { hand: index + 1, profitBB: running };
+    const rakeBB = hand.rake / hand.bb;
+    runningBeforeRake += hand.profitBB + rakeBB;
+    runningEv += hand.profitBB + rakeBB * 0.36;
+    if (Math.abs(hand.profitBB) <= 1.5) {
+      runningNonShowdown += hand.profitBB;
+    } else {
+      runningShowdown += hand.profitBB;
+    }
+    return {
+      hand: index + 1,
+      profitBB: running,
+      beforeRakeBB: runningBeforeRake,
+      evBB: runningEv,
+      nonShowdownBB: runningNonShowdown,
+      showdownBB: runningShowdown
+    };
   });
 
   for (const hand of results) {
@@ -226,7 +252,16 @@ export function summarizeHeroResults(results) {
     totalHands,
     totalProfit,
     totalProfitBB,
+    beforeRakeProfit: totalProfit + totalRake,
+    beforeRakeProfitBB: totalProfitBB + results.reduce((sum, hand) => sum + hand.rake / hand.bb, 0),
+    totalRake,
+    totalJackpot,
+    gameRake: Math.max(0, totalRake - totalJackpot),
     bbPer100: totalHands ? (totalProfitBB / totalHands) * 100 : 0,
+    beforeRakeBBPer100: totalHands ? ((totalProfitBB + results.reduce((sum, hand) => sum + hand.rake / hand.bb, 0)) / totalHands) * 100 : 0,
+    rakeBBPer100: totalHands ? (results.reduce((sum, hand) => sum + hand.rake / hand.bb, 0) / totalHands) * 100 : 0,
+    gameRakeBBPer100: totalHands ? (results.reduce((sum, hand) => sum + Math.max(0, hand.rake - hand.jackpot) / hand.bb, 0) / totalHands) * 100 : 0,
+    jackpotRakeBBPer100: totalHands ? (results.reduce((sum, hand) => sum + hand.jackpot / hand.bb, 0) / totalHands) * 100 : 0,
     vpip: totalHands ? (vpipCount / totalHands) * 100 : 0,
     pfr: totalHands ? (pfrCount / totalHands) * 100 : 0,
     threeBet: facingThreeBet ? (threeBetCount / facingThreeBet) * 100 : 0,

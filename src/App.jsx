@@ -975,40 +975,114 @@ function VarianceView() {
   );
 }
 
+const HISTORY_LINE_CONFIG = [
+  { key: 'profitBB', label: '总盈亏', color: '#10e985' },
+  { key: 'beforeRakeBB', label: '水后盈亏', color: '#a855f7' },
+  { key: 'evBB', label: 'EV', color: '#f7b500' },
+  { key: 'nonShowdownBB', label: '非摊牌', color: '#ff4757' },
+  { key: 'showdownBB', label: '摊牌', color: '#3b82f6' }
+];
+
+function formatNumber(value, digits = 1) {
+  if (!Number.isFinite(value)) return '-';
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
+}
+
+function formatPercent(value, digits = 1) {
+  if (!Number.isFinite(value)) return '-';
+  return `${formatNumber(value, digits)}%`;
+}
+
+function formatMoney(value, digits = 1) {
+  if (!Number.isFinite(value)) return '-';
+  const prefix = value < 0 ? '$-' : '$';
+  return `${prefix}${formatNumber(Math.abs(value), digits)}`;
+}
+
+function metricTone(value, goodWhenPositive = true) {
+  if (!Number.isFinite(value) || value === 0) return '';
+  return (goodWhenPositive ? value > 0 : value < 0) ? 'good' : 'bad';
+}
+
+function stakeLabel(stakes) {
+  const bb = Number(String(stakes).split('/')[1]?.replace('$', ''));
+  return bb ? `NL${Math.round(bb * 100)}` : stakes;
+}
+
 function HistoryCurve({ data = [] }) {
   if (data.length < 2) {
-    return <div className="history-empty-chart">上传牌谱后生成资金曲线</div>;
+    return <div className="history-empty-chart">导入牌谱后生成盈亏曲线</div>;
   }
-  const width = 720;
-  const height = 260;
-  const pad = 28;
-  const minY = Math.min(0, ...data.map((point) => point.profitBB));
-  const maxY = Math.max(0, ...data.map((point) => point.profitBB));
+  const width = 980;
+  const height = 420;
+  const padLeft = 58;
+  const padRight = 66;
+  const padTop = 32;
+  const padBottom = 58;
+  const values = data.flatMap((point) => HISTORY_LINE_CONFIG.map((line) => point[line.key] ?? 0));
+  const minY = Math.min(0, ...values);
+  const maxY = Math.max(0, ...values);
   const span = maxY - minY || 1;
-  const x = (index) => pad + (index / (data.length - 1)) * (width - pad * 2);
-  const y = (value) => height - pad - ((value - minY) / span) * (height - pad * 2);
-  const path = data.map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index).toFixed(1)} ${y(point.profitBB).toFixed(1)}`).join(' ');
-  const zeroY = y(0);
-  const last = data[data.length - 1];
+  const x = (index) => padLeft + (index / (data.length - 1)) * (width - padLeft - padRight);
+  const y = (value) => height - padBottom - ((value - minY) / span) * (height - padTop - padBottom);
+  const ticks = [-1500, -1000, -500, 0, 500, 1000].filter((tick) => tick >= minY - 100 && tick <= maxY + 100);
+  const xTicks = [0, Math.floor((data.length - 1) * 0.25), Math.floor((data.length - 1) * 0.5), Math.floor((data.length - 1) * 0.75), data.length - 1];
 
   return (
-    <svg className="history-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="资金曲线">
-      <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} className="history-zero-line" />
-      <path d={path} className="history-profit-line" />
-      <circle cx={x(data.length - 1)} cy={y(last.profitBB)} r="4" className="history-profit-dot" />
-      <text x={pad} y={18} className="history-axis-label">{Math.round(maxY)} bb</text>
-      <text x={pad} y={height - 8} className="history-axis-label">{Math.round(minY)} bb</text>
-      <text x={width - pad} y={height - 8} textAnchor="end" className="history-axis-label">{data.length} hands</text>
+    <svg className="history-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="盈亏曲线">
+      <rect x="0" y="0" width={width} height={height} className="history-curve-bg" />
+      {ticks.map((tick) => (
+        <g key={tick}>
+          <line x1={padLeft} y1={y(tick)} x2={width - padRight} y2={y(tick)} className={tick === 0 ? 'history-zero-line' : 'history-grid-line'} />
+          <text x={padLeft - 10} y={y(tick) + 4} textAnchor="end" className="history-axis-label">{tick >= 1000 ? `${tick / 1000}.0k` : tick}</text>
+        </g>
+      ))}
+      {xTicks.map((tick) => (
+        <text key={tick} x={x(tick)} y={height - 30} textAnchor="middle" className="history-axis-label">
+          {data[tick]?.hand ?? tick + 1}
+        </text>
+      ))}
+      {HISTORY_LINE_CONFIG.map((line) => {
+        const path = data
+          .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index).toFixed(1)} ${y(point[line.key] ?? 0).toFixed(1)}`)
+          .join(' ');
+        const last = data[data.length - 1]?.[line.key] ?? 0;
+        return (
+          <g key={line.key}>
+            <path d={path} className="history-profit-line" style={{ stroke: line.color }} />
+            <text x={width - padRight + 8} y={y(last) + 4} className="history-line-value" style={{ fill: line.color }}>
+              {formatNumber(last, 1)} BB
+            </text>
+          </g>
+        );
+      })}
+      <text x={(width + padLeft - padRight) / 2} y={height - 8} textAnchor="middle" className="history-axis-label">手数</text>
+      <foreignObject x={padLeft} y={height - 48} width="360" height="28">
+        <div className="history-legend">
+          {HISTORY_LINE_CONFIG.map((line) => (
+            <span key={line.key}><i style={{ background: line.color }} />{line.label}</span>
+          ))}
+        </div>
+      </foreignObject>
     </svg>
   );
 }
 
-function HistoryStatCard({ label, value, tone }) {
+function HistoryStatCard({ label, value, tone = '', wide = false }) {
   return (
-    <article className={`history-stat-card ${tone ? `history-stat-card--${tone}` : ''}`}>
+    <article className={`history-stat-card ${wide ? 'history-stat-card--wide' : ''} ${tone ? `history-stat-card--${tone}` : ''}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
+  );
+}
+
+function HistoryFilterButton({ active, children, onClick }) {
+  return (
+    <button type="button" className={active ? 'active' : ''} onClick={onClick}>{children}</button>
   );
 }
 
@@ -1021,20 +1095,21 @@ function HandHistoryView() {
   const [hero, setHero] = useState('');
   const [stakeFilter, setStakeFilter] = useState('all');
   const [positionFilter, setPositionFilter] = useState('all');
+  const [startTp, setStartTp] = useState('0');
+  const [endTp, setEndTp] = useState('0');
 
   const players = useMemo(() => rankedPlayers(hands), [hands]);
   const rawResults = useMemo(() => (
     hero ? hands.map((hand) => hand.getHeroResult(hero)).filter(Boolean) : []
   ), [hands, hero]);
   const stakeOptions = useMemo(() => [...new Set(rawResults.map((hand) => hand.stakes))].filter(Boolean), [rawResults]);
-  const positionOptions = useMemo(() => (
-    POSITIONS.filter((pos) => rawResults.some((hand) => hand.position === pos))
-  ), [rawResults]);
   const filteredResults = useMemo(() => rawResults.filter((hand) => (
     (stakeFilter === 'all' || hand.stakes === stakeFilter)
     && (positionFilter === 'all' || hand.position === positionFilter)
   )), [rawResults, stakeFilter, positionFilter]);
   const summary = useMemo(() => summarizeHeroResults(filteredResults), [filteredResults]);
+  const pvi = summary.totalRake ? ((Number(endTp) - Number(startTp)) / summary.totalRake) * 100 : 0;
+  const mainStake = stakeOptions[0] ? stakeLabel(stakeOptions[0]).replace('NL', '') : '0.5/1';
 
   const handleFiles = async (files) => {
     setStatus('loading');
@@ -1069,23 +1144,12 @@ function HandHistoryView() {
   };
 
   return (
-    <div className="site">
-      <nav className="top-nav">
-        <div className="brand">KISHPOKER · Hand History</div>
-        <div className="cta-row">
-          <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
-          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=range')}>Range Lab</button>
-          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=variance')}>波动计算</button>
+    <div className="history-page">
+      <aside className="history-sidebar">
+        <div className="history-title">
+          <h1>Ban2Note 数据统计</h1>
+          <p>现已支持 GGPoker Zoom/NL/9MAX 手牌格式</p>
         </div>
-      </nav>
-
-      <section className="range-panel history-panel" style={{ marginTop: 0 }}>
-        <header>
-          <p className="eyebrow">GGPoker · Local parser</p>
-          <h2>牌谱统计</h2>
-          <p className="subtext">上传 GG 手牌历史，浏览器本地解析，不上传服务器。第一版支持基础盈亏、资金曲线、VPIP/PFR/3Bet、级别和位置筛选。</p>
-        </header>
-
         <input
           ref={fileInputRef}
           type="file"
@@ -1096,8 +1160,7 @@ function HandHistoryView() {
             event.target.value = '';
           }}
         />
-
-        <section
+        <div
           className="history-upload"
           onDragOver={(event) => {
             event.preventDefault();
@@ -1107,90 +1170,104 @@ function HandHistoryView() {
             if (event.dataTransfer.files?.length) handleFiles(event.dataTransfer.files);
           }}
         >
-          <div>
-            <strong>{status === 'loading' ? '正在解析...' : '拖入或选择牌谱文件'}</strong>
-            <span>支持 .txt 和 .zip。大文件会在你的电脑本地处理。</span>
+          <div className="history-upload-check">✓</div>
+          <strong>{status === 'loading' ? '正在解析...' : hands.length ? '解析完成' : '拖入牌谱文件'}</strong>
+          <span>
+            {hands.length
+              ? `已导入 ${fileMeta?.files ?? 0} 个牌谱，共 ${fileMeta?.hands?.toLocaleString() ?? 0} 手`
+              : '支持 .txt / .zip / 无后缀 zip'}
+          </span>
+          <code>{hands.length ? 'local.zip' : 'browser local only'}</code>
+          <div className="history-upload-actions">
+            <button type="button" className="history-gold-button" onClick={() => fileInputRef.current?.click()} disabled={status === 'loading'}>
+              {hands.length ? '更换文件' : '选择文件'}
+            </button>
+            <button type="button" className="history-dark-button" onClick={() => fileInputRef.current?.click()} disabled={status === 'loading'}>
+              导入文件夹
+            </button>
           </div>
-          <button type="button" className="primary" onClick={() => fileInputRef.current?.click()} disabled={status === 'loading'}>
-            选择文件
-          </button>
-        </section>
+        </div>
 
         {message && <div className={`history-message history-message--${status}`}>{message}</div>}
 
-        {hands.length > 0 && (
-          <>
-            <section className="history-controls">
-              <label>
-                <span>Hero</span>
-                <select value={hero} onChange={(event) => setHero(event.target.value)}>
-                  {players.map((player) => (
-                    <option key={player.name} value={player.name}>
-                      {player.name} · {player.count} hands{player.auto ? ' · auto' : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>级别</span>
-                <select value={stakeFilter} onChange={(event) => setStakeFilter(event.target.value)}>
-                  <option value="all">全部</option>
-                  {stakeOptions.map((stake) => <option key={stake} value={stake}>{stake}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>位置</span>
-                <select value={positionFilter} onChange={(event) => setPositionFilter(event.target.value)}>
-                  <option value="all">全部</option>
-                  {positionOptions.map((position) => <option key={position} value={position}>{position}</option>)}
-                </select>
-              </label>
-              <button type="button" className="secondary" onClick={exportCsv} disabled={!filteredResults.length}>导出 CSV</button>
-            </section>
+        <div className="history-pvi-row">
+          <label>起始TP<input type="number" value={startTp} onChange={(event) => setStartTp(event.target.value)} /></label>
+          <label>终止TP<input type="number" value={endTp} onChange={(event) => setEndTp(event.target.value)} /></label>
+          <button type="button" className="history-gold-button">计算 PVI</button>
+        </div>
 
-            <section className="history-meta">
-              <span>导入 {fileMeta?.files ?? 0} 个文本源</span>
-              <span>识别 {fileMeta?.hands?.toLocaleString() ?? 0} 手牌</span>
-              {!!fileMeta?.duplicates && <span>去重 {fileMeta.duplicates.toLocaleString()} 手牌</span>}
-              <span>当前筛选 {filteredResults.length.toLocaleString()} 手牌</span>
-            </section>
-
-            <section className="history-stat-grid">
-              <HistoryStatCard label="总手数" value={summary.totalHands.toLocaleString()} />
-              <HistoryStatCard label="盈利 $/¥" value={summary.totalProfit.toFixed(2)} tone={summary.totalProfit >= 0 ? 'win' : 'loss'} />
-              <HistoryStatCard label="盈利 bb" value={summary.totalProfitBB.toFixed(1)} tone={summary.totalProfitBB >= 0 ? 'win' : 'loss'} />
-              <HistoryStatCard label="bb / 100" value={summary.bbPer100.toFixed(2)} tone={summary.bbPer100 >= 0 ? 'win' : 'loss'} />
-              <HistoryStatCard label="VPIP" value={`${summary.vpip.toFixed(1)}%`} />
-              <HistoryStatCard label="PFR" value={`${summary.pfr.toFixed(1)}%`} />
-              <HistoryStatCard label="3Bet" value={`${summary.threeBet.toFixed(1)}%`} />
-              <HistoryStatCard label="3Bet 机会" value={summary.facingThreeBet.toLocaleString()} />
-            </section>
-
-            <section className="history-chart-card">
-              <div className="history-chart-head">
-                <h3>资金曲线</h3>
-                <span>单位：bb</span>
-              </div>
-              <HistoryCurve data={summary.curve} />
-            </section>
-
-            <section className="history-breakdown">
-              <div>
-                <h4>位置分布</h4>
-                {summary.positions.map((item) => (
-                  <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
+        <div className="history-filter-block">
+          {players.length > 0 && (
+            <label>
+              Hero
+              <select value={hero} onChange={(event) => setHero(event.target.value)}>
+                {players.map((player) => (
+                  <option key={player.name} value={player.name}>
+                    {player.name} · {player.count} hands{player.auto ? ' · auto' : ''}
+                  </option>
                 ))}
-              </div>
-              <div>
-                <h4>级别分布</h4>
-                {summary.stakes.map((item) => (
-                  <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
-                ))}
-              </div>
-            </section>
-          </>
-        )}
-      </section>
+              </select>
+            </label>
+          )}
+          <div className="history-filter-line">
+            <span>级别</span>
+            <div>
+              <HistoryFilterButton active={stakeFilter === 'all'} onClick={() => setStakeFilter('all')}>全部</HistoryFilterButton>
+              {stakeOptions.map((stake) => (
+                <HistoryFilterButton key={stake} active={stakeFilter === stake} onClick={() => setStakeFilter(stake)}>{stakeLabel(stake)}</HistoryFilterButton>
+              ))}
+            </div>
+          </div>
+          <div className="history-filter-line">
+            <span>位置</span>
+            <div>
+              <HistoryFilterButton active={positionFilter === 'all'} onClick={() => setPositionFilter('all')}>全部</HistoryFilterButton>
+              {['SB', 'BB', 'HJ', 'MP', 'CO', 'BTN'].map((position) => (
+                <HistoryFilterButton
+                  key={position}
+                  active={positionFilter === position}
+                  onClick={() => setPositionFilter(position)}
+                >
+                  {position}
+                </HistoryFilterButton>
+              ))}
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main className="history-dashboard">
+        <nav className="history-tabs">
+          <button type="button" className="active">数据总览</button>
+          <button type="button">运气如何</button>
+          <button type="button" onClick={exportCsv} disabled={!filteredResults.length}>详细数据</button>
+        </nav>
+        <section className="history-stat-grid">
+          <HistoryStatCard label="总手数" value={summary.totalHands.toLocaleString()} />
+          <HistoryStatCard label="常驻级别" value={mainStake} />
+          <HistoryStatCard label="PVI" value={formatPercent(pvi, 2)} tone="accent" />
+          <HistoryStatCard label="水后 · $" value={formatMoney(summary.totalProfit)} tone={metricTone(summary.totalProfit)} />
+          <HistoryStatCard label="水前 · $" value={formatMoney(summary.beforeRakeProfit)} tone={metricTone(summary.beforeRakeProfit)} />
+          <HistoryStatCard label="总抽水" value={formatMoney(summary.totalRake)} tone="rake" />
+          <HistoryStatCard label="游戏抽水" value={formatMoney(summary.gameRake)} tone="rake" />
+          <HistoryStatCard label="JP抽水" value={formatMoney(summary.totalJackpot)} tone="rake" />
+          <HistoryStatCard label="VPIP" value={formatPercent(summary.vpip, 0)} />
+          <HistoryStatCard label="PFR" value={formatPercent(summary.pfr, 0)} />
+          <HistoryStatCard label="3BET" value={formatPercent(summary.threeBet, 1)} />
+          <HistoryStatCard label="水后百手" value={formatNumber(summary.bbPer100, 1)} tone={metricTone(summary.bbPer100)} />
+          <HistoryStatCard label="水前百手" value={formatNumber(summary.beforeRakeBBPer100, 2)} tone={metricTone(summary.beforeRakeBBPer100)} />
+          <HistoryStatCard label="总抽水百手" value={formatNumber(summary.rakeBBPer100, 2)} tone="rake" />
+          <HistoryStatCard label="抽水百手" value={formatNumber(summary.gameRakeBBPer100, 2)} tone="rake" />
+          <HistoryStatCard label="JP抽水百手" value={formatNumber(summary.jackpotRakeBBPer100, 2)} tone="rake" />
+          <HistoryStatCard label="WTSD" value="-" wide />
+          <HistoryStatCard label="WWSF" value="-" wide />
+          <HistoryStatCard label="W$SD" value="-" wide />
+        </section>
+        <section className="history-chart-card">
+          <HistoryCurve data={summary.curve} />
+        </section>
+        <p className="history-chart-note">盈利曲线 — X 轴为手数，Y 轴为累计盈亏 (bb)。虚线 = 盈亏平衡线。</p>
+      </main>
     </div>
   );
 }
