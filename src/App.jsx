@@ -1327,9 +1327,9 @@ function HandHistoryView() {
               <HistoryStatCard label="PFR" value={formatPercent(summary.pfr, 1)} />
               <HistoryStatCard label="3Bet" value={formatPercent(summary.threeBet, 1)} />
               <HistoryStatCard label="3Bet 机会" value={summary.facingThreeBet.toLocaleString()} />
-              <HistoryStatCard label="WTSD" value="-" />
-              <HistoryStatCard label="WWSF" value="-" />
-              <HistoryStatCard label="W$SD" value="-" />
+              <HistoryStatCard label="WTSD" value={formatPercent(summary.wtsd, 1)} />
+              <HistoryStatCard label="WWSF" value={formatPercent(summary.wwsf, 1)} />
+              <HistoryStatCard label="W$SD" value={formatPercent(summary.wsd, 1)} />
             </section>
 
             <section className="history-chart-card">

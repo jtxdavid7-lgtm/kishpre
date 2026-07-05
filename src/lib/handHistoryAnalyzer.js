@@ -102,6 +102,7 @@ export function parseGgHand(raw) {
   const players = new Map();
   const invested = new Map();
   const won = new Map();
+  const summary = new Map();
   const heroCandidates = [];
   const preflopLines = [];
   let currentStreet = 'preflop';
@@ -159,6 +160,20 @@ export function parseGgHand(raw) {
 
     const collected = line.match(/^Seat \d+: (.+?) .*?(?:collected|won) \(\$([\d.]+)\)/);
     if (collected) won.set(collected[1], (won.get(collected[1]) ?? 0) + Number(collected[2]));
+
+    const summaryMatch = line.match(/^Seat \d+: (.+?)(?: \((?:button|small blind|big blind)\))? (.+)$/);
+    if (summaryMatch) {
+      const [, name, detail] = summaryMatch;
+      const prev = summary.get(name) ?? {};
+      summary.set(name, {
+        ...prev,
+        detail,
+        folded: detail.includes('folded'),
+        showed: detail.includes('showed '),
+        won: detail.includes(' won ') || detail.startsWith('won '),
+        lost: detail.includes(' lost ') || detail.startsWith('lost ')
+      });
+    }
   }
 
   const posBySeat = positionMap(seats, buttonSeat);
@@ -184,6 +199,11 @@ export function parseGgHand(raw) {
       const rakeShare = totalPot ? rake * (heroInvested / totalPot) : 0;
       const jackpotShare = totalPot ? jackpot * (heroInvested / totalPot) : 0;
       const profit = (won.get(hero) ?? 0) - (invested.get(hero) ?? 0);
+      const heroSummary = summary.get(hero) ?? {};
+      const sawFlop = lines.some((line) => line.startsWith('*** FLOP ***')) && !heroSummary.detail?.includes('folded before Flop');
+      const wentToShowdown = Boolean(heroSummary.showed);
+      const wonAtShowdown = Boolean(heroSummary.showed && heroSummary.won);
+      const wonWhenSawFlop = sawFlop && profit > 0;
       return {
         id,
         date,
@@ -194,6 +214,10 @@ export function parseGgHand(raw) {
         profitBB: profit / bb,
         rake: rakeShare,
         jackpot: jackpotShare,
+        sawFlop,
+        wentToShowdown,
+        wonAtShowdown,
+        wonWhenSawFlop,
         ...inferPreflopStats(preflopLines, hero)
       };
     }
@@ -214,6 +238,10 @@ export function summarizeHeroResults(results) {
   const pfrCount = results.filter((hand) => hand.heroRaise).length;
   const facingThreeBet = results.filter((hand) => hand.heroThreeBetOpportunity || hand.heroFacingRaise).length;
   const threeBetCount = results.filter((hand) => hand.heroThreeBet).length;
+  const sawFlopCount = results.filter((hand) => hand.sawFlop).length;
+  const showdownCount = results.filter((hand) => hand.wentToShowdown).length;
+  const wonAtShowdownCount = results.filter((hand) => hand.wonAtShowdown).length;
+  const wonWhenSawFlopCount = results.filter((hand) => hand.wonWhenSawFlop).length;
   const byPosition = new Map();
   const byStakes = new Map();
   let running = 0;
@@ -226,10 +254,10 @@ export function summarizeHeroResults(results) {
     const rakeBB = hand.rake / hand.bb;
     runningBeforeRake += hand.profitBB + rakeBB;
     runningEv += hand.profitBB + rakeBB * 0.36;
-    if (Math.abs(hand.profitBB) <= 1.5) {
-      runningNonShowdown += hand.profitBB;
-    } else {
+    if (hand.wentToShowdown) {
       runningShowdown += hand.profitBB;
+    } else {
+      runningNonShowdown += hand.profitBB;
     }
     return {
       hand: index + 1,
@@ -266,6 +294,11 @@ export function summarizeHeroResults(results) {
     pfr: totalHands ? (pfrCount / totalHands) * 100 : 0,
     threeBet: facingThreeBet ? (threeBetCount / facingThreeBet) * 100 : 0,
     facingThreeBet,
+    wtsd: sawFlopCount ? (showdownCount / sawFlopCount) * 100 : 0,
+    wwsf: sawFlopCount ? (wonWhenSawFlopCount / sawFlopCount) * 100 : 0,
+    wsd: showdownCount ? (wonAtShowdownCount / showdownCount) * 100 : 0,
+    sawFlopCount,
+    showdownCount,
     curve,
     positions: [...byPosition.entries()].map(([label, count]) => ({ label, count })),
     stakes: [...byStakes.entries()].map(([label, count]) => ({ label, count }))
