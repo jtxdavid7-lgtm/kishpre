@@ -1194,10 +1194,37 @@ const HISTORY_CURVE_LINES = [
   { key: 'showdownBB', label: '摊牌', color: '#38bdf8' }
 ];
 const DEFAULT_VISIBLE_CURVE_LINES = ['beforeRakeBB', 'evBB', 'profitBB'];
+const MAX_RENDERED_CURVE_POINTS = 1800;
+
+function sampleCurveData(data, maxPoints = MAX_RENDERED_CURVE_POINTS) {
+  if (data.length <= maxPoints) return data;
+  const step = Math.ceil((data.length - 1) / (maxPoints - 1));
+  const sampled = [];
+  for (let index = 0; index < data.length; index += step) {
+    sampled.push(data[index]);
+  }
+  const last = data[data.length - 1];
+  if (sampled[sampled.length - 1] !== last) sampled.push(last);
+  return sampled;
+}
+
+function curveValueRange(data, lines) {
+  let min = 0;
+  let max = 0;
+  for (const point of data) {
+    for (const line of lines) {
+      const value = point[line.key] ?? 0;
+      if (value < min) min = value;
+      if (value > max) max = value;
+    }
+  }
+  return { min, max };
+}
 
 function HistoryCurve({ data = [] }) {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [visibleLineKeys, setVisibleLineKeys] = useState(() => new Set(DEFAULT_VISIBLE_CURVE_LINES));
+  const sampledData = useMemo(() => sampleCurveData(data), [data]);
   if (data.length < 2) {
     return <div className="history-empty-chart">上传牌谱后生成资金曲线</div>;
   }
@@ -1208,14 +1235,13 @@ function HistoryCurve({ data = [] }) {
   const padTop = 24;
   const padBottom = 48;
   const visibleLines = HISTORY_CURVE_LINES.filter((line) => visibleLineKeys.has(line.key));
-  const values = data.flatMap((point) => visibleLines.map((line) => point[line.key] ?? 0));
-  const rawMinY = Math.min(0, ...values);
-  const rawMaxY = Math.max(0, ...values);
+  const { min: rawMinY, max: rawMaxY } = curveValueRange(data, visibleLines);
   const yStep = niceStep(Math.max(1, rawMaxY - rawMinY) / 4);
   const minY = Math.floor(rawMinY / yStep) * yStep;
   const maxY = Math.max(yStep, Math.ceil(rawMaxY / yStep) * yStep);
   const span = maxY - minY || 1;
   const x = (index) => padLeft + (index / (data.length - 1)) * (width - padLeft - padRight);
+  const pointX = (point) => x(Math.max(0, (point.hand ?? 1) - 1));
   const y = (value) => height - padBottom - ((value - minY) / span) * (height - padTop - padBottom);
   const zeroY = y(0);
   const hands = data.length;
@@ -1276,8 +1302,8 @@ function HistoryCurve({ data = [] }) {
         ))}
         <line x1={padLeft} y1={zeroY} x2={width - padRight} y2={zeroY} className="history-zero-line" />
         {visibleLines.map((line, lineIndex) => {
-          const path = data
-            .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index).toFixed(1)} ${y(point[line.key] ?? 0).toFixed(1)}`)
+          const path = sampledData
+            .map((point, index) => `${index === 0 ? 'M' : 'L'} ${pointX(point).toFixed(1)} ${y(point[line.key] ?? 0).toFixed(1)}`)
             .join(' ');
           const last = data[data.length - 1]?.[line.key] ?? 0;
           const bbPer100 = hands ? (last / hands) * 100 : 0;
