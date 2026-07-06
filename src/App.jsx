@@ -1286,7 +1286,9 @@ function HandHistoryView() {
   )), [rawResults, stakeFilter, positionFilter]);
   const summary = useMemo(() => summarizeHeroResults(filteredResults), [filteredResults]);
   const mainStake = stakeOptions[0] ? stakeLabel(stakeOptions[0]) : '-';
-  const pvi = summary.totalRake ? ((Number(endTp) - Number(startTp)) / summary.totalRake) * 100 : 0;
+  const tpDelta = Number(endTp) - Number(startTp);
+  const expectedTp = summary.gameRake * 100;
+  const pvi = expectedTp ? (tpDelta / expectedTp) * 100 : 0;
 
   const handleFiles = async (files) => {
     setStatus('loading');
