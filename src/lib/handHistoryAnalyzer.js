@@ -294,7 +294,7 @@ function inferPostflopStats(lines, seats, buttonSeat, hero, preflopAggressor) {
       }
     }
 
-    if (heroReachedStreet && previousAggressor && previousAggressor !== hero && firstAggressive?.player === previousAggressor) {
+    if (heroReachedStreet && preflopAggressor && preflopAggressor !== hero && firstAggressive?.player === preflopAggressor) {
       const heroResponse = actions.slice(firstAggressiveIndex + 1).find((action) => action.player === hero);
       if (heroResponse) {
         stats.foldToCbetOpportunity = true;
