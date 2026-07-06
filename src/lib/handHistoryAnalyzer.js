@@ -130,17 +130,18 @@ function inferPreflopStats(lines, hero, heroPosition = '') {
     const isFold = line.includes(': folds');
     const isCheck = line.includes(': checks');
     const isHeroAction = player === hero && (isVoluntary || isFold || isCheck);
+    const isFirstHeroAction = isHeroAction && !heroActed;
 
-    if (isHeroAction && !heroActed) {
+    if (isFirstHeroAction) {
       heroThreeBetOpportunity = raiseCount === 1;
       heroSqueezeOpportunity = raiseCount === 1 && callersAfterOpen > 0;
       heroStealOpportunity = isStealPosition && raiseCount === 0 && !voluntaryBeforeHero;
       heroStealBtnOpportunity = heroStealOpportunity && heroPosition === 'BTN';
       heroStealSbOpportunity = heroStealOpportunity && heroPosition === 'SB';
+      heroFourBetOpportunity = raiseCount === 2;
       heroActed = true;
     }
     if (isHeroAction && raiseCount === 2) {
-      heroFourBetOpportunity = true;
       if (heroOpened) {
         heroFoldToThreeBetOpportunity = true;
         if (isFold) heroFoldToThreeBet = true;
@@ -166,7 +167,7 @@ function inferPreflopStats(lines, hero, heroPosition = '') {
         heroMadeThreeBet = true;
         if (callersAfterOpen > 0) heroSqueeze = true;
       }
-      if (raiseCount === 2) heroFourBet = true;
+      if (raiseCount === 2 && isFirstHeroAction) heroFourBet = true;
     }
     if (player !== hero && isCall && raiseCount === 0) voluntaryBeforeHero = true;
     if (isRaise) {
@@ -278,17 +279,18 @@ function inferPostflopStats(lines, seats, buttonSeat, hero, preflopAggressor) {
     const firstAggressiveIndex = actions.findIndex(isAggressiveAction);
     const firstAggressive = firstAggressiveIndex >= 0 ? actions[firstAggressiveIndex] : null;
     const heroFirstActionIndex = actions.findIndex((action) => action.player === hero);
+    const heroCbetIsIp = heroFirstActionIndex > 0;
 
-    if (heroReachedStreet && previousAggressor === hero && heroFirstActionIndex >= 0) {
+    if (heroReachedStreet && preflopAggressor === hero && heroFirstActionIndex >= 0) {
       const gotDonkedInto = firstAggressive && firstAggressive.player !== hero && firstAggressiveIndex < heroFirstActionIndex;
       stats.cbetOpportunity = true;
-      stats.cbetIpOpportunity = heroIsIp;
-      stats.cbetOopOpportunity = !heroIsIp;
+      stats.cbetIpOpportunity = heroCbetIsIp;
+      stats.cbetOopOpportunity = !heroCbetIsIp;
       const heroFirstAction = actions[heroFirstActionIndex];
       if (!gotDonkedInto && heroFirstAction.type === 'bet') {
         stats.cbet = true;
-        stats.cbetIp = heroIsIp;
-        stats.cbetOop = !heroIsIp;
+        stats.cbetIp = heroCbetIsIp;
+        stats.cbetOop = !heroCbetIsIp;
       }
     }
 
