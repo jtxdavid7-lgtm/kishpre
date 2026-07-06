@@ -281,16 +281,14 @@ function inferPostflopStats(lines, seats, buttonSeat, hero, preflopAggressor) {
 
     if (heroReachedStreet && previousAggressor === hero && heroFirstActionIndex >= 0) {
       const gotDonkedInto = firstAggressive && firstAggressive.player !== hero && firstAggressiveIndex < heroFirstActionIndex;
-      if (!gotDonkedInto) {
-        stats.cbetOpportunity = true;
-        stats.cbetIpOpportunity = heroIsIp;
-        stats.cbetOopOpportunity = !heroIsIp;
-        const heroFirstAction = actions[heroFirstActionIndex];
-        if (heroFirstAction.type === 'bet') {
-          stats.cbet = true;
-          stats.cbetIp = heroIsIp;
-          stats.cbetOop = !heroIsIp;
-        }
+      stats.cbetOpportunity = true;
+      stats.cbetIpOpportunity = heroIsIp;
+      stats.cbetOopOpportunity = !heroIsIp;
+      const heroFirstAction = actions[heroFirstActionIndex];
+      if (!gotDonkedInto && heroFirstAction.type === 'bet') {
+        stats.cbet = true;
+        stats.cbetIp = heroIsIp;
+        stats.cbetOop = !heroIsIp;
       }
     }
 
