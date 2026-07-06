@@ -3,6 +3,7 @@ const HAND_SPLIT_RE = /(?=Poker Hand #)/g;
 const FLOP_RE = /^\*\*\* (?:FIRST |SECOND )?FLOP \*\*\*/;
 const TURN_RE = /^\*\*\* (?:FIRST |SECOND )?TURN \*\*\*/;
 const RIVER_RE = /^\*\*\* (?:FIRST |SECOND )?RIVER \*\*\*/;
+const POSTFLOP_STREETS = ['flop', 'turn', 'river'];
 
 export const POSITIONS = ['BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO', 'MP', 'EP'];
 
@@ -28,6 +29,19 @@ function playerFromAction(line) {
   return idx > 0 ? line.slice(0, idx) : null;
 }
 
+function actionType(line) {
+  if (line.includes(': folds')) return 'fold';
+  if (line.includes(': checks')) return 'check';
+  if (line.includes(' calls ')) return 'call';
+  if (line.includes(' bets ')) return 'bet';
+  if (line.includes(' raises ')) return 'raise';
+  return null;
+}
+
+function isAggressiveAction(action) {
+  return action?.type === 'bet' || action?.type === 'raise';
+}
+
 function actionAmount(line, committed) {
   if (line.includes(' raises ')) {
     const toMatch = line.match(/\bto \$(-?[\d,]+(?:\.\d+)?)/);
@@ -37,6 +51,26 @@ function actionAmount(line, committed) {
     }
   }
   return money(line);
+}
+
+function lastRaiser(lines) {
+  let raiser = null;
+  for (const line of lines) {
+    if (FLOP_RE.test(line)) break;
+    if (line.includes(' raises ')) raiser = playerFromAction(line);
+  }
+  return raiser;
+}
+
+function postflopOrder(seats, buttonSeat, activePlayers) {
+  const seatNums = [...seats.keys()].sort((a, b) => a - b);
+  if (!seatNums.length || !buttonSeat) return activePlayers;
+  const buttonIndex = seatNums.indexOf(buttonSeat);
+  const orderedSeats = buttonIndex >= 0
+    ? [...seatNums.slice(buttonIndex + 1), ...seatNums.slice(0, buttonIndex + 1)]
+    : seatNums;
+  const active = new Set(activePlayers);
+  return orderedSeats.map((seat) => seats.get(seat)).filter((name) => active.has(name));
 }
 
 function positionMap(seats, buttonSeat) {
@@ -163,6 +197,146 @@ function inferPreflopStats(lines, hero, heroPosition = '') {
     heroStealSbOpportunity,
     heroStealSb
   };
+}
+
+function emptyStreetStats() {
+  return {
+    cbetOpportunity: false,
+    cbet: false,
+    cbetIpOpportunity: false,
+    cbetIp: false,
+    cbetOopOpportunity: false,
+    cbetOop: false,
+    foldToCbetOpportunity: false,
+    foldToCbet: false,
+    foldToCbetIpOpportunity: false,
+    foldToCbetIp: false,
+    foldToCbetOopOpportunity: false,
+    foldToCbetOop: false,
+    donkOpportunity: false,
+    donk: false,
+    checkResponseOpportunity: false,
+    checkCall: false,
+    checkRaise: false
+  };
+}
+
+function inferPostflopStats(lines, seats, buttonSeat, hero, preflopAggressor) {
+  const streetActions = {
+    flop: [],
+    turn: [],
+    river: []
+  };
+  const activeAtStart = {
+    flop: [],
+    turn: [],
+    river: []
+  };
+  const folded = new Set();
+  let currentStreet = 'preflop';
+
+  for (const line of lines) {
+    if (FLOP_RE.test(line)) {
+      currentStreet = 'flop';
+      activeAtStart.flop = [...seats.values()].filter((name) => !folded.has(name));
+      continue;
+    }
+    if (TURN_RE.test(line)) {
+      currentStreet = 'turn';
+      activeAtStart.turn = [...seats.values()].filter((name) => !folded.has(name));
+      continue;
+    }
+    if (RIVER_RE.test(line)) {
+      currentStreet = 'river';
+      activeAtStart.river = [...seats.values()].filter((name) => !folded.has(name));
+      continue;
+    }
+
+    const player = playerFromAction(line);
+    const type = actionType(line);
+    if (!player || !type) continue;
+    if (POSTFLOP_STREETS.includes(currentStreet)) {
+      streetActions[currentStreet].push({ player, type });
+    }
+    if (type === 'fold') folded.add(player);
+  }
+
+  const result = {
+    flop: emptyStreetStats(),
+    turn: emptyStreetStats(),
+    river: emptyStreetStats()
+  };
+  let previousAggressor = preflopAggressor;
+
+  for (const street of POSTFLOP_STREETS) {
+    const activePlayers = activeAtStart[street];
+    const actions = streetActions[street];
+    const stats = result[street];
+    const heroReachedStreet = activePlayers.includes(hero);
+    const ordered = postflopOrder(seats, buttonSeat, activePlayers);
+    const heroIsIp = ordered.length > 1 && ordered[ordered.length - 1] === hero;
+    const firstAggressiveIndex = actions.findIndex(isAggressiveAction);
+    const firstAggressive = firstAggressiveIndex >= 0 ? actions[firstAggressiveIndex] : null;
+    const heroFirstActionIndex = actions.findIndex((action) => action.player === hero);
+
+    if (heroReachedStreet && previousAggressor === hero && heroFirstActionIndex >= 0) {
+      const gotDonkedInto = firstAggressive && firstAggressive.player !== hero && firstAggressiveIndex < heroFirstActionIndex;
+      if (!gotDonkedInto) {
+        stats.cbetOpportunity = true;
+        stats.cbetIpOpportunity = heroIsIp;
+        stats.cbetOopOpportunity = !heroIsIp;
+        const heroFirstAction = actions[heroFirstActionIndex];
+        if (heroFirstAction.type === 'bet') {
+          stats.cbet = true;
+          stats.cbetIp = heroIsIp;
+          stats.cbetOop = !heroIsIp;
+        }
+      }
+    }
+
+    if (heroReachedStreet && previousAggressor && previousAggressor !== hero && firstAggressive?.player === previousAggressor) {
+      const heroResponse = actions.slice(firstAggressiveIndex + 1).find((action) => action.player === hero);
+      if (heroResponse) {
+        stats.foldToCbetOpportunity = true;
+        stats.foldToCbetIpOpportunity = heroIsIp;
+        stats.foldToCbetOopOpportunity = !heroIsIp;
+        if (heroResponse.type === 'fold') {
+          stats.foldToCbet = true;
+          stats.foldToCbetIp = heroIsIp;
+          stats.foldToCbetOop = !heroIsIp;
+        }
+      }
+    }
+
+    if (heroReachedStreet && previousAggressor && previousAggressor !== hero && heroFirstActionIndex >= 0) {
+      const previousAggressorActionIndex = actions.findIndex((action) => action.player === previousAggressor);
+      const heroActsBeforeAggressor = previousAggressorActionIndex < 0 || heroFirstActionIndex < previousAggressorActionIndex;
+      if (heroActsBeforeAggressor) {
+        stats.donkOpportunity = true;
+        if (actions[heroFirstActionIndex].type === 'bet') stats.donk = true;
+      }
+    }
+
+    const heroCheckIndex = actions.findIndex((action) => action.player === hero && action.type === 'check');
+    if (heroCheckIndex >= 0) {
+      const opponentBetIndex = actions.findIndex((action, index) => (
+        index > heroCheckIndex && action.player !== hero && isAggressiveAction(action)
+      ));
+      if (opponentBetIndex >= 0) {
+        const heroResponse = actions.slice(opponentBetIndex + 1).find((action) => action.player === hero);
+        if (heroResponse) {
+          stats.checkResponseOpportunity = true;
+          stats.checkCall = heroResponse.type === 'call';
+          stats.checkRaise = heroResponse.type === 'raise';
+        }
+      }
+    }
+
+    const lastAggressive = actions.filter(isAggressiveAction).at(-1);
+    if (lastAggressive) previousAggressor = lastAggressive.player;
+  }
+
+  return result;
 }
 
 export function parseGgHand(raw) {
@@ -293,7 +467,8 @@ export function parseGgHand(raw) {
         wentToShowdown,
         wonAtShowdown,
         wonWhenSawFlop,
-        ...inferPreflopStats(preflopLines, hero, player.position)
+        ...inferPreflopStats(preflopLines, hero, player.position),
+        postflop: inferPostflopStats(lines, seats, buttonSeat, hero, lastRaiser(preflopLines))
       };
     }
   };
@@ -301,6 +476,55 @@ export function parseGgHand(raw) {
 
 export function parseGgHands(text) {
   return splitHandHistories(text).map(parseGgHand);
+}
+
+function percentage(count, opportunity) {
+  return opportunity ? (count / opportunity) * 100 : null;
+}
+
+function summarizePostflopStats(results) {
+  const summary = {};
+  for (const street of POSTFLOP_STREETS) {
+    const streetHands = results.map((hand) => hand.postflop?.[street]).filter(Boolean);
+    const cbetOpportunity = streetHands.filter((stats) => stats.cbetOpportunity).length;
+    const cbet = streetHands.filter((stats) => stats.cbet).length;
+    const cbetIpOpportunity = streetHands.filter((stats) => stats.cbetIpOpportunity).length;
+    const cbetIp = streetHands.filter((stats) => stats.cbetIp).length;
+    const cbetOopOpportunity = streetHands.filter((stats) => stats.cbetOopOpportunity).length;
+    const cbetOop = streetHands.filter((stats) => stats.cbetOop).length;
+    const foldToCbetOpportunity = streetHands.filter((stats) => stats.foldToCbetOpportunity).length;
+    const foldToCbet = streetHands.filter((stats) => stats.foldToCbet).length;
+    const foldToCbetIpOpportunity = streetHands.filter((stats) => stats.foldToCbetIpOpportunity).length;
+    const foldToCbetIp = streetHands.filter((stats) => stats.foldToCbetIp).length;
+    const foldToCbetOopOpportunity = streetHands.filter((stats) => stats.foldToCbetOopOpportunity).length;
+    const foldToCbetOop = streetHands.filter((stats) => stats.foldToCbetOop).length;
+    const donkOpportunity = streetHands.filter((stats) => stats.donkOpportunity).length;
+    const donk = streetHands.filter((stats) => stats.donk).length;
+    const checkResponseOpportunity = streetHands.filter((stats) => stats.checkResponseOpportunity).length;
+    const checkCall = streetHands.filter((stats) => stats.checkCall).length;
+    const checkRaise = streetHands.filter((stats) => stats.checkRaise).length;
+
+    summary[street] = {
+      cbet: percentage(cbet, cbetOpportunity),
+      cbetOpportunity,
+      cbetIp: percentage(cbetIp, cbetIpOpportunity),
+      cbetIpOpportunity,
+      cbetOop: percentage(cbetOop, cbetOopOpportunity),
+      cbetOopOpportunity,
+      foldToCbet: percentage(foldToCbet, foldToCbetOpportunity),
+      foldToCbetOpportunity,
+      foldToCbetIp: percentage(foldToCbetIp, foldToCbetIpOpportunity),
+      foldToCbetIpOpportunity,
+      foldToCbetOop: percentage(foldToCbetOop, foldToCbetOopOpportunity),
+      foldToCbetOopOpportunity,
+      donk: percentage(donk, donkOpportunity),
+      donkOpportunity,
+      checkCall: percentage(checkCall, checkResponseOpportunity),
+      checkRaise: percentage(checkRaise, checkResponseOpportunity),
+      checkResponseOpportunity
+    };
+  }
+  return summary;
 }
 
 export function summarizeHeroResults(results) {
@@ -338,6 +562,7 @@ export function summarizeHeroResults(results) {
   const wonWhenSawFlopCount = results.filter((hand) => hand.wonWhenSawFlop).length;
   const byPosition = new Map();
   const byStakes = new Map();
+  const postflop = summarizePostflopStats(results);
   let running = 0;
   let runningBeforeRake = 0;
   let runningEv = 0;
@@ -408,6 +633,7 @@ export function summarizeHeroResults(results) {
     wsd: showdownCount ? (wonAtShowdownCount / showdownCount) * 100 : 0,
     sawFlopCount,
     showdownCount,
+    postflop,
     curve,
     positions: [...byPosition.entries()].map(([label, count]) => ({ label, count })),
     stakes: [...byStakes.entries()].map(([label, count]) => ({ label, count }))

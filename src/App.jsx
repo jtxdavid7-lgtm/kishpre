@@ -1485,6 +1485,9 @@ function HandHistoryView() {
   const tpDelta = Number(endTp) - Number(startTp);
   const expectedTp = summary.gameRake * 100;
   const pvi = expectedTp ? (tpDelta / expectedTp) * 100 : 0;
+  const flopStats = summary.postflop?.flop ?? {};
+  const turnStats = summary.postflop?.turn ?? {};
+  const riverStats = summary.postflop?.river ?? {};
   const detailSections = [
     {
       title: 'BASIC STATS',
@@ -1515,43 +1518,43 @@ function HandHistoryView() {
     {
       title: 'FLOP',
       items: [
-        { label: 'CBet', value: '-' },
-        { label: 'CBet IP', value: '-' },
-        { label: 'CBet OOP', value: '-' },
-        { label: 'FvCB', value: '-' },
-        { label: 'FvCB IP', value: '-' },
-        { label: 'FvCB OOP', value: '-' },
-        { label: 'Donk', value: '-' },
-        { label: 'CheckC', value: '-' },
-        { label: 'CheckR', value: '-' }
+        { label: 'CBet', value: formatPercent(flopStats.cbet, 1) },
+        { label: 'CBet IP', value: formatPercent(flopStats.cbetIp, 1) },
+        { label: 'CBet OOP', value: formatPercent(flopStats.cbetOop, 1) },
+        { label: 'FvCB', value: formatPercent(flopStats.foldToCbet, 1) },
+        { label: 'FvCB IP', value: formatPercent(flopStats.foldToCbetIp, 1) },
+        { label: 'FvCB OOP', value: formatPercent(flopStats.foldToCbetOop, 1) },
+        { label: 'Donk', value: formatPercent(flopStats.donk, 1) },
+        { label: 'CheckC', value: formatPercent(flopStats.checkCall, 1) },
+        { label: 'CheckR', value: formatPercent(flopStats.checkRaise, 1) }
       ]
     },
     {
       title: 'TURN',
       items: [
-        { label: 'CBet', value: '-' },
-        { label: 'CBet IP', value: '-' },
-        { label: 'CBet OOP', value: '-' },
-        { label: 'FvCB', value: '-' },
-        { label: 'FvCB IP', value: '-' },
-        { label: 'FvCB OOP', value: '-' },
-        { label: 'Donk', value: '-' },
-        { label: 'CheckC', value: '-' },
-        { label: 'CheckR', value: '-' }
+        { label: 'CBet', value: formatPercent(turnStats.cbet, 1) },
+        { label: 'CBet IP', value: formatPercent(turnStats.cbetIp, 1) },
+        { label: 'CBet OOP', value: formatPercent(turnStats.cbetOop, 1) },
+        { label: 'FvCB', value: formatPercent(turnStats.foldToCbet, 1) },
+        { label: 'FvCB IP', value: formatPercent(turnStats.foldToCbetIp, 1) },
+        { label: 'FvCB OOP', value: formatPercent(turnStats.foldToCbetOop, 1) },
+        { label: 'Donk', value: formatPercent(turnStats.donk, 1) },
+        { label: 'CheckC', value: formatPercent(turnStats.checkCall, 1) },
+        { label: 'CheckR', value: formatPercent(turnStats.checkRaise, 1) }
       ]
     },
     {
       title: 'RIVER',
       items: [
-        { label: 'CBet', value: '-' },
-        { label: 'CBet IP', value: '-' },
-        { label: 'CBet OOP', value: '-' },
-        { label: 'FvCB', value: '-' },
-        { label: 'FvCB IP', value: '-' },
-        { label: 'FvCB OOP', value: '-' },
-        { label: 'Donk', value: '-' },
-        { label: 'CheckC', value: '-' },
-        { label: 'CheckR', value: '-' }
+        { label: 'CBet', value: formatPercent(riverStats.cbet, 1) },
+        { label: 'CBet IP', value: formatPercent(riverStats.cbetIp, 1) },
+        { label: 'CBet OOP', value: formatPercent(riverStats.cbetOop, 1) },
+        { label: 'FvCB', value: formatPercent(riverStats.foldToCbet, 1) },
+        { label: 'FvCB IP', value: formatPercent(riverStats.foldToCbetIp, 1) },
+        { label: 'FvCB OOP', value: formatPercent(riverStats.foldToCbetOop, 1) },
+        { label: 'Donk', value: formatPercent(riverStats.donk, 1) },
+        { label: 'CheckC', value: formatPercent(riverStats.checkCall, 1) },
+        { label: 'CheckR', value: formatPercent(riverStats.checkRaise, 1) }
       ]
     }
   ];
