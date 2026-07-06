@@ -981,6 +981,35 @@ input:focus {
   min-width: 0;
 }
 
+.history-tabs {
+  display: inline-flex;
+  align-self: flex-end;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 10px;
+  background: rgba(3, 7, 18, 0.58);
+  overflow: hidden;
+}
+
+.history-tabs button {
+  border: 0;
+  border-right: 1px solid rgba(148, 163, 184, 0.14);
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 9px 14px;
+}
+
+.history-tabs button:last-child {
+  border-right: 0;
+}
+
+.history-tabs button.active {
+  background: rgba(250, 204, 21, 0.15);
+  color: #fde68a;
+}
+
 .history-pvi-controls {
   display: grid;
   grid-template-columns: 1fr;
@@ -1052,6 +1081,72 @@ input:focus {
 .history-filter-group button:hover {
   border-color: rgba(226, 232, 240, 0.42);
   color: #f8fafc;
+}
+
+.history-detail-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.history-detail-section {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 18px;
+  background: rgba(4, 7, 16, 0.88);
+  padding: 16px;
+}
+
+.history-detail-section h3 {
+  margin: 0 0 12px;
+  color: #facc15;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.history-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(106px, 1fr));
+  gap: 7px;
+}
+
+.history-detail-card {
+  min-height: 56px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
+  text-align: center;
+}
+
+.history-detail-card strong {
+  color: #f8fafc;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.history-detail-card span {
+  color: #bfdbfe;
+  font-size: 11px;
+}
+
+.history-detail-card--win {
+  color: #86efac !important;
+}
+
+.history-detail-card--loss {
+  color: #fca5a5 !important;
+}
+
+.history-detail-note {
+  color: #94a3b8;
+  font-size: 12px;
+  margin: 0;
+  text-align: center;
 }
 
 .history-stat-grid {

@@ -10,7 +10,8 @@ import { Archive } from 'libarchive.js';
 import {
   POSITIONS,
   exportSummaryCsv,
-  parseGgHands,
+  parseGgHand,
+  splitHandHistories,
   summarizeHeroResults
 } from './lib/handHistoryAnalyzer';
 import './App.css';
@@ -310,6 +311,23 @@ async function readHistoryFiles(fileList) {
     }
   }
   return chunks;
+}
+
+function yieldToBrowser() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function parseHistoryChunks(chunks, batchSize = 500) {
+  const parsed = [];
+  for (const chunk of chunks) {
+    const rawHands = splitHandHistories(chunk.text);
+    for (let index = 0; index < rawHands.length; index += batchSize) {
+      const batch = rawHands.slice(index, index + batchSize);
+      parsed.push(...batch.map(parseGgHand));
+      await yieldToBrowser();
+    }
+  }
+  return parsed;
 }
 
 function fileFromEntry(entry, path = '') {
@@ -1412,6 +1430,22 @@ function HistoryFilterGroup({ label, options, value, onChange }) {
   );
 }
 
+function HistoryDetailSection({ title, items }) {
+  return (
+    <section className="history-detail-section">
+      <h3>{title}</h3>
+      <div className="history-detail-grid">
+        {items.map((item) => (
+          <article key={`${title}-${item.label}`} className="history-detail-card">
+            <strong className={item.tone ? `history-detail-card--${item.tone}` : ''}>{item.value}</strong>
+            <span>{item.label}</span>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function HandHistoryView() {
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
@@ -1424,6 +1458,7 @@ function HandHistoryView() {
   const [positionFilter, setPositionFilter] = useState('all');
   const [startTp, setStartTp] = useState('0');
   const [endTp, setEndTp] = useState('0');
+  const [historyTab, setHistoryTab] = useState('overview');
 
   const players = useMemo(() => rankedPlayers(hands), [hands]);
   const rawResults = useMemo(() => (
@@ -1450,13 +1485,83 @@ function HandHistoryView() {
   const tpDelta = Number(endTp) - Number(startTp);
   const expectedTp = summary.gameRake * 100;
   const pvi = expectedTp ? (tpDelta / expectedTp) * 100 : 0;
+  const detailSections = [
+    {
+      title: 'BASIC STATS',
+      items: [
+        { label: 'Hands', value: summary.totalHands.toLocaleString() },
+        { label: 'Winnings', value: formatMoney(summary.totalProfit, 0), tone: statTone(summary.totalProfit) },
+        { label: 'bb/100', value: formatNumber(summary.bbPer100, 1), tone: statTone(summary.bbPer100) },
+        { label: 'VPIP', value: formatPercent(summary.vpip, 0) },
+        { label: 'PFR', value: formatPercent(summary.pfr, 0) },
+        { label: 'WWSF', value: formatPercent(summary.wwsf, 0), tone: wwsfTone(summary.wwsf) },
+        { label: 'WTSD', value: formatPercent(summary.wtsd, 1) },
+        { label: 'W$SD', value: formatPercent(summary.wsd, 1) }
+      ]
+    },
+    {
+      title: 'PREFLOP',
+      items: [
+        { label: '3Bet', value: formatPercent(summary.threeBet, 1) },
+        { label: 'Squeeze', value: '-' },
+        { label: '4Bet', value: '-' },
+        { label: 'Fold to 3Bet', value: '-' },
+        { label: 'Fold to 4Bet', value: '-' },
+        { label: 'Steal Total', value: '-' },
+        { label: 'Steal BTN', value: '-' },
+        { label: 'Steal SB', value: '-' }
+      ]
+    },
+    {
+      title: 'FLOP',
+      items: [
+        { label: 'CBet', value: '-' },
+        { label: 'CBet IP', value: '-' },
+        { label: 'CBet OOP', value: '-' },
+        { label: 'FvCB', value: '-' },
+        { label: 'FvCB IP', value: '-' },
+        { label: 'FvCB OOP', value: '-' },
+        { label: 'Donk', value: '-' },
+        { label: 'CheckC', value: '-' },
+        { label: 'CheckR', value: '-' }
+      ]
+    },
+    {
+      title: 'TURN',
+      items: [
+        { label: 'CBet', value: '-' },
+        { label: 'CBet IP', value: '-' },
+        { label: 'CBet OOP', value: '-' },
+        { label: 'FvCB', value: '-' },
+        { label: 'FvCB IP', value: '-' },
+        { label: 'FvCB OOP', value: '-' },
+        { label: 'Donk', value: '-' },
+        { label: 'CheckC', value: '-' },
+        { label: 'CheckR', value: '-' }
+      ]
+    },
+    {
+      title: 'RIVER',
+      items: [
+        { label: 'CBet', value: '-' },
+        { label: 'CBet IP', value: '-' },
+        { label: 'CBet OOP', value: '-' },
+        { label: 'FvCB', value: '-' },
+        { label: 'FvCB IP', value: '-' },
+        { label: 'FvCB OOP', value: '-' },
+        { label: 'Donk', value: '-' },
+        { label: 'CheckC', value: '-' },
+        { label: 'CheckR', value: '-' }
+      ]
+    }
+  ];
 
   const handleFiles = async (files) => {
     setStatus('loading');
     setMessage('正在解析牌谱...');
     try {
       const chunks = await readHistoryFiles(files);
-      const parsed = chunks.flatMap((chunk) => parseGgHands(chunk.text));
+      const parsed = await parseHistoryChunks(chunks);
       const unique = new Map();
       for (const hand of parsed) unique.set(hand.id, hand);
       const nextHands = sortHandsByTime([...unique.values()]);
@@ -1470,6 +1575,7 @@ function HandHistoryView() {
       setHero(nextPlayers[0]?.name ?? '');
       setStakeFilter('all');
       setPositionFilter('all');
+      setHistoryTab('overview');
       setStatus(nextHands.length ? 'ready' : 'empty');
       setMessage(nextHands.length ? '' : '没有识别到 GGPoker 手牌。');
     } catch (error) {
@@ -1600,61 +1706,89 @@ function HandHistoryView() {
               </aside>
 
               <div className="history-analysis-main">
-                <section className="history-stat-grid">
-                  <div className="history-stat-row history-stat-row--basic">
-                    <HistoryStatCard label="总手数" value={summary.totalHands.toLocaleString()} />
-                    <HistoryStatCard label="常驻级别" value={mainStake} />
-                    <HistoryStatCard label="PVI" value={formatPercent(pvi, 2)} />
-                  </div>
-                  <div className="history-stat-row history-stat-row--profit">
-                    <HistoryStatCard label="水后 $" value={formatMoney(summary.totalProfit)} tone={statTone(summary.totalProfit)} />
-                    <HistoryStatCard label="水前 $" value={formatMoney(summary.beforeRakeProfit)} tone={statTone(summary.beforeRakeProfit)} />
-                    <HistoryStatCard label="盈利 bb" value={formatNumber(summary.totalProfitBB, 1)} tone={statTone(summary.totalProfitBB)} />
-                    <HistoryStatCard label="水后百手" value={formatNumber(summary.bbPer100, 2)} tone={statTone(summary.bbPer100)} />
-                    <HistoryStatCard label="水前百手" value={formatNumber(summary.beforeRakeBBPer100, 2)} tone={statTone(summary.beforeRakeBBPer100)} />
-                  </div>
-                  <div className="history-stat-row history-stat-row--rake">
-                    <HistoryStatCard label="总抽水" value={formatMoney(summary.totalRake)} />
-                    <HistoryStatCard label="游戏抽水" value={formatMoney(summary.gameRake)} />
-                    <HistoryStatCard label="JP抽水" value={formatMoney(summary.totalJackpot)} />
-                    <HistoryStatCard label="总抽水百手" value={formatNumber(summary.rakeBBPer100, 2)} />
-                    <HistoryStatCard label="抽水百手" value={formatNumber(summary.gameRakeBBPer100, 2)} />
-                    <HistoryStatCard label="JP抽水百手" value={formatNumber(summary.jackpotRakeBBPer100, 2)} />
-                  </div>
-                  <div className="history-stat-row history-stat-row--preflop">
-                    <HistoryStatCard label="VPIP" value={formatPercent(summary.vpip, 0)} />
-                    <HistoryStatCard label="PFR" value={formatPercent(summary.pfr, 0)} />
-                    <HistoryStatCard label="3Bet" value={formatPercent(summary.threeBet, 1)} />
-                  </div>
-                  <div className="history-stat-row history-stat-row--showdown">
-                    <HistoryStatCard label="WTSD" value={formatPercent(summary.wtsd, 1)} size="large" />
-                    <HistoryStatCard label="WWSF" value={formatPercent(summary.wwsf, 0)} tone={wwsfTone(summary.wwsf)} size="large" />
-                    <HistoryStatCard label="W$SD" value={formatPercent(summary.wsd, 1)} size="large" />
-                  </div>
-                </section>
+                <nav className="history-tabs" aria-label="牌谱统计视图">
+                  <button
+                    type="button"
+                    className={historyTab === 'overview' ? 'active' : ''}
+                    onClick={() => setHistoryTab('overview')}
+                  >
+                    数据总览
+                  </button>
+                  <button
+                    type="button"
+                    className={historyTab === 'details' ? 'active' : ''}
+                    onClick={() => setHistoryTab('details')}
+                  >
+                    详细数据
+                  </button>
+                </nav>
 
-                <section className="history-chart-card">
-                  <div className="history-chart-head">
-                    <h3>资金曲线</h3>
-                    <span>单位：bb</span>
-                  </div>
-                  <HistoryCurve data={summary.curve} />
-                </section>
+                {historyTab === 'overview' ? (
+                  <>
+                    <section className="history-stat-grid">
+                      <div className="history-stat-row history-stat-row--basic">
+                        <HistoryStatCard label="总手数" value={summary.totalHands.toLocaleString()} />
+                        <HistoryStatCard label="常驻级别" value={mainStake} />
+                        <HistoryStatCard label="PVI" value={formatPercent(pvi, 2)} />
+                      </div>
+                      <div className="history-stat-row history-stat-row--profit">
+                        <HistoryStatCard label="水后 $" value={formatMoney(summary.totalProfit)} tone={statTone(summary.totalProfit)} />
+                        <HistoryStatCard label="水前 $" value={formatMoney(summary.beforeRakeProfit)} tone={statTone(summary.beforeRakeProfit)} />
+                        <HistoryStatCard label="盈利 bb" value={formatNumber(summary.totalProfitBB, 1)} tone={statTone(summary.totalProfitBB)} />
+                        <HistoryStatCard label="水后百手" value={formatNumber(summary.bbPer100, 2)} tone={statTone(summary.bbPer100)} />
+                        <HistoryStatCard label="水前百手" value={formatNumber(summary.beforeRakeBBPer100, 2)} tone={statTone(summary.beforeRakeBBPer100)} />
+                      </div>
+                      <div className="history-stat-row history-stat-row--rake">
+                        <HistoryStatCard label="总抽水" value={formatMoney(summary.totalRake)} />
+                        <HistoryStatCard label="游戏抽水" value={formatMoney(summary.gameRake)} />
+                        <HistoryStatCard label="JP抽水" value={formatMoney(summary.totalJackpot)} />
+                        <HistoryStatCard label="总抽水百手" value={formatNumber(summary.rakeBBPer100, 2)} />
+                        <HistoryStatCard label="抽水百手" value={formatNumber(summary.gameRakeBBPer100, 2)} />
+                        <HistoryStatCard label="JP抽水百手" value={formatNumber(summary.jackpotRakeBBPer100, 2)} />
+                      </div>
+                      <div className="history-stat-row history-stat-row--preflop">
+                        <HistoryStatCard label="VPIP" value={formatPercent(summary.vpip, 0)} />
+                        <HistoryStatCard label="PFR" value={formatPercent(summary.pfr, 0)} />
+                        <HistoryStatCard label="3Bet" value={formatPercent(summary.threeBet, 1)} />
+                      </div>
+                      <div className="history-stat-row history-stat-row--showdown">
+                        <HistoryStatCard label="WTSD" value={formatPercent(summary.wtsd, 1)} size="large" />
+                        <HistoryStatCard label="WWSF" value={formatPercent(summary.wwsf, 0)} tone={wwsfTone(summary.wwsf)} size="large" />
+                        <HistoryStatCard label="W$SD" value={formatPercent(summary.wsd, 1)} size="large" />
+                      </div>
+                    </section>
 
-                <section className="history-breakdown">
-                  <div>
-                    <h4>位置分布</h4>
-                    {summary.positions.map((item) => (
-                      <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
+                    <section className="history-chart-card">
+                      <div className="history-chart-head">
+                        <h3>资金曲线</h3>
+                        <span>单位：bb</span>
+                      </div>
+                      <HistoryCurve data={summary.curve} />
+                    </section>
+
+                    <section className="history-breakdown">
+                      <div>
+                        <h4>位置分布</h4>
+                        {summary.positions.map((item) => (
+                          <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
+                        ))}
+                      </div>
+                      <div>
+                        <h4>级别分布</h4>
+                        {summary.stakes.map((item) => (
+                          <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
+                        ))}
+                      </div>
+                    </section>
+                  </>
+                ) : (
+                  <section className="history-detail-stack">
+                    {detailSections.map((section) => (
+                      <HistoryDetailSection key={section.title} title={section.title} items={section.items} />
                     ))}
-                  </div>
-                  <div>
-                    <h4>级别分布</h4>
-                    {summary.stakes.map((item) => (
-                      <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
-                    ))}
-                  </div>
-                </section>
+                    <p className="history-detail-note">标记为 “-” 的指标需要继续补解析口径，当前先保留详情页结构。</p>
+                  </section>
+                )}
               </div>
             </section>
           </>
