@@ -1503,13 +1503,13 @@ function HandHistoryView() {
       title: 'PREFLOP',
       items: [
         { label: '3Bet', value: formatPercent(summary.threeBet, 1) },
-        { label: 'Squeeze', value: '-' },
-        { label: '4Bet', value: '-' },
-        { label: 'Fold to 3Bet', value: '-' },
-        { label: 'Fold to 4Bet', value: '-' },
-        { label: 'Steal Total', value: '-' },
-        { label: 'Steal BTN', value: '-' },
-        { label: 'Steal SB', value: '-' }
+        { label: 'Squeeze', value: formatPercent(summary.squeeze, 1) },
+        { label: '4Bet', value: formatPercent(summary.fourBet, 1) },
+        { label: 'Fold to 3Bet', value: formatPercent(summary.foldToThreeBet, 1) },
+        { label: 'Fold to 4Bet', value: formatPercent(summary.foldToFourBet, 1) },
+        { label: 'Steal Total', value: formatPercent(summary.stealTotal, 1) },
+        { label: 'Steal BTN', value: formatPercent(summary.stealBtn, 1) },
+        { label: 'Steal SB', value: formatPercent(summary.stealSb, 1) }
       ]
     },
     {

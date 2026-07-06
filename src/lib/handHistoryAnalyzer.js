@@ -58,13 +58,32 @@ function positionMap(seats, buttonSeat) {
   return new Map(ordered.map((seat, index) => [seat, labels[index] ?? `S${index + 1}`]));
 }
 
-function inferPreflopStats(lines, hero) {
+function inferPreflopStats(lines, hero, heroPosition = '') {
   let heroVoluntary = false;
   let heroRaise = false;
   let heroThreeBet = false;
   let heroThreeBetOpportunity = false;
+  let heroSqueeze = false;
+  let heroSqueezeOpportunity = false;
+  let heroFourBet = false;
+  let heroFourBetOpportunity = false;
+  let heroFoldToThreeBet = false;
+  let heroFoldToThreeBetOpportunity = false;
+  let heroFoldToFourBet = false;
+  let heroFoldToFourBetOpportunity = false;
+  let heroSteal = false;
+  let heroStealOpportunity = false;
+  let heroStealBtn = false;
+  let heroStealBtnOpportunity = false;
+  let heroStealSb = false;
+  let heroStealSbOpportunity = false;
   let heroActed = false;
+  let heroOpened = false;
+  let heroMadeThreeBet = false;
   let raiseCount = 0;
+  let callersAfterOpen = 0;
+  let voluntaryBeforeHero = false;
+  const isStealPosition = ['CO', 'BTN', 'SB'].includes(heroPosition);
 
   for (const line of lines) {
     if (FLOP_RE.test(line)) break;
@@ -73,18 +92,53 @@ function inferPreflopStats(lines, hero) {
     if (!player) continue;
     const isVoluntary = line.includes(' calls ') || line.includes(' raises ') || line.includes(' bets ');
     const isRaise = line.includes(' raises ');
+    const isCall = line.includes(' calls ');
+    const isFold = line.includes(': folds');
+    const isCheck = line.includes(': checks');
+    const isHeroAction = player === hero && (isVoluntary || isFold || isCheck);
 
-    if (player === hero && !heroActed && (isVoluntary || line.includes(': folds') || line.includes(': checks'))) {
+    if (isHeroAction && !heroActed) {
       heroThreeBetOpportunity = raiseCount === 1;
+      heroSqueezeOpportunity = raiseCount === 1 && callersAfterOpen > 0;
+      heroStealOpportunity = isStealPosition && raiseCount === 0 && !voluntaryBeforeHero;
+      heroStealBtnOpportunity = heroStealOpportunity && heroPosition === 'BTN';
+      heroStealSbOpportunity = heroStealOpportunity && heroPosition === 'SB';
       heroActed = true;
+    }
+    if (isHeroAction && raiseCount === 2) {
+      heroFourBetOpportunity = true;
+      if (heroOpened) {
+        heroFoldToThreeBetOpportunity = true;
+        if (isFold) heroFoldToThreeBet = true;
+      }
+    }
+    if (isHeroAction && raiseCount === 3 && heroMadeThreeBet) {
+      heroFoldToFourBetOpportunity = true;
+      if (isFold) heroFoldToFourBet = true;
     }
     if (player === hero && isVoluntary) heroVoluntary = true;
     if (player === hero && isRaise) {
       heroRaise = true;
-      if (raiseCount === 1) heroThreeBet = true;
+      if (raiseCount === 0) {
+        heroOpened = true;
+        if (heroStealOpportunity) {
+          heroSteal = true;
+          heroStealBtn = heroPosition === 'BTN';
+          heroStealSb = heroPosition === 'SB';
+        }
+      }
+      if (raiseCount === 1) {
+        heroThreeBet = true;
+        heroMadeThreeBet = true;
+        if (callersAfterOpen > 0) heroSqueeze = true;
+      }
+      if (raiseCount === 2) heroFourBet = true;
     }
+    if (player !== hero && isCall && raiseCount === 0) voluntaryBeforeHero = true;
     if (isRaise) {
       raiseCount += 1;
+    } else if (isCall && raiseCount === 1 && player !== hero) {
+      callersAfterOpen += 1;
     }
   }
 
@@ -93,7 +147,21 @@ function inferPreflopStats(lines, hero) {
     heroThreeBetOpportunity,
     heroVoluntary,
     heroRaise,
-    heroThreeBet
+    heroThreeBet,
+    heroSqueezeOpportunity,
+    heroSqueeze,
+    heroFourBetOpportunity,
+    heroFourBet,
+    heroFoldToThreeBetOpportunity,
+    heroFoldToThreeBet,
+    heroFoldToFourBetOpportunity,
+    heroFoldToFourBet,
+    heroStealOpportunity,
+    heroSteal,
+    heroStealBtnOpportunity,
+    heroStealBtn,
+    heroStealSbOpportunity,
+    heroStealSb
   };
 }
 
@@ -225,7 +293,7 @@ export function parseGgHand(raw) {
         wentToShowdown,
         wonAtShowdown,
         wonWhenSawFlop,
-        ...inferPreflopStats(preflopLines, hero)
+        ...inferPreflopStats(preflopLines, hero, player.position)
       };
     }
   };
@@ -250,6 +318,20 @@ export function summarizeHeroResults(results) {
   const pfrCount = results.filter((hand) => hand.heroRaise).length;
   const facingThreeBet = results.filter((hand) => hand.heroThreeBetOpportunity || hand.heroFacingRaise).length;
   const threeBetCount = results.filter((hand) => hand.heroThreeBet).length;
+  const squeezeOpportunityCount = results.filter((hand) => hand.heroSqueezeOpportunity).length;
+  const squeezeCount = results.filter((hand) => hand.heroSqueeze).length;
+  const fourBetOpportunityCount = results.filter((hand) => hand.heroFourBetOpportunity).length;
+  const fourBetCount = results.filter((hand) => hand.heroFourBet).length;
+  const foldToThreeBetOpportunityCount = results.filter((hand) => hand.heroFoldToThreeBetOpportunity).length;
+  const foldToThreeBetCount = results.filter((hand) => hand.heroFoldToThreeBet).length;
+  const foldToFourBetOpportunityCount = results.filter((hand) => hand.heroFoldToFourBetOpportunity).length;
+  const foldToFourBetCount = results.filter((hand) => hand.heroFoldToFourBet).length;
+  const stealOpportunityCount = results.filter((hand) => hand.heroStealOpportunity).length;
+  const stealCount = results.filter((hand) => hand.heroSteal).length;
+  const stealBtnOpportunityCount = results.filter((hand) => hand.heroStealBtnOpportunity).length;
+  const stealBtnCount = results.filter((hand) => hand.heroStealBtn).length;
+  const stealSbOpportunityCount = results.filter((hand) => hand.heroStealSbOpportunity).length;
+  const stealSbCount = results.filter((hand) => hand.heroStealSb).length;
   const sawFlopCount = results.filter((hand) => hand.sawFlop).length;
   const showdownCount = results.filter((hand) => hand.sawFlop && hand.wentToShowdown).length;
   const wonAtShowdownCount = results.filter((hand) => hand.sawFlop && hand.wentToShowdown && hand.wonAtShowdown).length;
@@ -307,6 +389,20 @@ export function summarizeHeroResults(results) {
     pfr: totalHands ? (pfrCount / totalHands) * 100 : 0,
     threeBet: facingThreeBet ? (threeBetCount / facingThreeBet) * 100 : 0,
     facingThreeBet,
+    squeeze: squeezeOpportunityCount ? (squeezeCount / squeezeOpportunityCount) * 100 : null,
+    squeezeOpportunityCount,
+    fourBet: fourBetOpportunityCount ? (fourBetCount / fourBetOpportunityCount) * 100 : null,
+    fourBetOpportunityCount,
+    foldToThreeBet: foldToThreeBetOpportunityCount ? (foldToThreeBetCount / foldToThreeBetOpportunityCount) * 100 : null,
+    foldToThreeBetOpportunityCount,
+    foldToFourBet: foldToFourBetOpportunityCount ? (foldToFourBetCount / foldToFourBetOpportunityCount) * 100 : null,
+    foldToFourBetOpportunityCount,
+    stealTotal: stealOpportunityCount ? (stealCount / stealOpportunityCount) * 100 : null,
+    stealOpportunityCount,
+    stealBtn: stealBtnOpportunityCount ? (stealBtnCount / stealBtnOpportunityCount) * 100 : null,
+    stealBtnOpportunityCount,
+    stealSb: stealSbOpportunityCount ? (stealSbCount / stealSbOpportunityCount) * 100 : null,
+    stealSbOpportunityCount,
     wtsd: sawFlopCount ? (showdownCount / sawFlopCount) * 100 : 0,
     wwsf: sawFlopCount ? (wonWhenSawFlopCount / sawFlopCount) * 100 : 0,
     wsd: showdownCount ? (wonAtShowdownCount / showdownCount) * 100 : 0,
