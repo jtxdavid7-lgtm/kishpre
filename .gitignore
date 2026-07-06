@@ -1,5 +1,7 @@
 node_modules/
 dist/
+!public/libarchive.js/dist/
+!public/libarchive.js/dist/**
 .DS_Store
 vite.config.local.*
 .env

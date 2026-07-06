@@ -6,6 +6,7 @@ import { PROFILES } from './data/profiles';
 import { getRangePayload } from './lib/rangeEngine';
 import { simulateEquity } from './lib/equityEngine';
 import JSZip from 'jszip';
+import { Archive } from 'libarchive.js';
 import {
   POSITIONS,
   exportSummaryCsv,
@@ -27,6 +28,10 @@ const profileOptions = Object.values(PROFILES).map((profile) => ({
 const SUIT_ICON = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const PICKER_RANKS = ['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
 const PICKER_SUITS = ['s', 'h', 'c', 'd'];
+Archive.init({
+  workerUrl: `${import.meta.env.BASE_URL}libarchive.js/dist/worker-bundle.js`
+});
+
 const FEATURE_BLUEPRINT = [
   { key: 'reports', action: 'history' },
   { key: 'equity', action: 'equity' },
@@ -182,6 +187,22 @@ const summarizeRange = (range = {}) => {
   };
 };
 
+const ARCHIVE_EXTENSIONS = [
+  '.zip',
+  '.rar',
+  '.7z',
+  '.tar',
+  '.tar.gz',
+  '.tgz',
+  '.tar.bz2',
+  '.tbz2',
+  '.tar.xz',
+  '.txz',
+  '.gz',
+  '.bz2',
+  '.xz'
+];
+
 async function readZipTexts(fileName, data, depth = 0) {
   if (depth > 2) return [];
   const zip = await JSZip.loadAsync(data);
@@ -194,12 +215,55 @@ async function readZipTexts(fileName, data, depth = 0) {
         name: `${fileName}/${entry.name}`,
         text: await entry.async('string')
       });
-    } else if (lower.endsWith('.zip')) {
+    } else {
       const nested = await entry.async('arraybuffer');
-      chunks.push(...await readZipTexts(`${fileName}/${entry.name}`, nested, depth + 1));
+      if (!isArchivePayload(entry.name, nested)) continue;
+      const nestedFile = new File([nested], entry.name);
+      chunks.push(...await readArchiveTexts(`${fileName}/${entry.name}`, nestedFile, nested, depth + 1));
     }
   }
   return chunks;
+}
+
+function flattenArchiveFiles(tree, path = '') {
+  const files = [];
+  for (const [name, value] of Object.entries(tree ?? {})) {
+    if (value instanceof File) {
+      files.push({ file: value, name: `${path}${name}` });
+    } else if (value && typeof value === 'object') {
+      files.push(...flattenArchiveFiles(value, `${path}${name}/`));
+    }
+  }
+  return files;
+}
+
+async function readGenericArchiveTexts(fileName, file, depth = 0) {
+  if (depth > 2) return [];
+  const archive = await Archive.open(file);
+  try {
+    if (await archive.hasEncryptedData()) {
+      throw new Error(`${fileName} 是加密压缩包，暂时不能解析。`);
+    }
+    const extracted = await archive.extractFiles();
+    const entries = flattenArchiveFiles(extracted);
+    const chunks = [];
+    for (const entry of entries) {
+      const entryName = `${fileName}/${entry.name}`;
+      const data = await entry.file.arrayBuffer();
+      const lower = entryName.toLowerCase();
+      if (lower.endsWith('.txt')) {
+        chunks.push({
+          name: entryName,
+          text: new TextDecoder('utf-8').decode(data)
+        });
+      } else if (isArchivePayload(entryName, data)) {
+        chunks.push(...await readArchiveTexts(entryName, entry.file, data, depth + 1));
+      }
+    }
+    return chunks;
+  } finally {
+    await archive.close();
+  }
 }
 
 function isZipPayload(name, data) {
@@ -208,14 +272,39 @@ function isZipPayload(name, data) {
   return lower.endsWith('.zip') || (bytes[0] === 0x50 && bytes[1] === 0x4b);
 }
 
+function isArchivePayload(name, data) {
+  const lower = name.toLowerCase();
+  const bytes = new Uint8Array(data, 0, Math.min(264, data.byteLength));
+  const hasArchiveExtension = ARCHIVE_EXTENSIONS.some((extension) => lower.endsWith(extension));
+  const isRar = bytes[0] === 0x52 && bytes[1] === 0x61 && bytes[2] === 0x72 && bytes[3] === 0x21;
+  const isSevenZip = bytes[0] === 0x37 && bytes[1] === 0x7a && bytes[2] === 0xbc && bytes[3] === 0xaf;
+  const isGzip = bytes[0] === 0x1f && bytes[1] === 0x8b;
+  const isBzip = bytes[0] === 0x42 && bytes[1] === 0x5a && bytes[2] === 0x68;
+  const isXz = bytes[0] === 0xfd && bytes[1] === 0x37 && bytes[2] === 0x7a && bytes[3] === 0x58 && bytes[4] === 0x5a;
+  const isTar = bytes.length > 262
+    && bytes[257] === 0x75
+    && bytes[258] === 0x73
+    && bytes[259] === 0x74
+    && bytes[260] === 0x61
+    && bytes[261] === 0x72;
+  return hasArchiveExtension || isZipPayload(name, data) || isRar || isSevenZip || isGzip || isBzip || isXz || isTar;
+}
+
+async function readArchiveTexts(name, file, data, depth = 0) {
+  if (isZipPayload(name, data)) return readZipTexts(name, data, depth);
+  return readGenericArchiveTexts(name, file, depth);
+}
+
 async function readHistoryFiles(fileList) {
   const files = Array.from(fileList ?? []);
   const chunks = [];
   for (const file of files) {
     const name = file.webkitRelativePath || file.name;
     const data = await file.arrayBuffer();
-    if (isZipPayload(name, data)) {
-      chunks.push(...await readZipTexts(name, data));
+    if (isArchivePayload(name, data)) {
+      chunks.push(...await readArchiveTexts(name, file, data));
+    } else if (name.toLowerCase().endsWith('.txt')) {
+      chunks.push({ name, text: new TextDecoder('utf-8').decode(data) });
     } else {
       chunks.push({ name, text: new TextDecoder('utf-8').decode(data) });
     }
@@ -1363,7 +1452,7 @@ function HandHistoryView() {
         >
           <div>
             <strong>{status === 'loading' ? '正在解析...' : '拖入或选择牌谱文件'}</strong>
-            <span>支持 .txt 和 .zip。大文件会在你的电脑本地处理。</span>
+            <span>支持 .txt、.zip、.rar、.7z、.tar、.gz 等格式。大文件会在你的电脑本地处理。</span>
           </div>
           <button type="button" className="primary" onClick={() => fileInputRef.current?.click()} disabled={status === 'loading'}>
             选择文件
