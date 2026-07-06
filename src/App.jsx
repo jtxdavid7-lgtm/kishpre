@@ -299,7 +299,7 @@ async function readHistoryFiles(fileList) {
   const files = Array.from(fileList ?? []);
   const chunks = [];
   for (const file of files) {
-    const name = file.webkitRelativePath || file.name;
+    const name = file.relativePath || file.webkitRelativePath || file.name;
     const data = await file.arrayBuffer();
     if (isArchivePayload(name, data)) {
       chunks.push(...await readArchiveTexts(name, file, data));
@@ -310,6 +310,51 @@ async function readHistoryFiles(fileList) {
     }
   }
   return chunks;
+}
+
+function fileFromEntry(entry, path = '') {
+  return new Promise((resolve, reject) => {
+    entry.file((file) => {
+      Object.defineProperty(file, 'relativePath', {
+        value: `${path}${file.name}`,
+        configurable: true
+      });
+      resolve(file);
+    }, reject);
+  });
+}
+
+function readDirectoryEntries(reader) {
+  return new Promise((resolve, reject) => {
+    reader.readEntries(resolve, reject);
+  });
+}
+
+async function filesFromEntry(entry, path = '') {
+  if (entry.isFile) return [await fileFromEntry(entry, path)];
+  if (!entry.isDirectory) return [];
+
+  const reader = entry.createReader();
+  const files = [];
+  let entries = await readDirectoryEntries(reader);
+  while (entries.length) {
+    const nested = await Promise.all(entries.map((item) => filesFromEntry(item, `${path}${entry.name}/`)));
+    files.push(...nested.flat());
+    entries = await readDirectoryEntries(reader);
+  }
+  return files;
+}
+
+async function filesFromDataTransfer(dataTransfer) {
+  const items = Array.from(dataTransfer.items ?? []);
+  const entries = items
+    .map((item) => (typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null))
+    .filter(Boolean);
+
+  if (!entries.length) return Array.from(dataTransfer.files ?? []);
+
+  const files = await Promise.all(entries.map((entry) => filesFromEntry(entry)));
+  return files.flat();
 }
 
 function handDateValue(hand) {
@@ -1343,6 +1388,7 @@ function HistoryFilterGroup({ label, options, value, onChange }) {
 
 function HandHistoryView() {
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
   const [status, setStatus] = useState('idle');
   const [message, setMessage] = useState('');
   const [hands, setHands] = useState([]);
@@ -1439,24 +1485,41 @@ function HandHistoryView() {
             event.target.value = '';
           }}
         />
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          hidden
+          webkitdirectory=""
+          onChange={(event) => {
+            if (event.target.files?.length) handleFiles(event.target.files);
+            event.target.value = '';
+          }}
+        />
 
         <section
           className="history-upload"
           onDragOver={(event) => {
             event.preventDefault();
           }}
-          onDrop={(event) => {
+          onDrop={async (event) => {
             event.preventDefault();
-            if (event.dataTransfer.files?.length) handleFiles(event.dataTransfer.files);
+            const droppedFiles = await filesFromDataTransfer(event.dataTransfer);
+            if (droppedFiles.length) handleFiles(droppedFiles);
           }}
         >
           <div>
             <strong>{status === 'loading' ? '正在解析...' : '拖入或选择牌谱文件'}</strong>
-            <span>支持 .txt、.zip、.rar、.7z、.tar、.gz 等格式。大文件会在你的电脑本地处理。</span>
+            <span>支持文件夹、多个压缩包、.txt、.zip、.rar、.7z、.tar、.gz 等格式。大文件会在你的电脑本地处理。</span>
           </div>
-          <button type="button" className="primary" onClick={() => fileInputRef.current?.click()} disabled={status === 'loading'}>
-            选择文件
-          </button>
+          <div className="history-upload-actions">
+            <button type="button" className="primary" onClick={() => fileInputRef.current?.click()} disabled={status === 'loading'}>
+              选择文件
+            </button>
+            <button type="button" className="secondary" onClick={() => folderInputRef.current?.click()} disabled={status === 'loading'}>
+              选择文件夹
+            </button>
+          </div>
         </section>
 
         {message && <div className={`history-message history-message--${status}`}>{message}</div>}

@@ -887,10 +887,17 @@ input:focus {
   gap: 16px;
 }
 
-.history-upload div {
+.history-upload > div:first-child {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.history-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .history-upload strong {
