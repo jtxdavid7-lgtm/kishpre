@@ -1232,6 +1232,26 @@ function HistoryStatCard({ label, value, tone, size }) {
   );
 }
 
+function HistoryFilterGroup({ label, options, value, onChange }) {
+  return (
+    <div className="history-filter-group">
+      <span>{label}</span>
+      <div>
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className={value === option.value ? 'active' : ''}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function HandHistoryView() {
   const fileInputRef = useRef(null);
   const [status, setStatus] = useState('idle');
@@ -1252,6 +1272,14 @@ function HandHistoryView() {
   const positionOptions = useMemo(() => (
     POSITIONS.filter((pos) => rawResults.some((hand) => hand.position === pos))
   ), [rawResults]);
+  const stakeFilterOptions = useMemo(() => [
+    { value: 'all', label: '全部' },
+    ...stakeOptions.map((stake) => ({ value: stake, label: stakeLabel(stake) }))
+  ], [stakeOptions]);
+  const positionFilterOptions = useMemo(() => [
+    { value: 'all', label: '全部' },
+    ...positionOptions.map((position) => ({ value: position, label: position }))
+  ], [positionOptions]);
   const filteredResults = useMemo(() => rawResults.filter((hand) => (
     (stakeFilter === 'all' || hand.stakes === stakeFilter)
     && (positionFilter === 'all' || hand.position === positionFilter)
@@ -1355,20 +1383,6 @@ function HandHistoryView() {
                   ))}
                 </select>
               </label>
-              <label>
-                <span>级别</span>
-                <select value={stakeFilter} onChange={(event) => setStakeFilter(event.target.value)}>
-                  <option value="all">全部</option>
-                  {stakeOptions.map((stake) => <option key={stake} value={stake}>{stake}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>位置</span>
-                <select value={positionFilter} onChange={(event) => setPositionFilter(event.target.value)}>
-                  <option value="all">全部</option>
-                  {positionOptions.map((position) => <option key={position} value={position}>{position}</option>)}
-                </select>
-              </label>
               <button type="button" className="secondary" onClick={exportCsv} disabled={!filteredResults.length}>导出 CSV</button>
             </section>
 
@@ -1379,70 +1393,88 @@ function HandHistoryView() {
               <span>当前筛选 {filteredResults.length.toLocaleString()} 手牌</span>
             </section>
 
-            <section className="history-pvi-controls">
-              <label>
-                <span>起始 TP</span>
-                <input type="number" value={startTp} onChange={(event) => setStartTp(event.target.value)} />
-              </label>
-              <label>
-                <span>终止 TP</span>
-                <input type="number" value={endTp} onChange={(event) => setEndTp(event.target.value)} />
-              </label>
-            </section>
+            <section className="history-analysis-layout">
+              <aside className="history-side-panel">
+                <section className="history-pvi-controls">
+                  <label>
+                    <span>起始 TP</span>
+                    <input type="number" value={startTp} onChange={(event) => setStartTp(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>终止 TP</span>
+                    <input type="number" value={endTp} onChange={(event) => setEndTp(event.target.value)} />
+                  </label>
+                </section>
+                <HistoryFilterGroup
+                  label="级别"
+                  options={stakeFilterOptions}
+                  value={stakeFilter}
+                  onChange={setStakeFilter}
+                />
+                <HistoryFilterGroup
+                  label="位置"
+                  options={positionFilterOptions}
+                  value={positionFilter}
+                  onChange={setPositionFilter}
+                />
+              </aside>
 
-            <section className="history-stat-grid">
-              <div className="history-stat-row history-stat-row--basic">
-                <HistoryStatCard label="总手数" value={summary.totalHands.toLocaleString()} />
-                <HistoryStatCard label="常驻级别" value={mainStake} />
-                <HistoryStatCard label="PVI" value={formatPercent(pvi, 2)} />
-              </div>
-              <div className="history-stat-row history-stat-row--profit">
-                <HistoryStatCard label="水后 $" value={formatMoney(summary.totalProfit)} tone={statTone(summary.totalProfit)} />
-                <HistoryStatCard label="水前 $" value={formatMoney(summary.beforeRakeProfit)} tone={statTone(summary.beforeRakeProfit)} />
-                <HistoryStatCard label="盈利 bb" value={formatNumber(summary.totalProfitBB, 1)} tone={statTone(summary.totalProfitBB)} />
-                <HistoryStatCard label="水后百手" value={formatNumber(summary.bbPer100, 2)} tone={statTone(summary.bbPer100)} />
-                <HistoryStatCard label="水前百手" value={formatNumber(summary.beforeRakeBBPer100, 2)} tone={statTone(summary.beforeRakeBBPer100)} />
-              </div>
-              <div className="history-stat-row history-stat-row--rake">
-                <HistoryStatCard label="总抽水" value={formatMoney(summary.totalRake)} />
-                <HistoryStatCard label="游戏抽水" value={formatMoney(summary.gameRake)} />
-                <HistoryStatCard label="JP抽水" value={formatMoney(summary.totalJackpot)} />
-                <HistoryStatCard label="总抽水百手" value={formatNumber(summary.rakeBBPer100, 2)} />
-                <HistoryStatCard label="抽水百手" value={formatNumber(summary.gameRakeBBPer100, 2)} />
-                <HistoryStatCard label="JP抽水百手" value={formatNumber(summary.jackpotRakeBBPer100, 2)} />
-              </div>
-              <div className="history-stat-row history-stat-row--preflop">
-                <HistoryStatCard label="VPIP" value={formatPercent(summary.vpip, 0)} />
-                <HistoryStatCard label="PFR" value={formatPercent(summary.pfr, 0)} />
-                <HistoryStatCard label="3Bet" value={formatPercent(summary.threeBet, 1)} />
-              </div>
-              <div className="history-stat-row history-stat-row--showdown">
-                <HistoryStatCard label="WTSD" value={formatPercent(summary.wtsd, 1)} size="large" />
-                <HistoryStatCard label="WWSF" value={formatPercent(summary.wwsf, 0)} tone={wwsfTone(summary.wwsf)} size="large" />
-                <HistoryStatCard label="W$SD" value={formatPercent(summary.wsd, 1)} size="large" />
-              </div>
-            </section>
+              <div className="history-analysis-main">
+                <section className="history-stat-grid">
+                  <div className="history-stat-row history-stat-row--basic">
+                    <HistoryStatCard label="总手数" value={summary.totalHands.toLocaleString()} />
+                    <HistoryStatCard label="常驻级别" value={mainStake} />
+                    <HistoryStatCard label="PVI" value={formatPercent(pvi, 2)} />
+                  </div>
+                  <div className="history-stat-row history-stat-row--profit">
+                    <HistoryStatCard label="水后 $" value={formatMoney(summary.totalProfit)} tone={statTone(summary.totalProfit)} />
+                    <HistoryStatCard label="水前 $" value={formatMoney(summary.beforeRakeProfit)} tone={statTone(summary.beforeRakeProfit)} />
+                    <HistoryStatCard label="盈利 bb" value={formatNumber(summary.totalProfitBB, 1)} tone={statTone(summary.totalProfitBB)} />
+                    <HistoryStatCard label="水后百手" value={formatNumber(summary.bbPer100, 2)} tone={statTone(summary.bbPer100)} />
+                    <HistoryStatCard label="水前百手" value={formatNumber(summary.beforeRakeBBPer100, 2)} tone={statTone(summary.beforeRakeBBPer100)} />
+                  </div>
+                  <div className="history-stat-row history-stat-row--rake">
+                    <HistoryStatCard label="总抽水" value={formatMoney(summary.totalRake)} />
+                    <HistoryStatCard label="游戏抽水" value={formatMoney(summary.gameRake)} />
+                    <HistoryStatCard label="JP抽水" value={formatMoney(summary.totalJackpot)} />
+                    <HistoryStatCard label="总抽水百手" value={formatNumber(summary.rakeBBPer100, 2)} />
+                    <HistoryStatCard label="抽水百手" value={formatNumber(summary.gameRakeBBPer100, 2)} />
+                    <HistoryStatCard label="JP抽水百手" value={formatNumber(summary.jackpotRakeBBPer100, 2)} />
+                  </div>
+                  <div className="history-stat-row history-stat-row--preflop">
+                    <HistoryStatCard label="VPIP" value={formatPercent(summary.vpip, 0)} />
+                    <HistoryStatCard label="PFR" value={formatPercent(summary.pfr, 0)} />
+                    <HistoryStatCard label="3Bet" value={formatPercent(summary.threeBet, 1)} />
+                  </div>
+                  <div className="history-stat-row history-stat-row--showdown">
+                    <HistoryStatCard label="WTSD" value={formatPercent(summary.wtsd, 1)} size="large" />
+                    <HistoryStatCard label="WWSF" value={formatPercent(summary.wwsf, 0)} tone={wwsfTone(summary.wwsf)} size="large" />
+                    <HistoryStatCard label="W$SD" value={formatPercent(summary.wsd, 1)} size="large" />
+                  </div>
+                </section>
 
-            <section className="history-chart-card">
-              <div className="history-chart-head">
-                <h3>资金曲线</h3>
-                <span>单位：bb</span>
-              </div>
-              <HistoryCurve data={summary.curve} />
-            </section>
+                <section className="history-chart-card">
+                  <div className="history-chart-head">
+                    <h3>资金曲线</h3>
+                    <span>单位：bb</span>
+                  </div>
+                  <HistoryCurve data={summary.curve} />
+                </section>
 
-            <section className="history-breakdown">
-              <div>
-                <h4>位置分布</h4>
-                {summary.positions.map((item) => (
-                  <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
-                ))}
-              </div>
-              <div>
-                <h4>级别分布</h4>
-                {summary.stakes.map((item) => (
-                  <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
-                ))}
+                <section className="history-breakdown">
+                  <div>
+                    <h4>位置分布</h4>
+                    {summary.positions.map((item) => (
+                      <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
+                    ))}
+                  </div>
+                  <div>
+                    <h4>级别分布</h4>
+                    {summary.stakes.map((item) => (
+                      <p key={item.label}><span>{item.label}</span><strong>{item.count}</strong></p>
+                    ))}
+                  </div>
+                </section>
               </div>
             </section>
           </>
