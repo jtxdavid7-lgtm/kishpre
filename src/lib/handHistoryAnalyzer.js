@@ -310,8 +310,11 @@ function inferPostflopStats(lines, seats, buttonSeat, hero, preflopAggressor) {
 
     if (heroReachedStreet && previousAggressor && previousAggressor !== hero && heroFirstActionIndex >= 0) {
       const previousAggressorActionIndex = actions.findIndex((action) => action.player === previousAggressor);
-      const heroActsBeforeAggressor = previousAggressorActionIndex < 0 || heroFirstActionIndex < previousAggressorActionIndex;
-      if (heroActsBeforeAggressor) {
+      const heroActsBeforeAggressor = activePlayers.includes(previousAggressor)
+        && previousAggressorActionIndex >= 0
+        && heroFirstActionIndex < previousAggressorActionIndex;
+      const noBetBeforeHero = firstAggressiveIndex < 0 || heroFirstActionIndex <= firstAggressiveIndex;
+      if (heroActsBeforeAggressor && noBetBeforeHero) {
         stats.donkOpportunity = true;
         if (actions[heroFirstActionIndex].type === 'bet') stats.donk = true;
       }
