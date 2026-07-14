@@ -1582,7 +1582,7 @@ function HoleCardReport({ results }) {
         <div>
           <span>底牌分析</span>
           <strong>169 种起手牌盈亏</strong>
-          <p>按当前级别与位置筛选统计，每格显示累计输赢和样本数。</p>
+          <p>按当前级别与位置筛选统计，每格显示累计输赢、该牌型百手输赢和样本数。</p>
         </div>
         <div className="hole-card-report-actions">
           <div className="history-unit-toggle" aria-label="底牌盈亏单位">
@@ -1608,6 +1608,7 @@ function HoleCardReport({ results }) {
             <div className="hole-card-matrix-row" role="row" key={rank}>
               {cells.slice(rowIndex * STARTING_HAND_RANKS.length, (rowIndex + 1) * STARTING_HAND_RANKS.length).map(({ key, columnIndex, stats }) => {
                 const value = unit === 'bb' ? stats?.profitBB : stats?.profit;
+                const perHundred = stats ? (value / stats.hands) * 100 : null;
                 const tone = !stats ? 'empty' : value > 0 ? 'win' : value < 0 ? 'loss' : 'neutral';
                 const strength = stats && maxAbsoluteValue
                   ? 0.34 + (Math.sqrt(Math.abs(value) / maxAbsoluteValue) * 0.5)
@@ -1619,11 +1620,12 @@ function HoleCardReport({ results }) {
                     role="gridcell"
                     className={`hole-card-matrix-cell hole-card-matrix-cell--${tone} hole-card-matrix-cell--${type}`}
                     style={{ '--hole-card-strength': strength }}
-                    aria-label={`${key}，${stats ? `${stats.hands} 手牌，${matrixAmount(value, unit)}` : '无样本'}`}
+                    aria-label={`${key}，${stats ? `${stats.hands} 手牌，累计 ${matrixAmount(value, unit)}，百手 ${matrixAmount(perHundred, unit)}` : '无样本'}`}
                   >
                     <b>{key}</b>
                     <strong>{stats ? matrixAmount(value, unit) : '—'}</strong>
-                    <span>{stats ? `${stats.hands.toLocaleString()} 手` : '无样本'}</span>
+                    <span>{stats ? `百手 ${matrixAmount(perHundred, unit)}` : '百手 —'}</span>
+                    <small>{stats ? `${stats.hands.toLocaleString()} 手` : '无样本'}</small>
                   </div>
                 );
               })}
@@ -1691,8 +1693,8 @@ function buildReplayState(actions, step) {
   return { street, pot, streetContributions, stackChanges, foldedPlayers };
 }
 
-function replayPosition(index, count, radiusX, radiusY) {
-  const angle = (-90 + (360 / Math.max(1, count)) * index) * (Math.PI / 180);
+function replayPosition(index, count, radiusX, radiusY, startAngle = -90) {
+  const angle = (startAngle + (360 / Math.max(1, count)) * index) * (Math.PI / 180);
   return {
     left: 50 + Math.cos(angle) * radiusX,
     top: 50 + Math.sin(angle) * radiusY
@@ -1704,6 +1706,223 @@ function ReplayChipStack({ compact = false }) {
     <i className={`history-chip-stack${compact ? ' history-chip-stack--compact' : ''}`} aria-hidden="true">
       <span /><span /><span />
     </i>
+  );
+}
+
+const HAND_DETAIL_STREETS = [
+  { key: 'blinds', label: '盲注（底注）' },
+  { key: 'preflop', label: '翻牌前' },
+  { key: 'flop', label: '翻牌' },
+  { key: 'turn', label: '转牌' },
+  { key: 'river', label: '河牌' }
+];
+
+function handDetailAmount(value, bb, unit) {
+  if (!Number.isFinite(value)) return '—';
+  const amount = unit === 'bb' ? value / bb : value;
+  return unit === 'bb' ? `${formatNumber(amount, 2)} BB` : `$${formatNumber(amount, 2)}`;
+}
+
+function handDetailRaiseTarget(action) {
+  const target = action.text?.match(/\bto \$(-?[\d,]+(?:\.\d+)?)/)?.[1];
+  return target ? Number(target.replaceAll(',', '')) : null;
+}
+
+function handDetailActionLabel(action, hand, unit, position = '') {
+  const labels = {
+    fold: '弃牌', check: '过牌', call: '跟注', bet: '下注', raise: '加注',
+    return: '退回未跟注', collect: '赢得底池'
+  };
+  if (action.type === 'post') {
+    const postLabel = /ante/i.test(action.text)
+      ? '底注'
+      : /straddle/i.test(action.text)
+        ? 'Straddle'
+        : `${position ? `${position} ` : ''}盲注`;
+    return `${postLabel} ${handDetailAmount(action.amount, hand.bb, unit)}`;
+  }
+  if (action.type === 'raise') {
+    const target = handDetailRaiseTarget(action);
+    return target
+      ? `加注至 ${handDetailAmount(target, hand.bb, unit)}`
+      : `加注 ${handDetailAmount(action.amount, hand.bb, unit)}`;
+  }
+  const label = labels[action.type] ?? action.text;
+  return action.amount > 0 ? `${label} ${handDetailAmount(action.amount, hand.bb, unit)}` : label;
+}
+
+function buildHandDetailStreets(actions, board) {
+  const grouped = new Map(HAND_DETAIL_STREETS.map(({ key }) => [key, []]));
+  const showdownActions = [];
+  let lastPlayedStreet = 'preflop';
+
+  actions.forEach((action) => {
+    if (action.street === 'showdown') {
+      showdownActions.push(action);
+      return;
+    }
+    const streetKey = action.street === 'preflop' && action.type === 'post' ? 'blinds' : action.street;
+    if (!grouped.has(streetKey)) return;
+    grouped.get(streetKey).push(action);
+    if (streetKey !== 'blinds') lastPlayedStreet = streetKey;
+  });
+  const resultStreet = board.length >= 5 ? 'river' : board.length >= 4 ? 'turn' : board.length >= 3 ? 'flop' : lastPlayedStreet;
+  grouped.get(resultStreet)?.push(...showdownActions);
+
+  let carriedPot = 0;
+  return HAND_DETAIL_STREETS.map((street) => {
+    const streetActions = grouped.get(street.key) ?? [];
+    const startingPot = carriedPot;
+    if (streetActions.length) carriedPot = streetActions.at(-1).potAfter ?? carriedPot;
+    const cards = street.key === 'flop'
+      ? board.slice(0, 3)
+      : street.key === 'turn'
+        ? board.slice(3, 4)
+        : street.key === 'river'
+          ? board.slice(4, 5)
+          : [];
+    return { ...street, actions: streetActions, pot: street.key === 'blinds' ? carriedPot : startingPot, cards };
+  });
+}
+
+function HistoryHandDetail({ hand, hero, initialUnit, onClose, onReplay }) {
+  const [unit, setUnit] = useState(initialUnit);
+  const stageScrollRef = useRef(null);
+  const actions = useMemo(() => hand.actions ?? [], [hand.actions]);
+  const finalState = useMemo(() => buildReplayState(actions, actions.length), [actions]);
+  const streetColumns = useMemo(() => buildHandDetailStreets(actions, hand.board ?? []), [actions, hand.board]);
+  const winners = useMemo(() => new Map(hand.winners.map((winner) => [winner.name, winner.amount])), [hand.winners]);
+  const playerList = useMemo(() => {
+    const bySeat = [...hand.players.entries()].sort((a, b) => a[1].seat - b[1].seat);
+    const heroIndex = bySeat.findIndex(([name]) => name === hero);
+    return heroIndex > 0 ? [...bySeat.slice(heroIndex), ...bySeat.slice(0, heroIndex)] : bySeat;
+  }, [hand.players, hero]);
+  const heroCards = hand.holeCards.get(hero) ?? [];
+  const totalPot = hand.totalPot || finalState.pot;
+
+  useEffect(() => {
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+
+  useEffect(() => {
+    const centerStage = () => {
+      const stage = stageScrollRef.current;
+      if (stage) stage.scrollLeft = Math.max(0, (stage.scrollWidth - stage.clientWidth) / 2);
+    };
+    const frame = window.requestAnimationFrame(centerStage);
+    window.addEventListener('resize', centerStage);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', centerStage);
+    };
+  }, []);
+
+  return (
+    <div className="history-replay-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="history-hand-detail" role="dialog" aria-modal="true" aria-label={`牌局 ${hand.id} 牌谱详情`}>
+        <header>
+          <div className="history-hand-detail-title">
+            <span>牌谱详情</span>
+            <strong>{hand.stakes} · #{hand.id}</strong>
+            <small>{hand.date}</small>
+          </div>
+          <div className="history-hand-detail-toolbar">
+            <div className="history-unit-toggle" aria-label="牌谱金额单位">
+              <button type="button" aria-pressed={unit === 'bb'} className={unit === 'bb' ? 'active' : ''} onClick={() => setUnit('bb')}>BB</button>
+              <button type="button" aria-pressed={unit === 'money'} className={unit === 'money' ? 'active' : ''} onClick={() => setUnit('money')}>$</button>
+            </div>
+            <button type="button" className="history-hand-detail-replay" onClick={onReplay}>▶ 播放此手</button>
+            <button type="button" className="history-replay-close" onClick={onClose} aria-label="关闭">×</button>
+          </div>
+        </header>
+
+        <div className="history-hand-detail-body">
+          <div className="history-hand-detail-stage-scroll" ref={stageScrollRef}>
+            <div className="history-hand-detail-stage">
+              <div className="history-hand-detail-table">
+                <div className="history-hand-detail-board">
+                  <small>最终牌面</small>
+                  <PlayingCards cards={hand.board} />
+                  <strong><ReplayChipStack compact />底池 {handDetailAmount(totalPot, hand.bb, unit)}</strong>
+                  {!!heroCards.length && <em>{evaluateHandValue([...heroCards, ...hand.board])}</em>}
+                </div>
+                {playerList.map(([name, player], index) => {
+                  const position = replayPosition(index, playerList.length, 43, 46, 90);
+                  const knownCards = hand.holeCards.get(name) ?? [];
+                  const finalStack = Math.max(0, player.stack + (finalState.stackChanges.get(name) ?? 0));
+                  const folded = finalState.foldedPlayers.has(name);
+                  const won = winners.get(name) ?? 0;
+                  return (
+                    <div
+                      key={name}
+                      className={`history-hand-detail-seat${name === hero ? ' hero' : ''}${won > 0 ? ' winner' : ''}${folded ? ' folded' : ''}`}
+                      style={{ left: `${position.left}%`, top: `${position.top}%` }}
+                    >
+                      <div className="history-seat-cards">
+                        {knownCards.length ? <PlayingCards cards={knownCards} compact /> : <PlayingCards hidden compact />}
+                      </div>
+                      <strong>{name}</strong>
+                      <span>{player.position} · {handDetailAmount(finalStack, hand.bb, unit)}</span>
+                      {won > 0 && <i>赢得 {handDetailAmount(won, hand.bb, unit)}</i>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <section className="history-hand-detail-timeline">
+            <header>
+              <div><span>完整行动</span><strong>按牌局街道展开</strong></div>
+              <small>加注显示目标额；“行动后底池”为该动作完成后的底池。</small>
+            </header>
+            <div className="history-hand-detail-timeline-scroll">
+              <div className="history-hand-detail-timeline-grid">
+                {streetColumns.map((street) => (
+                  <section className="history-hand-detail-street" key={street.key}>
+                    <header>
+                      <div><span>{street.label}</span><strong>底池 {handDetailAmount(street.pot, hand.bb, unit)}</strong></div>
+                      {street.cards.length ? <PlayingCards cards={street.cards} compact /> : <small>{street.key === 'blinds' ? '强制投入' : '起手牌行动'}</small>}
+                    </header>
+                    <div className="history-hand-detail-actions">
+                      {street.actions.map((action, index) => {
+                        const player = hand.players.get(action.player);
+                        const shownCards = action.type === 'collect' ? hand.holeCards.get(action.player) ?? [] : [];
+                        return (
+                          <article
+                            key={`${street.key}-${index}-${action.player}`}
+                            className={`history-hand-detail-action history-hand-detail-action--${action.type}`}
+                            title={action.text}
+                          >
+                            <header>
+                              <i>{action.player.slice(0, 1).toUpperCase()}</i>
+                              <div><strong>{action.player}</strong><span>{player?.position || '—'}</span></div>
+                            </header>
+                            <p>{handDetailActionLabel(action, hand, unit, player?.position)}</p>
+                            <small>行动后底池 {handDetailAmount(action.potAfter, hand.bb, unit)}</small>
+                            {!!shownCards.length && (
+                              <div className="history-hand-detail-result">
+                                <PlayingCards cards={shownCards} compact />
+                                <strong>{evaluateHandValue([...shownCards, ...hand.board])}</strong>
+                              </div>
+                            )}
+                          </article>
+                        );
+                      })}
+                      {!street.actions.length && <p className="history-hand-detail-empty">本街无行动</p>}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1998,7 +2217,7 @@ function HistoryRecords({ results, hands, hero }) {
   const [sort, setSort] = useState({ key: 'date', direction: 'desc' });
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
-  const [replayHand, setReplayHand] = useState(null);
+  const [handViewer, setHandViewer] = useState(null);
   const handById = useMemo(() => new Map(hands.map((hand) => [hand.id, hand])), [hands]);
 
   const rows = useMemo(() => results.map((result) => ({ result, hand: handById.get(result.id) })).filter((row) => row.hand), [handById, results]);
@@ -2091,14 +2310,14 @@ function HistoryRecords({ results, hands, hero }) {
                 tabIndex={0}
                 aria-label={`查看牌局 ${result.id} 的具体牌谱`}
                 title="点击查看这手具体牌谱"
-                onClick={() => setReplayHand(hand)}
+                onClick={() => setHandViewer({ mode: 'detail', hand })}
                 onKeyDown={(event) => {
                   if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
                   event.preventDefault();
-                  setReplayHand(hand);
+                  setHandViewer({ mode: 'detail', hand });
                 }}
               >
-                <td><button type="button" className="history-replay-button" onClick={(event) => { event.stopPropagation(); setReplayHand(hand); }}>▶ 重播</button></td>
+                <td><button type="button" className="history-replay-button" onClick={(event) => { event.stopPropagation(); setHandViewer({ mode: 'replay', hand }); }}>▶ 重播</button></td>
                 <td><span className="history-record-date">{result.date.replace(/^\d{4}\//, '').replace(' ', ' · ')}</span></td>
                 <td><code>{result.id}</code></td>
                 <td><PlayingCards cards={result.cards} compact /></td>
@@ -2117,7 +2336,16 @@ function HistoryRecords({ results, hands, hero }) {
         <span>第 {safePage} / {pageCount} 页</span>
         <div><button type="button" onClick={() => setPage(1)} disabled={safePage === 1}>首页</button><button type="button" onClick={() => setPage(safePage - 1)} disabled={safePage === 1}>上一页</button><button type="button" onClick={() => setPage(safePage + 1)} disabled={safePage === pageCount}>下一页</button><button type="button" onClick={() => setPage(pageCount)} disabled={safePage === pageCount}>末页</button></div>
       </footer>
-      {replayHand && <HandReplay hand={replayHand} hero={hero} onClose={() => setReplayHand(null)} />}
+      {handViewer?.mode === 'detail' && (
+        <HistoryHandDetail
+          hand={handViewer.hand}
+          hero={hero}
+          initialUnit={unit}
+          onClose={() => setHandViewer(null)}
+          onReplay={() => setHandViewer({ mode: 'replay', hand: handViewer.hand })}
+        />
+      )}
+      {handViewer?.mode === 'replay' && <HandReplay hand={handViewer.hand} hero={hero} onClose={() => setHandViewer(null)} />}
       {filterModal === 'hole' && (
         <HoleCardFilterModal
           initial={holeFilter}
@@ -2146,6 +2374,8 @@ function HandHistoryView() {
   const [hero, setHero] = useState('');
   const [stakeFilter, setStakeFilter] = useState('all');
   const [positionFilter, setPositionFilter] = useState('all');
+  const [holeCardFilter, setHoleCardFilter] = useState(() => ({ ranks: [null, null], suitedOnly: false }));
+  const [holeCardFilterOpen, setHoleCardFilterOpen] = useState(false);
   const [startTp, setStartTp] = useState('0');
   const [endTp, setEndTp] = useState('0');
   const [historyTab, setHistoryTab] = useState('overview');
@@ -2169,11 +2399,14 @@ function HandHistoryView() {
   const filteredResults = useMemo(() => rawResults.filter((hand) => (
     (stakeFilter === 'all' || hand.stakes === stakeFilter)
     && (positionFilter === 'all' || hand.position === positionFilter)
-  )), [rawResults, stakeFilter, positionFilter]);
+    && matchesHoleFilter(hand.cards ?? [], holeCardFilter)
+  )), [holeCardFilter, positionFilter, rawResults, stakeFilter]);
+  const holeCardFilterActive = holeCardFilter.ranks.some(Boolean) || holeCardFilter.suitedOnly;
+  const overallSummary = useMemo(() => summarizeHeroResults(rawResults), [rawResults]);
   const summary = useMemo(() => summarizeHeroResults(filteredResults), [filteredResults]);
   const mainStake = stakeOptions[0] ? stakeLabel(stakeOptions[0]) : '-';
   const tpDelta = Number(endTp) - Number(startTp);
-  const expectedTp = summary.gameRake * 100;
+  const expectedTp = overallSummary.gameRake * 100;
   const pvi = expectedTp ? (tpDelta / expectedTp) * 100 : 0;
   const flopStats = summary.postflop?.flop ?? {};
   const turnStats = summary.postflop?.turn ?? {};
@@ -2268,6 +2501,8 @@ function HandHistoryView() {
       setHero(nextPlayers[0]?.name ?? '');
       setStakeFilter('all');
       setPositionFilter('all');
+      setHoleCardFilter({ ranks: [null, null], suitedOnly: false });
+      setHoleCardFilterOpen(false);
       setHistoryTab('overview');
       setStatus(nextHands.length ? 'ready' : 'empty');
       setMessage(nextHands.length ? '' : '没有识别到 GGPoker 手牌。');
@@ -2396,6 +2631,28 @@ function HandHistoryView() {
                   value={positionFilter}
                   onChange={setPositionFilter}
                 />
+                <section className="history-side-hole-filter">
+                  <header>
+                    <div><span>底牌</span><small>看线筛选</small></div>
+                    {holeCardFilterActive && (
+                      <button type="button" onClick={() => setHoleCardFilter({ ranks: [null, null], suitedOnly: false })}>清除</button>
+                    )}
+                  </header>
+                  <button
+                    type="button"
+                    className={`history-card-filter-trigger history-side-hole-trigger${holeCardFilterActive ? ' active' : ''}`}
+                    aria-label={holeCardFilterActive ? '修改全局底牌筛选' : '选择全局底牌筛选'}
+                    onClick={() => setHoleCardFilterOpen(true)}
+                  >
+                    <span className="history-hole-filter-preview">
+                      <i>{holeCardFilter.ranks[0] ?? '?'}</i><i>{holeCardFilter.ranks[1] ?? '?'}</i>
+                      {holeCardFilter.suitedOnly && <b>同花</b>}
+                    </span>
+                    <strong>{holeCardFilterActive ? '已选择' : '任意底牌'}</strong>
+                    <em>{holeCardFilterActive ? '修改' : '选择'}</em>
+                  </button>
+                  <p>选择后资金曲线和全部数据同步筛选，可与级别、位置叠加。</p>
+                </section>
               </aside>
 
               <div className="history-analysis-main">
@@ -2503,6 +2760,13 @@ function HandHistoryView() {
               </div>
             </section>
           </>
+        )}
+        {holeCardFilterOpen && (
+          <HoleCardFilterModal
+            initial={holeCardFilter}
+            onClose={() => setHoleCardFilterOpen(false)}
+            onApply={(next) => { setHoleCardFilter(next); setHoleCardFilterOpen(false); }}
+          />
         )}
       </section>
     </div>
