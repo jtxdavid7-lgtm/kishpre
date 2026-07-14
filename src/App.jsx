@@ -1582,7 +1582,7 @@ function HoleCardReport({ results }) {
         <div>
           <span>底牌分析</span>
           <strong>169 种起手牌盈亏</strong>
-          <p>按当前级别与位置筛选统计，每格显示累计输赢、该牌型百手输赢和样本数。</p>
+          <p>按当前筛选统计，每格显示累计输赢、对全部手牌的百手贡献和样本数。</p>
         </div>
         <div className="hole-card-report-actions">
           <div className="history-unit-toggle" aria-label="底牌盈亏单位">
@@ -1608,7 +1608,7 @@ function HoleCardReport({ results }) {
             <div className="hole-card-matrix-row" role="row" key={rank}>
               {cells.slice(rowIndex * STARTING_HAND_RANKS.length, (rowIndex + 1) * STARTING_HAND_RANKS.length).map(({ key, columnIndex, stats }) => {
                 const value = unit === 'bb' ? stats?.profitBB : stats?.profit;
-                const perHundred = stats ? (value / stats.hands) * 100 : null;
+                const perHundred = stats && results.length ? (value / results.length) * 100 : null;
                 const tone = !stats ? 'empty' : value > 0 ? 'win' : value < 0 ? 'loss' : 'neutral';
                 const strength = stats && maxAbsoluteValue
                   ? 0.34 + (Math.sqrt(Math.abs(value) / maxAbsoluteValue) * 0.5)
@@ -1620,7 +1620,7 @@ function HoleCardReport({ results }) {
                     role="gridcell"
                     className={`hole-card-matrix-cell hole-card-matrix-cell--${tone} hole-card-matrix-cell--${type}`}
                     style={{ '--hole-card-strength': strength }}
-                    aria-label={`${key}，${stats ? `${stats.hands} 手牌，累计 ${matrixAmount(value, unit)}，百手 ${matrixAmount(perHundred, unit)}` : '无样本'}`}
+                    aria-label={`${key}，${stats ? `${stats.hands} 手牌，累计 ${matrixAmount(value, unit)}，对全部手牌百手贡献 ${matrixAmount(perHundred, unit)}` : '无样本'}`}
                   >
                     <b>{key}</b>
                     <strong>{stats ? matrixAmount(value, unit) : '—'}</strong>
@@ -1717,6 +1717,32 @@ const HAND_DETAIL_STREETS = [
   { key: 'river', label: '河牌' }
 ];
 
+const HAND_DETAIL_SIZES = ['compact', 'normal', 'max'];
+const HAND_DETAIL_SIZE_LABELS = { compact: '紧凑', normal: '标准', max: '全屏' };
+
+function keepModalFocusInside(event, container) {
+  if (event.key !== 'Tab' || !container) return;
+  const focusable = [...container.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+    .filter((element) => element.offsetParent !== null);
+  if (!focusable.length) {
+    event.preventDefault();
+    container.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (document.activeElement === container) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  } else if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function handDetailAmount(value, bb, unit) {
   if (!Number.isFinite(value)) return '—';
   const amount = unit === 'bb' ? value / bb : value;
@@ -1787,6 +1813,8 @@ function buildHandDetailStreets(actions, board) {
 
 function HistoryHandDetail({ hand, hero, initialUnit, onClose, onReplay }) {
   const [unit, setUnit] = useState(initialUnit);
+  const [detailSize, setDetailSize] = useState('normal');
+  const dialogRef = useRef(null);
   const stageScrollRef = useRef(null);
   const actions = useMemo(() => hand.actions ?? [], [hand.actions]);
   const finalState = useMemo(() => buildReplayState(actions, actions.length), [actions]);
@@ -1799,6 +1827,13 @@ function HistoryHandDetail({ hand, hero, initialUnit, onClose, onReplay }) {
   }, [hand.players, hero]);
   const heroCards = hand.holeCards.get(hero) ?? [];
   const totalPot = hand.totalPot || finalState.pot;
+  const detailSizeIndex = HAND_DETAIL_SIZES.indexOf(detailSize);
+
+  const changeDetailSize = (direction) => {
+    const nextIndex = Math.min(HAND_DETAIL_SIZES.length - 1, Math.max(0, detailSizeIndex + direction));
+    if (nextIndex === detailSizeIndex) return;
+    setDetailSize(HAND_DETAIL_SIZES[nextIndex]);
+  };
 
   useEffect(() => {
     const closeOnEscape = (event) => {
@@ -1807,6 +1842,18 @@ function HistoryHandDetail({ hand, hero, initialUnit, onClose, onReplay }) {
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [onClose]);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    const frame = window.requestAnimationFrame(() => dialogRef.current?.focus());
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus?.();
+    };
+  }, []);
 
   useEffect(() => {
     const centerStage = () => {
@@ -1819,21 +1866,35 @@ function HistoryHandDetail({ hand, hero, initialUnit, onClose, onReplay }) {
       window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', centerStage);
     };
-  }, []);
+  }, [detailSize]);
 
   return (
     <div className="history-replay-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="history-hand-detail" role="dialog" aria-modal="true" aria-label={`牌局 ${hand.id} 牌谱详情`}>
+      <section
+        ref={dialogRef}
+        className="history-hand-detail"
+        data-size={detailSize}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="history-hand-detail-title"
+        tabIndex={-1}
+        onKeyDown={(event) => keepModalFocusInside(event, dialogRef.current)}
+      >
         <header>
           <div className="history-hand-detail-title">
             <span>牌谱详情</span>
-            <strong>{hand.stakes} · #{hand.id}</strong>
+            <strong id="history-hand-detail-title">{hand.stakes} · #{hand.id}</strong>
             <small>{hand.date}</small>
           </div>
           <div className="history-hand-detail-toolbar">
             <div className="history-unit-toggle" aria-label="牌谱金额单位">
               <button type="button" aria-pressed={unit === 'bb'} className={unit === 'bb' ? 'active' : ''} onClick={() => setUnit('bb')}>BB</button>
               <button type="button" aria-pressed={unit === 'money'} className={unit === 'money' ? 'active' : ''} onClick={() => setUnit('money')}>$</button>
+            </div>
+            <div className="history-hand-detail-size" role="group" aria-label="牌谱窗口大小">
+              <button type="button" aria-label="缩小牌谱窗口" aria-disabled={detailSizeIndex === 0} onClick={() => changeDetailSize(-1)}>−</button>
+              <span aria-live="polite">{HAND_DETAIL_SIZE_LABELS[detailSize]}</span>
+              <button type="button" aria-label="放大牌谱窗口" aria-disabled={detailSizeIndex === HAND_DETAIL_SIZES.length - 1} onClick={() => changeDetailSize(1)}>＋</button>
             </div>
             <button type="button" className="history-hand-detail-replay" onClick={onReplay}>▶ 播放此手</button>
             <button type="button" className="history-replay-close" onClick={onClose} aria-label="关闭">×</button>
@@ -1851,7 +1912,7 @@ function HistoryHandDetail({ hand, hero, initialUnit, onClose, onReplay }) {
                   {!!heroCards.length && <em>{evaluateHandValue([...heroCards, ...hand.board])}</em>}
                 </div>
                 {playerList.map(([name, player], index) => {
-                  const position = replayPosition(index, playerList.length, 43, 46, 90);
+                  const position = replayPosition(index, playerList.length, 42, 42, 90);
                   const knownCards = hand.holeCards.get(name) ?? [];
                   const finalStack = Math.max(0, player.stack + (finalState.stackChanges.get(name) ?? 0));
                   const folded = finalState.foldedPlayers.has(name);
@@ -1903,7 +1964,7 @@ function HistoryHandDetail({ hand, hero, initialUnit, onClose, onReplay }) {
                               <div><strong>{action.player}</strong><span>{player?.position || '—'}</span></div>
                             </header>
                             <p>{handDetailActionLabel(action, hand, unit, player?.position)}</p>
-                            <small>行动后底池 {handDetailAmount(action.potAfter, hand.bb, unit)}</small>
+                            <small title={`行动后底池 ${handDetailAmount(action.potAfter, hand.bb, unit)}`}>底池 {handDetailAmount(action.potAfter, hand.bb, unit)}</small>
                             {!!shownCards.length && (
                               <div className="history-hand-detail-result">
                                 <PlayingCards cards={shownCards} compact />
@@ -1927,6 +1988,7 @@ function HistoryHandDetail({ hand, hero, initialUnit, onClose, onReplay }) {
 }
 
 function HandReplay({ hand, hero, onClose }) {
+  const dialogRef = useRef(null);
   const actions = useMemo(() => hand.actions ?? [], [hand.actions]);
   const initialStep = replayStartingStep(actions);
   const [step, setStep] = useState(() => initialStep);
@@ -1957,9 +2019,29 @@ function HandReplay({ hand, hero, onClose }) {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [onClose]);
 
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    const frame = window.requestAnimationFrame(() => dialogRef.current?.focus());
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus?.();
+    };
+  }, []);
+
   return (
     <div className="history-replay-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="history-replay" role="dialog" aria-modal="true" aria-label={`牌局 ${hand.id} 重播`}>
+      <section
+        ref={dialogRef}
+        className="history-replay"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`牌局 ${hand.id} 重播`}
+        tabIndex={-1}
+        onKeyDown={(event) => keepModalFocusInside(event, dialogRef.current)}
+      >
         <header>
           <div><span>牌谱播放器</span><strong>#{hand.id}</strong></div>
           <button type="button" className="history-replay-close" onClick={onClose} aria-label="关闭">×</button>
@@ -2015,12 +2097,12 @@ function HandReplay({ hand, hero, onClose }) {
               })}
             </div>
             <div className="history-replay-controls">
-              <button type="button" onClick={() => { setPlaying(false); setStep(Math.max(initialStep, step - 1)); }} disabled={step <= initialStep}>上一步</button>
+              <button type="button" onClick={() => { setPlaying(false); setStep(Math.max(initialStep, step - 1)); }} aria-disabled={step <= initialStep}>上一步</button>
               <button type="button" className="primary" onClick={() => {
                 if (step >= actions.length) setStep(initialStep);
                 setPlaying((value) => !value);
               }}>{playing ? '暂停' : step >= actions.length ? '重新播放' : '播放'}</button>
-              <button type="button" onClick={() => { setPlaying(false); setStep(Math.min(actions.length, step + 1)); }} disabled={step >= actions.length}>下一步</button>
+              <button type="button" onClick={() => { setPlaying(false); setStep(Math.min(actions.length, step + 1)); }} aria-disabled={step >= actions.length}>下一步</button>
               <span>{step} / {actions.length}</span>
             </div>
           </div>
