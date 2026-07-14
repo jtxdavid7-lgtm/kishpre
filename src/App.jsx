@@ -53,98 +53,128 @@ const PERCENTILE_POINTS = [
 const HOMEPAGE_COPY = {
   zh: {
     hero: {
-      eyebrow: '欢迎来到',
-      title: 'kishpoker',
-      desc: '一个围绕精确决策打造的扑克实验室：牌谱统计、胜率计算以及更多模块将在此聚合。',
-      primaryCta: '打开牌谱统计',
-      secondaryCta: '胜率计算工具',
-      varianceCta: '波动计算器'
+      eyebrow: 'KISHPOKER 旗舰工具',
+      product: 'kish2note',
+      title: '把 GG 牌谱，变成可以行动的数据',
+      desc: '导入 GGPoker 手牌历史，在浏览器本地查看资金盈亏和打法数据，并结合亏损牌型、位置与具体牌局排查可能的漏洞。',
+      privacy: '本地解析 · 牌谱不会上传服务器',
+      primaryCta: '开始分析 GG 牌谱',
+      previewLabel: '分析视图预览',
+      previewTitle: '一份牌谱，重新看清你的打法',
+      previewFooter: '从结果出发，回到每一个决策'
+    },
+    flagship: {
+      eyebrow: 'KISH2NOTE · GG 牌谱分析',
+      title: '你的 GG 牌谱分析工作台',
+      desc: '从长期结果到单手复盘，用一套清晰的报告重新认识自己的打法。',
+      action: '进入 kish2note',
+      capabilities: [
+        { title: '资金盈亏', desc: '查看总输赢、BB/100、资金与 EV 曲线，以及不同阶段的表现变化。' },
+        { title: '数据分析', desc: '拆解 VPIP、PFR、3Bet 等核心数据，并按级别、位置和底牌深入筛选。' },
+        { title: '漏洞分析', desc: '结合亏损牌型、位置及具体牌局筛选，辅助定位值得优先复盘的决策。' },
+        { title: '牌局复盘', desc: '筛选具体牌局，查看完整行动与筹码变化，回顾每一个关键节点。' }
+      ]
     },
     section: {
-      title: '工具入口',
-      subtitle: '点击打开对应模块'
+      title: '更多扑克工具',
+      subtitle: '针对具体决策场景准备的独立工具'
     },
     features: {
       range: {
         label: 'Range Lab · 施工中',
         title: '实时范围实验室',
-        desc: '范围编辑和对手画像功能仍在完善中。'
+        desc: '查看部分翻前范围与画像调整演示，编辑功能仍在完善中。'
       },
       equity: {
-        label: '胜率计算工具',
-        title: '德州计算器',
-        desc: '手牌 + 公共牌一键估算。'
+        label: 'Equity Calculator',
+        title: '德州胜率计算器',
+        desc: '输入手牌或范围，快速计算不同公共牌面的胜率。'
       },
       variance: {
-        label: 'Variance',
-        title: '波动计算器',
-        desc: '估算在指定手数下的收益分布、破产概率与极端下行。'
+        label: 'Variance Simulator',
+        title: '收益波动模拟器',
+        desc: '模拟长期收益分布、下行风险与可能经历的波动。'
       },
       rng: {
-        label: '随机数插件',
+        label: 'RNG Plugin',
         title: '牌桌随机数助手',
-        desc: '下载 Windows 插件，在直播或桌边一键生成随机数。'
+        desc: '在直播或牌桌边快速生成随机数，辅助混合策略执行。'
       },
       reports: {
-        label: '牌谱统计',
-        title: 'GG 手牌数据报表',
-        desc: '导入 GGPoker 手牌历史，查看盈亏、资金曲线、翻前和摊牌数据。'
+        label: 'KISH2NOTE',
+        title: 'GG 牌谱分析工作台',
+        desc: '导入 GGPoker 手牌历史，从盈亏结果到打法结构完成一站式复盘。'
       }
     },
     actions: {
-      range: '进入',
-      equity: '进入',
-      variance: '进入',
-      history: '进入',
-      download: '下载'
+      range: '查看演示',
+      equity: '立即计算',
+      variance: '开始模拟',
+      history: '进入 kish2note',
+      download: '下载插件'
     }
   },
   en: {
     hero: {
-      eyebrow: 'Welcome to',
-      title: 'kishpoker',
-      desc: 'A poker lab built around precise decisions—hand-history reports, equity sims, and more modules coming soon.',
-      primaryCta: 'Open Hand History',
-      secondaryCta: 'Run Equity Calculator',
-      varianceCta: 'Variance Calculator'
+      eyebrow: 'KISHPOKER FLAGSHIP TOOL',
+      product: 'kish2note',
+      title: 'Turn GG hand histories into decisions you can act on',
+      desc: 'Import GGPoker hand histories and review results and playing data locally in your browser, then use losing hand classes, positions, and individual hands to help inspect possible leaks.',
+      privacy: 'Local processing · Your hand histories never leave this browser',
+      primaryCta: 'Analyze GG Hand Histories',
+      previewLabel: 'ANALYSIS PREVIEW',
+      previewTitle: 'One hand-history file. A clearer view of your game.',
+      previewFooter: 'Start with results, then return to every decision'
+    },
+    flagship: {
+      eyebrow: 'KISH2NOTE · GG HAND ANALYSIS',
+      title: 'Your GG hand-history analysis workspace',
+      desc: 'Move from long-term results to individual hand review with one focused set of reports.',
+      action: 'Open kish2note',
+      capabilities: [
+        { title: 'Profit & loss', desc: 'Review net results, BB/100, bankroll and EV curves, and how performance changes over time.' },
+        { title: 'Data analysis', desc: 'Break down VPIP, PFR, 3Bet, and more by stake, position, and starting hand.' },
+        { title: 'Leak analysis', desc: 'Use losing hand classes, positions, and individual hand filters to help prioritize review.' },
+        { title: 'Hand review', desc: 'Filter individual hands and revisit every action, board card, and chip movement.' }
+      ]
     },
     section: {
-      title: 'Toolbox',
-      subtitle: 'Pick a module to launch'
+      title: 'More poker tools',
+      subtitle: 'Focused utilities for specific decisions'
     },
     features: {
       range: {
         label: 'Range Lab · WIP',
         title: 'Real-time Range Lab',
-        desc: 'Range editing and opponent profiling are still under construction.'
+        desc: 'Explore selected preflop ranges and opponent-profile adjustments while editing tools remain in development.'
       },
       equity: {
         label: 'Equity Calculator',
-        title: 'Hold’em odds tool',
-        desc: 'Select hole cards or ranges plus the board and simulate equities instantly.'
+        title: 'Hold’em equity calculator',
+        desc: 'Enter hands or ranges and calculate equity across different boards.'
       },
       variance: {
-        label: 'Variance',
-        title: 'Variance calculator',
-        desc: 'Project expected value, sigma bands, and risk of ruin for a given sample size.'
+        label: 'Variance Simulator',
+        title: 'Poker variance simulator',
+        desc: 'Model long-term result distributions, downside risk, and likely swings.'
       },
       rng: {
         label: 'RNG Plugin',
         title: 'Table-side RNG helper',
-        desc: 'Download the Windows helper to generate quick random numbers mid-session.'
+        desc: 'Generate quick random numbers while streaming or playing to support mixed strategies.'
       },
       reports: {
-        label: 'Hand History',
-        title: 'GG hand-history reports',
-        desc: 'Import GGPoker hand histories and review profit, curves, preflop, and showdown stats.'
+        label: 'KISH2NOTE',
+        title: 'GG hand-history analysis workspace',
+        desc: 'Import GGPoker hands and move from results to a structured review of your game.'
       }
     },
     actions: {
-      range: 'Launch',
-      equity: 'Launch',
-      variance: 'Launch',
-      history: 'Launch',
-      download: 'Download'
+      range: 'View demo',
+      equity: 'Calculate now',
+      variance: 'Run simulation',
+      history: 'Open kish2note',
+      download: 'Download plugin'
     }
   }
 };
@@ -2596,13 +2626,13 @@ function HandHistoryView() {
 
   const exportCsv = () => {
     if (!filteredResults.length) return;
-    downloadText(`kishpoker-${hero || 'hero'}-hands.csv`, exportSummaryCsv(filteredResults));
+    downloadText(`kish2note-${hero || 'hero'}-hands.csv`, exportSummaryCsv(filteredResults));
   };
 
   return (
     <div className="site site--history">
       <nav className="top-nav">
-        <div className="brand">KISHPOKER · Hand History</div>
+        <div className="brand">KISHPOKER · KISH2NOTE</div>
         <div className="cta-row">
           <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
           <button type="button" className="secondary" onClick={() => window.location.assign('?tool=range')}>Range Lab</button>
@@ -2612,9 +2642,9 @@ function HandHistoryView() {
 
       <section className="range-panel history-panel" style={{ marginTop: 0 }}>
         <header>
-          <p className="eyebrow">GGPoker · Local parser</p>
-          <h2>牌谱统计</h2>
-          <p className="subtext">上传 GG 手牌历史，浏览器本地解析，不上传服务器。第一版支持基础盈亏、资金曲线、VPIP/PFR/3Bet、级别和位置筛选。</p>
+          <p className="eyebrow">GGPoker · Local analysis</p>
+          <h2>kish2note</h2>
+          <p className="subtext">导入 GG 手牌历史，在浏览器本地查看资金盈亏和打法数据，并结合亏损牌型、位置与具体牌局筛选，辅助排查值得复盘的决策。牌谱不会上传服务器。</p>
         </header>
 
         <input
@@ -2738,7 +2768,7 @@ function HandHistoryView() {
               </aside>
 
               <div className="history-analysis-main">
-                <nav className="history-tabs" aria-label="牌谱统计视图">
+                <nav className="history-tabs" aria-label="kish2note 分析视图">
                   <button
                     type="button"
                     className={historyTab === 'overview' ? 'active' : ''}
@@ -2873,6 +2903,17 @@ function HomeView() {
 
   const copy = HOMEPAGE_COPY[language] ?? HOMEPAGE_COPY.zh;
 
+  useEffect(() => {
+    document.documentElement.lang = language === 'en' ? 'en' : 'zh-CN';
+    document.title = 'kish2note | KishPoker';
+    document.querySelector('meta[name="description"]')?.setAttribute(
+      'content',
+      language === 'en'
+        ? 'kish2note is KishPoker’s local GG hand-history workspace for results, data review, and leak investigation.'
+        : 'kish2note 是 KishPoker 的 GG 手牌本地分析工具，帮助你查看资金盈亏、打法数据并辅助排查值得复盘的漏洞。'
+    );
+  }, [language]);
+
   const handleLanguageChange = (next) => {
     setLanguage(next);
     if (typeof window !== 'undefined') {
@@ -2905,9 +2946,10 @@ function HomeView() {
       actionLabel: actionHandler ? copy.actions[item.action] : null
     };
   });
+  const supportingFeatureCards = featureCards.filter((feature) => feature.key !== 'reports');
 
   return (
-    <div className="site">
+    <div className="site site--home">
       <nav className="top-nav">
         <div className="brand">KISHPOKER</div>
         <div className="lang-switch">
@@ -2916,33 +2958,75 @@ function HomeView() {
               type="button"
               key={code}
               className={language === code ? 'active' : ''}
+              aria-pressed={language === code}
               onClick={() => handleLanguageChange(code)}
             >{label}</button>
           ))}
         </div>
       </nav>
 
-      <header className="hero">
-        <div>
+      <header className="hero hero--kish2note">
+        <div className="hero-copy">
           <p className="eyebrow">{copy.hero.eyebrow}</p>
-          <h1>{copy.hero.title}</h1>
-          <p>{copy.hero.desc}</p>
+          <h1>{copy.hero.product}</h1>
+          <h2>{copy.hero.title}</h2>
+          <p className="hero-description">{copy.hero.desc}</p>
+          <p className="hero-privacy"><i aria-hidden="true" />{copy.hero.privacy}</p>
+          <div className="cta-row">
+            <button type="button" className="primary hero-primary" onClick={openHistory}>{copy.hero.primaryCta}<span aria-hidden="true">→</span></button>
+          </div>
         </div>
-        <div className="cta-row">
-          <button type="button" className="primary" onClick={openHistory}>{copy.hero.primaryCta}</button>
-          <button type="button" className="secondary" onClick={openEquity}>{copy.hero.secondaryCta}</button>
-          <button type="button" className="secondary" onClick={openVariance}>{copy.hero.varianceCta ?? 'Variance calculator'}</button>
-        </div>
+        <aside className="hero-analysis-preview" aria-label={copy.hero.previewLabel}>
+          <header><span>{copy.hero.previewLabel}</span><i>LOCAL</i></header>
+          <strong>{copy.hero.previewTitle}</strong>
+          <div className="hero-preview-chart" aria-hidden="true">
+            <svg viewBox="0 0 360 112" preserveAspectRatio="none">
+              <path className="hero-chart-area" d="M0 96 C35 92 48 77 76 80 S118 64 142 68 S178 46 202 53 S240 30 266 39 S316 13 360 18 L360 112 L0 112 Z" />
+              <path className="hero-chart-line" d="M0 96 C35 92 48 77 76 80 S118 64 142 68 S178 46 202 53 S240 30 266 39 S316 13 360 18" />
+              <circle cx="360" cy="18" r="5" />
+            </svg>
+          </div>
+          <div className="hero-preview-list">
+            {copy.flagship.capabilities.slice(0, 3).map((capability, index) => (
+              <div key={capability.title}>
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <strong>{capability.title}</strong>
+                <i aria-hidden="true">↗</i>
+              </div>
+            ))}
+          </div>
+          <footer>{copy.hero.previewFooter}</footer>
+        </aside>
       </header>
 
-      <section>
+      <section className="kish2note-showcase">
+        <header>
+          <div>
+            <p className="eyebrow">{copy.flagship.eyebrow}</p>
+            <h2>{copy.flagship.title}</h2>
+            <p>{copy.flagship.desc}</p>
+          </div>
+          <button type="button" className="primary" onClick={openHistory}>{copy.flagship.action}<span aria-hidden="true">→</span></button>
+        </header>
+        <div className="kish2note-capabilities">
+          {copy.flagship.capabilities.map((capability, index) => (
+            <article key={capability.title}>
+              <span>{String(index + 1).padStart(2, '0')}</span>
+              <h3>{capability.title}</h3>
+              <p>{capability.desc}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="tool-section">
         <div className="section-title">
           <h2>{copy.section.title}</h2>
           <span className="subtext">{copy.section.subtitle}</span>
         </div>
-        <div className="feature-grid">
-          {featureCards.map((feature) => (
-            <article key={feature.key} className="feature-card">
+        <div className="feature-grid feature-grid--secondary">
+          {supportingFeatureCards.map((feature) => (
+            <article key={feature.key} className={`feature-card feature-card--${feature.key}`}>
               <span>{feature.label}</span>
               <h3>{feature.title}</h3>
               <p>{feature.desc}</p>
