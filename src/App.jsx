@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { RangeMatrix } from './components/RangeMatrix.jsx';
 import { RangeEditor } from './components/RangeEditor.jsx';
 import { BASE_RANGES } from './data/base';
@@ -9,6 +9,7 @@ import JSZip from 'jszip';
 import { Archive } from 'libarchive.js';
 import {
   POSITIONS,
+  evaluateHandValue,
   exportSummaryCsv,
   parseGgHand,
   splitHandHistories,
@@ -1446,6 +1447,276 @@ function HistoryDetailSection({ title, items }) {
   );
 }
 
+const HISTORY_PAGE_SIZES = [10, 25, 50, 100];
+const HISTORY_SORT_COLUMNS = [
+  { key: 'date', label: '时间' },
+  { key: 'id', label: '牌局号码' },
+  { key: 'cards', label: '底牌' },
+  { key: 'handValue', label: '牌局价值' },
+  { key: 'winner', label: '赢家' },
+  { key: 'pot', label: '底池' },
+  { key: 'profit', label: '输赢' }
+];
+
+function PlayingCards({ cards = [], compact = false, hidden = false }) {
+  if (!cards.length && !hidden) return <span className="history-card-empty">—</span>;
+  const visibleCards = hidden ? ['back', 'back'] : cards;
+  return (
+    <span className={`history-playing-cards${compact ? ' history-playing-cards--compact' : ''}`}>
+      {visibleCards.map((card, index) => {
+        if (card === 'back') return <i key={`back-${index}`} className="history-playing-card history-playing-card--back" />;
+        const rank = card[0] === 'T' ? '10' : card[0];
+        const suit = card[1];
+        return (
+          <i key={`${card}-${index}`} className={`history-playing-card history-playing-card--${suit}`}>
+            <b>{rank}</b><span>{SUIT_ICON[suit]}</span>
+          </i>
+        );
+      })}
+    </span>
+  );
+}
+
+function normalizedRanks(cards = []) {
+  const order = '23456789TJQKA';
+  return cards.map((card) => card[0]).sort((a, b) => order.indexOf(b) - order.indexOf(a)).join('');
+}
+
+function matchesCardFilter(cards, query, holeCards = false) {
+  const input = query.trim();
+  if (!input) return true;
+  const exactCards = [...input.matchAll(/([2-9TJQKA][shdc])/ig)].map((match) => `${match[1][0].toUpperCase()}${match[1][1].toLowerCase()}`);
+  if (exactCards.length) return exactCards.every((card) => cards.includes(card));
+
+  const compact = input.toUpperCase().replace(/[^2-9TJQKASO]/g, '');
+  if (holeCards) {
+    const match = compact.match(/^([2-9TJQKA])([2-9TJQKA])([SO])?$/);
+    if (match && cards.length === 2) {
+      const sameRanks = normalizedRanks(cards) === normalizedRanks([`${match[1]}s`, `${match[2]}h`]);
+      const suited = cards[0][1] === cards[1][1];
+      return sameRanks && (!match[3] || (match[3] === 'S' ? suited : !suited));
+    }
+  }
+  return [...compact].every((rank) => cards.some((card) => card[0] === rank));
+}
+
+function historyAmount(value, bb, unit, signed = false) {
+  const amount = unit === 'bb' ? value / bb : value;
+  const prefix = signed && amount > 0 ? '+' : '';
+  return `${prefix}${formatNumber(amount, 2)} ${unit === 'bb' ? 'BB' : '$'}`;
+}
+
+function historyWinnerLabel(winners = []) {
+  return winners.map((winner) => winner.name).join('、') || '—';
+}
+
+function actionLabel(action) {
+  const amount = action.amount ? ` $${formatNumber(action.amount, 2)}` : '';
+  const labels = {
+    post: '下盲注', fold: '弃牌', check: '过牌', call: '跟注', bet: '下注', raise: '加注',
+    return: '退回', collect: '赢得底池'
+  };
+  return `${labels[action.type] ?? action.text}${amount}`;
+}
+
+function HandReplay({ hand, hero, onClose }) {
+  const [step, setStep] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const actions = hand.actions ?? [];
+  const currentAction = step > 0 ? actions[step - 1] : null;
+  const street = currentAction?.street ?? 'preflop';
+  const boardCount = street === 'flop' ? 3 : street === 'turn' ? 4 : ['river', 'showdown'].includes(street) ? 5 : 0;
+  const visibleBoard = hand.board.slice(0, boardCount);
+  const playerList = [...hand.players.entries()].sort((a, b) => a[1].seat - b[1].seat);
+  const showdown = street === 'showdown';
+
+  useEffect(() => {
+    if (!playing || step >= actions.length) return undefined;
+    const timer = window.setTimeout(() => setStep((value) => {
+      const next = Math.min(actions.length, value + 1);
+      if (next >= actions.length) setPlaying(false);
+      return next;
+    }), 850);
+    return () => window.clearTimeout(timer);
+  }, [actions.length, playing, step]);
+
+  useEffect(() => {
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="history-replay-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="history-replay" role="dialog" aria-modal="true" aria-label={`牌局 ${hand.id} 重播`}>
+        <header>
+          <div><span>牌谱播放器</span><strong>#{hand.id}</strong></div>
+          <button type="button" className="history-replay-close" onClick={onClose} aria-label="关闭">×</button>
+        </header>
+        <div className="history-replay-layout">
+          <div className="history-replay-table-wrap">
+            <div className="history-poker-table">
+              <div className="history-table-center">
+                <small>{street === 'preflop' ? '翻牌前' : street === 'showdown' ? '摊牌' : street.toUpperCase()}</small>
+                <PlayingCards cards={visibleBoard} />
+                <strong>底池 {historyAmount(currentAction?.potAfter ?? 0, hand.bb, 'bb')}</strong>
+              </div>
+              {playerList.map(([name, player], index) => {
+                const angle = (-90 + (360 / Math.max(1, playerList.length)) * index) * (Math.PI / 180);
+                const left = 50 + Math.cos(angle) * 42;
+                const top = 50 + Math.sin(angle) * 39;
+                const knownCards = hand.holeCards.get(name) ?? [];
+                const showCards = name === hero || (showdown && knownCards.length);
+                return (
+                  <div
+                    key={name}
+                    className={`history-replay-seat${currentAction?.player === name ? ' active' : ''}${name === hero ? ' hero' : ''}`}
+                    style={{ left: `${left}%`, top: `${top}%` }}
+                  >
+                    <div className="history-seat-cards">
+                      {showCards ? <PlayingCards cards={knownCards} compact /> : <PlayingCards hidden compact />}
+                    </div>
+                    <strong>{name}</strong>
+                    <span>{player.position} · {historyAmount(player.stack, hand.bb, 'bb')}</span>
+                    {currentAction?.player === name && <em>{actionLabel(currentAction)}</em>}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="history-replay-controls">
+              <button type="button" onClick={() => { setPlaying(false); setStep(Math.max(0, step - 1)); }} disabled={step === 0}>上一步</button>
+              <button type="button" className="primary" onClick={() => {
+                if (step >= actions.length) setStep(0);
+                setPlaying((value) => !value);
+              }}>{playing ? '暂停' : step >= actions.length ? '重新播放' : '播放'}</button>
+              <button type="button" onClick={() => { setPlaying(false); setStep(Math.min(actions.length, step + 1)); }} disabled={step >= actions.length}>下一步</button>
+              <span>{step} / {actions.length}</span>
+            </div>
+          </div>
+          <aside className="history-action-log">
+            <div className="history-replay-summary">
+              <span>{hand.date}</span><span>{hand.stakes}</span>
+              <PlayingCards cards={hand.holeCards.get(hero) ?? []} compact />
+              <strong>{evaluateHandValue([...(hand.holeCards.get(hero) ?? []), ...hand.board])}</strong>
+            </div>
+            <ol>
+              {actions.map((action, index) => (
+                <li key={`${index}-${action.player}`} className={step === index + 1 ? 'active' : step > index + 1 ? 'past' : ''}>
+                  <span>{action.player}</span><strong>{actionLabel(action)}</strong>
+                </li>
+              ))}
+            </ol>
+          </aside>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function HistoryRecords({ results, hands, hero }) {
+  const [handQuery, setHandQuery] = useState('');
+  const [holeQuery, setHoleQuery] = useState('');
+  const [boardQuery, setBoardQuery] = useState('');
+  const [winnerQuery, setWinnerQuery] = useState('');
+  const [unit, setUnit] = useState('bb');
+  const [sort, setSort] = useState({ key: 'date', direction: 'desc' });
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
+  const [replayHand, setReplayHand] = useState(null);
+  const handById = useMemo(() => new Map(hands.map((hand) => [hand.id, hand])), [hands]);
+
+  const rows = useMemo(() => results.map((result) => ({ result, hand: handById.get(result.id) })).filter((row) => row.hand), [handById, results]);
+  const filteredRows = useMemo(() => rows.filter(({ result, hand }) => (
+    (!handQuery.trim() || result.id.toLowerCase().includes(handQuery.trim().toLowerCase()))
+    && matchesCardFilter(result.cards ?? [], holeQuery, true)
+    && matchesCardFilter(hand.board ?? [], boardQuery)
+    && (!winnerQuery.trim() || historyWinnerLabel(hand.winners).toLowerCase().includes(winnerQuery.trim().toLowerCase()))
+  )), [boardQuery, handQuery, holeQuery, rows, winnerQuery]);
+  const sortedRows = useMemo(() => [...filteredRows].sort((a, b) => {
+    const values = {
+      date: [handDateValue(a.result), handDateValue(b.result)],
+      id: [a.result.id, b.result.id],
+      cards: [normalizedRanks(a.result.cards), normalizedRanks(b.result.cards)],
+      handValue: [a.result.handValue, b.result.handValue],
+      winner: [historyWinnerLabel(a.hand.winners), historyWinnerLabel(b.hand.winners)],
+      pot: [a.hand.totalPot, b.hand.totalPot],
+      profit: [a.result.profit, b.result.profit]
+    }[sort.key];
+    const comparison = typeof values[0] === 'number' ? values[0] - values[1] : String(values[0]).localeCompare(String(values[1]), 'zh-CN');
+    return sort.direction === 'asc' ? comparison : -comparison;
+  }), [filteredRows, sort]);
+  const pageCount = Math.max(1, Math.ceil(sortedRows.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const visibleRows = sortedRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const toggleSort = (key) => setSort((current) => (
+    current.key === key
+      ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+      : { key, direction: key === 'date' || ['pot', 'profit'].includes(key) ? 'desc' : 'asc' }
+  ));
+  const reset = () => {
+    setHandQuery(''); setHoleQuery(''); setBoardQuery(''); setWinnerQuery('');
+    setSort({ key: 'date', direction: 'desc' }); setPage(1);
+  };
+
+  return (
+    <section className="history-records">
+      <header className="history-records-head">
+        <div><span>牌局历史</span><strong>{filteredRows.length.toLocaleString()} 手牌</strong></div>
+        <div className="history-unit-toggle" aria-label="金额单位">
+          <button type="button" className={unit === 'bb' ? 'active' : ''} onClick={() => setUnit('bb')}>BB</button>
+          <button type="button" className={unit === 'money' ? 'active' : ''} onClick={() => setUnit('money')}>$</button>
+        </div>
+      </header>
+      <div className="history-record-filters">
+        <label><span>牌局号码</span><input value={handQuery} onChange={(event) => { setHandQuery(event.target.value); setPage(1); }} placeholder="输入号码" /></label>
+        <label><span>底牌</span><input value={holeQuery} onChange={(event) => { setHoleQuery(event.target.value); setPage(1); }} placeholder="AKs / AsKd" /></label>
+        <label><span>公共牌</span><input value={boardQuery} onChange={(event) => { setBoardQuery(event.target.value); setPage(1); }} placeholder="Ah Kd 7c" /></label>
+        <label><span>赢家</span><input value={winnerQuery} onChange={(event) => { setWinnerQuery(event.target.value); setPage(1); }} placeholder="玩家名称" /></label>
+        <button type="button" className="secondary" onClick={reset}>重置</button>
+      </div>
+      <p className="history-filter-tip">底牌支持牌型（AK、AKs、AKo）或精确花色（AsKd）；公共牌支持点数或精确牌面。</p>
+      <div className="history-record-table-wrap">
+        <table className="history-record-table">
+          <thead><tr>
+            <th>重播</th>
+            {HISTORY_SORT_COLUMNS.map((column) => (
+              <th key={column.key}>
+                <button type="button" onClick={() => toggleSort(column.key)}>
+                  {column.label}<i>{sort.key === column.key ? (sort.direction === 'asc' ? '↑' : '↓') : '↕'}</i>
+                </button>
+              </th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {visibleRows.map(({ result, hand }) => (
+              <tr key={result.id}>
+                <td><button type="button" className="history-replay-button" onClick={() => setReplayHand(hand)}>▶ 重播</button></td>
+                <td><span className="history-record-date">{result.date.replace(/^\d{4}\//, '').replace(' ', ' · ')}</span></td>
+                <td><code>{result.id}</code></td>
+                <td><PlayingCards cards={result.cards} compact /></td>
+                <td><strong>{result.handValue}</strong></td>
+                <td>{historyWinnerLabel(hand.winners)}</td>
+                <td>{historyAmount(hand.totalPot, hand.bb, unit)}</td>
+                <td className={result.profit > 0 ? 'win' : result.profit < 0 ? 'loss' : ''}>{historyAmount(result.profit, hand.bb, unit, true)}</td>
+              </tr>
+            ))}
+            {!visibleRows.length && <tr><td colSpan="8" className="history-record-empty">没有符合当前筛选条件的牌局</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <footer className="history-record-pagination">
+        <label>每页 <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>{HISTORY_PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}</select> 手</label>
+        <span>第 {safePage} / {pageCount} 页</span>
+        <div><button type="button" onClick={() => setPage(1)} disabled={safePage === 1}>首页</button><button type="button" onClick={() => setPage(safePage - 1)} disabled={safePage === 1}>上一页</button><button type="button" onClick={() => setPage(safePage + 1)} disabled={safePage === pageCount}>下一页</button><button type="button" onClick={() => setPage(pageCount)} disabled={safePage === pageCount}>末页</button></div>
+      </footer>
+      {replayHand && <HandReplay hand={replayHand} hero={hero} onClose={() => setReplayHand(null)} />}
+    </section>
+  );
+}
+
 function HandHistoryView() {
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
@@ -1724,6 +1995,13 @@ function HandHistoryView() {
                   >
                     详细数据
                   </button>
+                  <button
+                    type="button"
+                    className={historyTab === 'history' ? 'active' : ''}
+                    onClick={() => setHistoryTab('history')}
+                  >
+                    历史记录
+                  </button>
                 </nav>
 
                 {historyTab === 'overview' ? (
@@ -1784,6 +2062,8 @@ function HandHistoryView() {
                       </div>
                     </section>
                   </>
+                ) : historyTab === 'history' ? (
+                  <HistoryRecords results={filteredResults} hands={hands} hero={hero} />
                 ) : (
                   <section className="history-detail-stack">
                     {detailSections.map((section) => (

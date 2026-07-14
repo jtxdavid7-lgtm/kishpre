@@ -4,6 +4,9 @@ const FLOP_RE = /^\*\*\* (?:FIRST |SECOND )?FLOP \*\*\*/;
 const TURN_RE = /^\*\*\* (?:FIRST |SECOND )?TURN \*\*\*/;
 const RIVER_RE = /^\*\*\* (?:FIRST |SECOND )?RIVER \*\*\*/;
 const POSTFLOP_STREETS = ['flop', 'turn', 'river'];
+const CARD_RE = /([2-9TJQKA][shdc])/g;
+const RANK_VALUE = Object.freeze({ 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, T: 10, J: 11, Q: 12, K: 13, A: 14 });
+const RANK_LABEL = Object.freeze({ 14: 'A', 13: 'K', 12: 'Q', 11: 'J', 10: 'T', 9: '9', 8: '8', 7: '7', 6: '6', 5: '5', 4: '4', 3: '3', 2: '2' });
 
 export const POSITIONS = ['BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO', 'MP', 'EP'];
 
@@ -22,6 +25,52 @@ function money(line) {
 
 function parseMoney(value) {
   return Number(String(value).replaceAll(',', ''));
+}
+
+function parseCards(value = '') {
+  return [...String(value).matchAll(CARD_RE)].map((match) => match[1]);
+}
+
+function straightHigh(values) {
+  const unique = [...new Set(values)].sort((a, b) => b - a);
+  if (unique.includes(14)) unique.push(1);
+  for (let index = 0; index <= unique.length - 5; index += 1) {
+    if (unique[index] - unique[index + 4] === 4) return unique[index];
+  }
+  return 0;
+}
+
+export function evaluateHandValue(cards = []) {
+  const parsed = cards
+    .map((card) => ({ rank: RANK_VALUE[card?.[0]], suit: card?.[1] }))
+    .filter((card) => card.rank && card.suit);
+  if (!parsed.length) return '—';
+
+  const rankCounts = new Map();
+  const suitCards = new Map();
+  for (const card of parsed) {
+    rankCounts.set(card.rank, (rankCounts.get(card.rank) ?? 0) + 1);
+    const suited = suitCards.get(card.suit) ?? [];
+    suited.push(card.rank);
+    suitCards.set(card.suit, suited);
+  }
+  const groups = [...rankCounts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0]);
+  const flushRanks = [...suitCards.values()].find((ranks) => ranks.length >= 5);
+  const straightFlush = flushRanks ? straightHigh(flushRanks) : 0;
+  const straight = straightHigh(parsed.map((card) => card.rank));
+  const quads = groups.find(([, count]) => count === 4)?.[0];
+  const trips = groups.filter(([, count]) => count >= 3).map(([rank]) => rank);
+  const pairs = groups.filter(([, count]) => count >= 2).map(([rank]) => rank);
+
+  if (straightFlush) return `同花顺 ${RANK_LABEL[straightFlush]}高`;
+  if (quads) return `四条 ${RANK_LABEL[quads]}`;
+  if (trips.length && pairs.some((rank) => rank !== trips[0])) return `葫芦 ${RANK_LABEL[trips[0]]}满`;
+  if (flushRanks) return `同花 ${RANK_LABEL[Math.max(...flushRanks)]}高`;
+  if (straight) return `顺子 ${RANK_LABEL[straight]}高`;
+  if (trips.length) return `三条 ${RANK_LABEL[trips[0]]}`;
+  if (pairs.length >= 2) return `两对 ${RANK_LABEL[pairs[0]]}${RANK_LABEL[pairs[1]]}`;
+  if (pairs.length === 1) return `一对 ${RANK_LABEL[pairs[0]]}`;
+  return `高牌 ${RANK_LABEL[Math.max(...parsed.map((card) => card.rank))]}`;
 }
 
 function playerFromAction(line) {
@@ -355,10 +404,16 @@ export function parseGgHand(raw) {
   const invested = new Map();
   const won = new Map();
   const summary = new Map();
+  const holeCards = new Map();
+  const winners = new Map();
+  const actions = [];
   const heroCandidates = [];
   const preflopLines = [];
   let currentStreet = 'preflop';
   let streetCommit = new Map();
+  let runningPot = 0;
+  let board = [];
+  let totalPot = 0;
   let rake = 0;
   let jackpot = 0;
 
@@ -367,26 +422,40 @@ export function parseGgHand(raw) {
     if (seatMatch) {
       const seat = Number(seatMatch[1]);
       const name = seatMatch[2];
+      const stack = parseMoney(line.match(/\(\$([-\d,.]+) in chips\)/)?.[1] ?? 0);
       seats.set(seat, name);
-      players.set(name, { seat });
+      players.set(name, { seat, stack });
       continue;
     }
-    const dealtMatch = line.match(/^Dealt to (.+?) \[/);
-    if (dealtMatch) heroCandidates.push(dealtMatch[1]);
+    const dealtMatch = line.match(/^Dealt to (.+?)(?: \[([^\]]+)\])?$/);
+    if (dealtMatch) {
+      if (dealtMatch[2]) {
+        heroCandidates.push(dealtMatch[1]);
+        holeCards.set(dealtMatch[1], parseCards(dealtMatch[2]));
+      }
+    }
     const potMatch = line.match(/^Total pot \$([\d,.]+).* Rake \$([\d,.]+).* Jackpot \$([\d,.]+)/);
     if (potMatch) {
+      totalPot = parseMoney(potMatch[1]);
       rake = parseMoney(potMatch[2]);
       jackpot = parseMoney(potMatch[3]);
     }
+    const boardMatch = line.match(/^Board \[([^\]]+)\]/);
+    if (boardMatch) board = parseCards(boardMatch[1]);
     if (FLOP_RE.test(line)) {
       currentStreet = 'flop';
       streetCommit = new Map();
+      if (!board.length) board = parseCards(line);
     } else if (TURN_RE.test(line)) {
       currentStreet = 'turn';
       streetCommit = new Map();
+      const cards = parseCards(line);
+      if (cards.length > board.length) board = cards;
     } else if (RIVER_RE.test(line)) {
       currentStreet = 'river';
       streetCommit = new Map();
+      const cards = parseCards(line);
+      if (cards.length > board.length) board = cards;
     }
 
     if (currentStreet === 'preflop') preflopLines.push(line);
@@ -398,7 +467,25 @@ export function parseGgHand(raw) {
       if (amount > 0) {
         invested.set(actor, (invested.get(actor) ?? 0) + amount);
         streetCommit.set(actor, already + amount);
+        runningPot += amount;
+        actions.push({
+          street: currentStreet,
+          player: actor,
+          type: line.includes(' posts ') ? 'post' : actionType(line),
+          amount,
+          potAfter: runningPot,
+          text: line.slice(line.indexOf(': ') + 2)
+        });
       }
+    } else if (actor && actionType(line)) {
+      actions.push({
+        street: currentStreet,
+        player: actor,
+        type: actionType(line),
+        amount: 0,
+        potAfter: runningPot,
+        text: line.slice(line.indexOf(': ') + 2)
+      });
     }
 
     const returned = line.match(/^Uncalled bet \(\$([\d,.]+)\) returned to (.+)$/);
@@ -406,14 +493,23 @@ export function parseGgHand(raw) {
       const amount = parseMoney(returned[1]);
       const player = returned[2];
       invested.set(player, (invested.get(player) ?? 0) - amount);
+      runningPot = Math.max(0, runningPot - amount);
+      actions.push({ street: currentStreet, player, type: 'return', amount, potAfter: runningPot, text: `收回未跟注下注 $${amount}` });
     }
 
     const collected = line.match(/^(.+?) collected \$([\d,.]+) from (?:the )?(?:main |side )?pot$/);
-    if (collected) won.set(collected[1], (won.get(collected[1]) ?? 0) + parseMoney(collected[2]));
+    if (collected) {
+      const amount = parseMoney(collected[2]);
+      won.set(collected[1], (won.get(collected[1]) ?? 0) + amount);
+      winners.set(collected[1], (winners.get(collected[1]) ?? 0) + amount);
+      actions.push({ street: 'showdown', player: collected[1], type: 'collect', amount, potAfter: totalPot || runningPot, text: `赢得底池 $${amount}` });
+    }
 
     const summaryMatch = line.match(/^Seat \d+: (.+?)(?: \((?:button|small blind|big blind)\))? (.+)$/);
     if (summaryMatch) {
       const [, name, detail] = summaryMatch;
+      const shown = detail.match(/(?:showed|mucked) \[([^\]]+)\]/)?.[1];
+      if (shown) holeCards.set(name, parseCards(shown));
       const prev = summary.get(name) ?? {};
       summary.set(name, {
         ...prev,
@@ -438,6 +534,11 @@ export function parseGgHand(raw) {
     stakes,
     bb,
     players,
+    holeCards,
+    board,
+    totalPot,
+    winners: [...winners.entries()].map(([name, amount]) => ({ name, amount })),
+    actions,
     heroCandidates,
     rake,
     jackpot,
@@ -462,6 +563,11 @@ export function parseGgHand(raw) {
         stakes,
         bb,
         position: player.position,
+        cards: holeCards.get(hero) ?? [],
+        board,
+        handValue: evaluateHandValue([...(holeCards.get(hero) ?? []), ...board]),
+        winners: [...winners.entries()].map(([name, amount]) => ({ name, amount })),
+        totalPot,
         profit,
         profitBB: profit / bb,
         rake: rakeShare,
