@@ -5,6 +5,14 @@ import { BASE_RANGES } from './data/base';
 import { PROFILES } from './data/profiles';
 import { getRangePayload } from './lib/rangeEngine';
 import { simulateEquity } from './lib/equityEngine';
+import { useAuth } from './auth/AuthProvider.jsx';
+import { CloudSaveDialog } from './components/cloud/CloudSaveDialog.jsx';
+import {
+  deleteCloudSession,
+  listCloudSessions,
+  loadCloudSession,
+  saveHandsToCloud
+} from './lib/cloudLibrary.js';
 import JSZip from 'jszip';
 import { Archive } from 'libarchive.js';
 import {
@@ -56,8 +64,8 @@ const HOMEPAGE_COPY = {
       eyebrow: 'KISHPOKER 旗舰工具',
       product: 'kish2note',
       title: '把 GG 牌谱，变成可以行动的数据',
-      desc: '导入 GGPoker 手牌历史，在浏览器本地查看资金盈亏和打法数据，并结合亏损牌型、位置与具体牌局排查可能的漏洞。',
-      privacy: '本地解析 · 牌谱不会上传服务器',
+      desc: '每个 session 打完后导入 GGPoker 手牌历史，立即在浏览器本地复盘；登录后也可以把确认过的牌谱长期保存到自己的云端牌谱库。',
+      privacy: '默认本地解析 · 只有你确认保存时才会同步云端',
       primaryCta: '开始分析 GG 牌谱',
       previewLabel: '分析视图预览',
       previewTitle: '一份牌谱，重新看清你的打法',
@@ -66,7 +74,7 @@ const HOMEPAGE_COPY = {
     flagship: {
       eyebrow: 'KISH2NOTE · GG 牌谱分析',
       title: '你的 GG 牌谱分析工作台',
-      desc: '从长期结果到单手复盘，用一套清晰的报告重新认识自己的打法。',
+      desc: '既能免登录分析单次 session，也能登录积累长期牌谱；从长期结果到单手复盘，用一套清晰的报告重新认识自己的打法。',
       action: '进入 kish2note',
       capabilities: [
         { title: '资金盈亏', desc: '查看总输赢、BB/100、资金与 EV 曲线，以及不同阶段的表现变化。' },
@@ -74,6 +82,10 @@ const HOMEPAGE_COPY = {
         { title: '漏洞分析', desc: '结合亏损牌型、位置及具体牌局筛选，辅助定位值得优先复盘的决策。' },
         { title: '牌局复盘', desc: '筛选具体牌局，查看完整行动与筹码变化，回顾每一个关键节点。' }
       ]
+    },
+    modes: {
+      local: { label: '免登录', title: '分析这次 Session', desc: '导入刚打完的牌谱，只在当前浏览器本地解析和查看。', action: '开始本地分析' },
+      cloud: { label: '登录后', title: '积累我的全部牌谱', desc: '每次由你确认保存，跨 session 查看长期趋势和历史数据。', action: '进入我的牌谱库' }
     },
     section: {
       title: '更多扑克工具',
@@ -119,8 +131,8 @@ const HOMEPAGE_COPY = {
       eyebrow: 'KISHPOKER FLAGSHIP TOOL',
       product: 'kish2note',
       title: 'Turn GG hand histories into decisions you can act on',
-      desc: 'Import GGPoker hand histories and review results and playing data locally in your browser, then use losing hand classes, positions, and individual hands to help inspect possible leaks.',
-      privacy: 'Local processing · Your hand histories never leave this browser',
+      desc: 'Review each GGPoker session locally in your browser, or sign in and explicitly save selected hands to your private cloud library for long-term analysis.',
+      privacy: 'Local by default · Cloud sync happens only after your confirmation',
       primaryCta: 'Analyze GG Hand Histories',
       previewLabel: 'ANALYSIS PREVIEW',
       previewTitle: 'One hand-history file. A clearer view of your game.',
@@ -129,7 +141,7 @@ const HOMEPAGE_COPY = {
     flagship: {
       eyebrow: 'KISH2NOTE · GG HAND ANALYSIS',
       title: 'Your GG hand-history analysis workspace',
-      desc: 'Move from long-term results to individual hand review with one focused set of reports.',
+      desc: 'Analyze a session without signing in, or build a private long-term library after signing in and explicitly choosing what to save.',
       action: 'Open kish2note',
       capabilities: [
         { title: 'Profit & loss', desc: 'Review net results, BB/100, bankroll and EV curves, and how performance changes over time.' },
@@ -137,6 +149,10 @@ const HOMEPAGE_COPY = {
         { title: 'Leak analysis', desc: 'Use losing hand classes, positions, and individual hand filters to help prioritize review.' },
         { title: 'Hand review', desc: 'Filter individual hands and revisit every action, board card, and chip movement.' }
       ]
+    },
+    modes: {
+      local: { label: 'NO SIGN-IN', title: 'Analyze this session', desc: 'Import your latest hands and keep parsing entirely in this browser.', action: 'Start local analysis' },
+      cloud: { label: 'SIGNED IN', title: 'Build my full library', desc: 'Explicitly choose what to save and review trends across sessions.', action: 'Open my library' }
     },
     section: {
       title: 'More poker tools',
@@ -2476,11 +2492,59 @@ function HistoryRecords({ results, hands, hero }) {
   );
 }
 
+function maskedAccountLabel(user) {
+  const raw = user?.phone
+    ?? user?.phone_number
+    ?? user?.user_metadata?.phone
+    ?? user?.user_metadata?.phone_number
+    ?? '';
+  const digits = String(raw).replace(/\D/g, '');
+  const local = digits.length > 11 ? digits.slice(-11) : digits;
+  if (/^1\d{10}$/.test(local)) return `${local.slice(0, 3)}****${local.slice(-4)}`;
+  return '我的账户';
+}
+
+function AccountControl({ showLibrary = true }) {
+  const { authStatus, isAuthenticated, user, openLogin, logout } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  if (authStatus === 'loading') {
+    return <span className="account-status">账户加载中…</span>;
+  }
+
+  if (!isAuthenticated) {
+    return <button type="button" className="account-login" onClick={() => openLogin()}>手机号登录</button>;
+  }
+
+  return (
+    <div className="account-control">
+      {showLibrary && <button type="button" className="account-library" onClick={() => window.location.assign('?tool=library')}>我的牌谱库</button>}
+      <span className="account-identity"><i aria-hidden="true" />{maskedAccountLabel(user)}</span>
+      <button type="button" className="account-logout" disabled={loggingOut} onClick={handleLogout}>{loggingOut ? '退出中…' : '退出'}</button>
+    </div>
+  );
+}
+
 function HandHistoryView() {
+  const { authStatus, isAuthenticated, openLogin } = useAuth();
+  const cloudSessionId = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('session')
+    : null;
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
-  const [status, setStatus] = useState('idle');
-  const [message, setMessage] = useState('');
+  const cloudLoadRef = useRef('');
+  const cloudLoginPromptedRef = useRef(false);
+  const [status, setStatus] = useState(cloudSessionId ? 'loading' : 'idle');
+  const [message, setMessage] = useState(cloudSessionId ? '正在确认登录状态…' : '');
   const [hands, setHands] = useState([]);
   const [fileMeta, setFileMeta] = useState(null);
   const [hero, setHero] = useState('');
@@ -2491,6 +2555,13 @@ function HandHistoryView() {
   const [startTp, setStartTp] = useState('0');
   const [endTp, setEndTp] = useState('0');
   const [historyTab, setHistoryTab] = useState('overview');
+  const [sourceMode, setSourceMode] = useState(cloudSessionId ? 'cloud' : 'local');
+  const [cloudSession, setCloudSession] = useState(null);
+  const [cloudSaveOpen, setCloudSaveOpen] = useState(false);
+  const [cloudSaving, setCloudSaving] = useState(false);
+  const [cloudSaveProgress, setCloudSaveProgress] = useState(null);
+  const [cloudSaveError, setCloudSaveError] = useState('');
+  const [savedSessionId, setSavedSessionId] = useState(null);
 
   const players = useMemo(() => rankedPlayers(hands), [hands]);
   const rawResults = useMemo(() => (
@@ -2594,6 +2665,66 @@ function HandHistoryView() {
     }
   ];
 
+  useEffect(() => {
+    if (!cloudSessionId) return undefined;
+    if (authStatus === 'loading') return undefined;
+    if (!isAuthenticated) {
+      const timer = window.setTimeout(() => {
+        setStatus(authStatus === 'error' ? 'error' : 'idle');
+        setMessage(authStatus === 'error' ? '暂时无法读取登录状态，请检查网络后重试。' : '登录后才能读取这个云端 Session。');
+      }, 0);
+      if (authStatus === 'guest' && !cloudLoginPromptedRef.current) {
+        cloudLoginPromptedRef.current = true;
+        openLogin();
+      }
+      return () => window.clearTimeout(timer);
+    }
+    if (cloudLoadRef.current === cloudSessionId) return undefined;
+
+    cloudLoadRef.current = cloudSessionId;
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return null;
+      setStatus('loading');
+      setMessage('正在读取云端 Session…');
+      return loadCloudSession(cloudSessionId);
+    }).then((result) => {
+      if (!result) return;
+      if (!active) return;
+      const nextHands = sortHandsByTime(result.hands ?? []);
+      const nextPlayers = rankedPlayers(nextHands);
+      const nextHero = result.hero && nextPlayers.some((player) => player.name === result.hero)
+        ? result.hero
+        : nextPlayers[0]?.name ?? '';
+      setHands(nextHands);
+      setHero(nextHero);
+      setFileMeta({
+        files: 0,
+        hands: nextHands.length,
+        duplicates: 0,
+        cloud: true,
+        sessionName: result.session?.name ?? ''
+      });
+      setCloudSession(result.session ?? null);
+      setStartTp(String(result.startTp ?? 0));
+      setEndTp(String(result.endTp ?? 0));
+      setStakeFilter('all');
+      setPositionFilter('all');
+      setHoleCardFilter({ ranks: [null, null], suitedOnly: false });
+      setHistoryTab('overview');
+      setSourceMode('cloud');
+      setStatus(nextHands.length ? 'ready' : 'empty');
+      setMessage(nextHands.length ? '' : '这个云端 Session 暂时没有牌谱。');
+    }).catch((error) => {
+      if (!active) return;
+      setStatus('error');
+      setMessage(error instanceof Error ? error.message : '读取云端 Session 失败。');
+    });
+    return () => {
+      active = false;
+    };
+  }, [authStatus, cloudSessionId, isAuthenticated, openLogin]);
+
   const handleFiles = async (files) => {
     setStatus('loading');
     setMessage('正在解析牌谱...');
@@ -2605,6 +2736,9 @@ function HandHistoryView() {
       const nextHands = sortHandsByTime([...unique.values()]);
       const nextPlayers = rankedPlayers(nextHands);
       setHands(nextHands);
+      setSourceMode('local');
+      setCloudSession(null);
+      setSavedSessionId(null);
       setFileMeta({
         files: chunks.length,
         hands: nextHands.length,
@@ -2629,12 +2763,51 @@ function HandHistoryView() {
     downloadText(`kish2note-${hero || 'hero'}-hands.csv`, exportSummaryCsv(filteredResults));
   };
 
+  const openCloudSave = () => {
+    setCloudSaveError('');
+    setCloudSaveProgress(null);
+    if (isAuthenticated) {
+      setCloudSaveOpen(true);
+      return;
+    }
+    openLogin({ onSuccess: () => setCloudSaveOpen(true) });
+  };
+
+  const confirmCloudSave = async ({ sessionName } = {}) => {
+    setCloudSaving(true);
+    setCloudSaveError('');
+    setCloudSaveProgress({ done: 0, total: hands.length });
+    try {
+      const result = await saveHandsToCloud({
+        hands,
+        hero,
+        sessionName,
+        startTp,
+        endTp,
+        onProgress: ({ completed, total, message: progressMessage }) => {
+          setCloudSaveProgress({ done: completed, total, message: progressMessage });
+        }
+      });
+      setCloudSaveOpen(false);
+      setSavedSessionId(result.sessionId ?? (result.alreadySaved ? 'existing' : null));
+      setStatus('ready');
+      setMessage(result.alreadySaved
+        ? '这批牌谱已存在于你的云端牌谱库，本次没有重复上传。'
+        : `已保存 ${result.insertedCount.toLocaleString()} 手牌到云端${result.duplicateCount ? `，跳过 ${result.duplicateCount.toLocaleString()} 手重复牌谱` : ''}。`);
+    } catch (error) {
+      setCloudSaveError(error instanceof Error ? error.message : '保存云牌谱失败。');
+    } finally {
+      setCloudSaving(false);
+    }
+  };
+
   return (
     <div className="site site--history">
       <nav className="top-nav">
         <div className="brand">KISHPOKER · KISH2NOTE</div>
         <div className="cta-row">
           <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
+          <AccountControl />
           <button type="button" className="secondary" onClick={() => window.location.assign('?tool=range')}>Range Lab</button>
           <button type="button" className="secondary" onClick={() => window.location.assign('?tool=variance')}>波动计算</button>
         </div>
@@ -2644,7 +2817,7 @@ function HandHistoryView() {
         <header>
           <p className="eyebrow">GGPoker · Local analysis</p>
           <h2>kish2note</h2>
-          <p className="subtext">导入 GG 手牌历史，在浏览器本地查看资金盈亏和打法数据，并结合亏损牌型、位置与具体牌局筛选，辅助排查值得复盘的决策。牌谱不会上传服务器。</p>
+          <p className="subtext">导入 GG 手牌历史，在浏览器本地查看资金盈亏和打法数据。选择文件不会自动上传；只有登录后主动点击保存并再次确认，牌谱才会同步到你自己的云端牌谱库。</p>
         </header>
 
         <input
@@ -2709,11 +2882,22 @@ function HandHistoryView() {
                   ))}
                 </select>
               </label>
-              <button type="button" className="secondary" onClick={exportCsv} disabled={!filteredResults.length}>导出 CSV</button>
+              <div className="history-control-actions">
+                <button type="button" className="secondary" onClick={exportCsv} disabled={!filteredResults.length}>导出 CSV</button>
+                {sourceMode === 'cloud' ? (
+                  <button type="button" className="history-cloud-button history-cloud-button--saved" onClick={() => window.location.assign('?tool=library')}>✓ 已从云端读取</button>
+                ) : savedSessionId ? (
+                  <button type="button" className="history-cloud-button history-cloud-button--saved" onClick={() => window.location.assign('?tool=library')}>✓ 已保存 · 查看牌谱库</button>
+                ) : (
+                  <button type="button" className="history-cloud-button" onClick={openCloudSave}>保存到我的牌谱库</button>
+                )}
+              </div>
             </section>
 
             <section className="history-meta">
-              <span>导入 {fileMeta?.files ?? 0} 个文本源</span>
+              {fileMeta?.cloud
+                ? <span>云端 Session · {fileMeta.sessionName || cloudSession?.name || '未命名'}</span>
+                : <span>本地导入 {fileMeta?.files ?? 0} 个文本源</span>}
               <span>识别 {fileMeta?.hands?.toLocaleString() ?? 0} 手牌</span>
               {!!fileMeta?.duplicates && <span>去重 {fileMeta.duplicates.toLocaleString()} 手牌</span>}
               <span>当前筛选 {filteredResults.length.toLocaleString()} 手牌</span>
@@ -2880,17 +3064,175 @@ function HandHistoryView() {
             onApply={(next) => { setHoleCardFilter(next); setHoleCardFilterOpen(false); }}
           />
         )}
+        {cloudSaveOpen && (
+          <CloudSaveDialog
+            open
+            handCount={hands.length}
+            hero={hero}
+            saving={cloudSaving}
+            progress={cloudSaveProgress}
+            error={cloudSaveError}
+            onClose={() => !cloudSaving && setCloudSaveOpen(false)}
+            onConfirm={confirmCloudSave}
+          />
+        )}
       </section>
     </div>
   );
 }
 
 
+function formatCloudDate(value) {
+  if (!value) return '时间未知';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '时间未知';
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(date);
+}
+
+function CloudLibraryView() {
+  const { authStatus, isAuthenticated, openLogin } = useAuth();
+  const [loadState, setLoadState] = useState('idle');
+  const [sessions, setSessions] = useState([]);
+  const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState('');
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return null;
+      setLoadState('loading');
+      setError('');
+      return listCloudSessions();
+    }).then((rows) => {
+      if (!active || !rows) return;
+      setSessions(rows);
+      setLoadState('ready');
+    }).catch((requestError) => {
+      if (!active) return;
+      setError(requestError instanceof Error ? requestError.message : '读取云牌谱库失败。');
+      setLoadState('error');
+    });
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated]);
+
+  const totalHands = sessions.reduce((sum, session) => sum + session.handCount, 0);
+  const totalProfitBB = sessions.reduce((sum, session) => sum + Number(session.summary?.totalProfitBB ?? 0), 0);
+
+  const removeSession = async (session) => {
+    if (!window.confirm(`确定删除“${session.name || '未命名 Session'}”吗？该 Session 的云端牌谱会一并删除，本地原文件不受影响。`)) return;
+    setDeletingId(session.id);
+    setError('');
+    try {
+      await deleteCloudSession(session.id);
+      setSessions((current) => current.filter((item) => item.id !== session.id));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : '删除云牌谱失败。');
+    } finally {
+      setDeletingId('');
+    }
+  };
+
+  return (
+    <div className="site site--library">
+      <nav className="top-nav">
+        <button type="button" className="brand brand--button" onClick={() => window.location.assign('/')}>KISHPOKER · KISH2NOTE</button>
+        <div className="cta-row">
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=history')}>分析新 Session</button>
+          <AccountControl showLibrary={false} />
+        </div>
+      </nav>
+
+      <header className="library-hero">
+        <div><p className="eyebrow">KISH2NOTE CLOUD LIBRARY</p><h1>我的牌谱库</h1><p>长期保存由你确认过的 GG 牌谱，按 Session 回到完整数据分析与每一手牌。导入文件仍然默认只在本地解析。</p></div>
+        {isAuthenticated && (
+          <div className="library-totals">
+            <span><small>已保存</small><strong>{sessions.length.toLocaleString()} Sessions</strong></span>
+            <span><small>总手数</small><strong>{totalHands.toLocaleString()} 手牌</strong></span>
+            <span><small>累计输赢</small><strong className={totalProfitBB >= 0 ? 'positive' : 'negative'}>{totalProfitBB >= 0 ? '+' : ''}{totalProfitBB.toFixed(1)} BB</strong></span>
+          </div>
+        )}
+      </header>
+
+      {authStatus === 'loading' && <section className="library-state"><i aria-hidden="true" /><h2>正在读取登录状态…</h2></section>}
+      {authStatus === 'error' && <section className="library-state library-state--error"><h2>登录服务暂时不可用</h2><p>请检查网络后刷新页面；本地 Session 分析仍可正常使用。</p><button type="button" className="secondary" onClick={() => window.location.assign('?tool=history')}>继续本地分析</button></section>}
+      {authStatus === 'guest' && (
+        <section className="library-state">
+          <span className="library-lock" aria-hidden="true">◇</span>
+          <h2>登录后查看你的长期牌谱</h2>
+          <p>支持中国大陆手机号。登录本身不会上传牌谱，保存时仍会逐次确认。</p>
+          <button type="button" className="primary" onClick={() => openLogin()}>手机号登录 / 注册</button>
+        </section>
+      )}
+
+      {isAuthenticated && loadState === 'loading' && <section className="library-state"><i aria-hidden="true" /><h2>正在读取云端 Sessions…</h2></section>}
+      {isAuthenticated && error && <div className="library-error" role="alert">{error}</div>}
+      {isAuthenticated && loadState === 'ready' && !sessions.length && (
+        <section className="library-state library-state--empty">
+          <span aria-hidden="true">＋</span>
+          <h2>你的牌谱库还是空的</h2>
+          <p>先分析一次 Session，再点击“保存到我的牌谱库”。只有确认后才会同步。</p>
+          <button type="button" className="primary" onClick={() => window.location.assign('?tool=history')}>分析第一个 Session</button>
+        </section>
+      )}
+
+      {isAuthenticated && sessions.length > 0 && (
+        <section className="library-list" aria-label="云端牌谱 Sessions">
+          {sessions.map((session) => {
+            const profit = Number(session.summary?.totalProfitBB ?? 0);
+            const bbPer100 = Number(session.summary?.bbPer100 ?? 0);
+            const stakes = (session.summary?.stakes ?? []).map((item) => item.label).filter(Boolean).slice(0, 2).join(' · ') || '级别未知';
+            return (
+              <article key={session.id} className="library-session-card">
+                <div className="library-session-main">
+                  <span>{formatCloudDate(session.startedAt || session.createdAt)}</span>
+                  <h2>{session.name || '未命名 Session'}</h2>
+                  <p>{session.hero || 'Hero 未知'} · {stakes}</p>
+                </div>
+                <div className="library-session-stats">
+                  <span><small>手数</small><strong>{session.handCount.toLocaleString()}</strong></span>
+                  <span><small>输赢</small><strong className={profit >= 0 ? 'positive' : 'negative'}>{profit >= 0 ? '+' : ''}{profit.toFixed(1)} BB</strong></span>
+                  <span><small>百手</small><strong className={bbPer100 >= 0 ? 'positive' : 'negative'}>{bbPer100 >= 0 ? '+' : ''}{bbPer100.toFixed(2)}</strong></span>
+                </div>
+                <div className="library-session-actions">
+                  <button type="button" className="primary" onClick={() => window.location.assign(`?tool=history&session=${encodeURIComponent(session.id)}`)}>打开分析</button>
+                  <button type="button" className="library-delete" disabled={deletingId === session.id} onClick={() => removeSession(session)}>{deletingId === session.id ? '删除中…' : '删除'}</button>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      )}
+
+      <footer className="library-privacy-note"><strong>你的选择始终优先</strong><span>本地分析不需要登录，也不会自动上传。云端只保存你在确认框中明确选择的牌谱。</span></footer>
+    </div>
+  );
+}
+
 function HomeView() {
+  const { isAuthenticated, openLogin } = useAuth();
   const openRange = () => window.location.assign('?tool=range');
   const openEquity = () => window.location.assign('?tool=equity');
   const openVariance = () => window.location.assign('?tool=variance');
   const openHistory = () => window.location.assign('?tool=history');
+  const openLibrary = () => {
+    if (isAuthenticated) {
+      window.location.assign('?tool=library');
+      return;
+    }
+    openLogin({ onSuccess: () => window.location.assign('?tool=library') });
+  };
+
   const downloadPlugin = () => {
     if (typeof window === 'undefined') return;
     window.open(RNG_DOWNLOAD_PATH, '_blank');
@@ -2909,8 +3251,8 @@ function HomeView() {
     document.querySelector('meta[name="description"]')?.setAttribute(
       'content',
       language === 'en'
-        ? 'kish2note is KishPoker’s local GG hand-history workspace for results, data review, and leak investigation.'
-        : 'kish2note 是 KishPoker 的 GG 手牌本地分析工具，帮助你查看资金盈亏、打法数据并辅助排查值得复盘的漏洞。'
+        ? 'kish2note is KishPoker’s local-first GG hand-history workspace with optional private cloud sessions for long-term review.'
+        : 'kish2note 是 KishPoker 的 GG 手牌分析工具，支持免登录本地复盘，也可在确认后保存到个人云端牌谱库。'
     );
   }, [language]);
 
@@ -2952,16 +3294,19 @@ function HomeView() {
     <div className="site site--home">
       <nav className="top-nav">
         <div className="brand">KISHPOKER</div>
-        <div className="lang-switch">
-          {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
-            <button
-              type="button"
-              key={code}
-              className={language === code ? 'active' : ''}
-              aria-pressed={language === code}
-              onClick={() => handleLanguageChange(code)}
-            >{label}</button>
-          ))}
+        <div className="top-nav-actions">
+          <div className="lang-switch">
+            {Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
+              <button
+                type="button"
+                key={code}
+                className={language === code ? 'active' : ''}
+                aria-pressed={language === code}
+                onClick={() => handleLanguageChange(code)}
+              >{label}</button>
+            ))}
+          </div>
+          <AccountControl />
         </div>
       </nav>
 
@@ -2974,6 +3319,7 @@ function HomeView() {
           <p className="hero-privacy"><i aria-hidden="true" />{copy.hero.privacy}</p>
           <div className="cta-row">
             <button type="button" className="primary hero-primary" onClick={openHistory}>{copy.hero.primaryCta}<span aria-hidden="true">→</span></button>
+            <button type="button" className="secondary hero-library" onClick={openLibrary}>{copy.modes.cloud.action}</button>
           </div>
         </div>
         <aside className="hero-analysis-preview" aria-label={copy.hero.previewLabel}>
@@ -3008,6 +3354,20 @@ function HomeView() {
           </div>
           <button type="button" className="primary" onClick={openHistory}>{copy.flagship.action}<span aria-hidden="true">→</span></button>
         </header>
+        <div className="kish2note-modes">
+          <article>
+            <span>{copy.modes.local.label}</span>
+            <h3>{copy.modes.local.title}</h3>
+            <p>{copy.modes.local.desc}</p>
+            <button type="button" onClick={openHistory}>{copy.modes.local.action}<i aria-hidden="true">→</i></button>
+          </article>
+          <article className="kish2note-mode-cloud">
+            <span>{copy.modes.cloud.label}</span>
+            <h3>{copy.modes.cloud.title}</h3>
+            <p>{copy.modes.cloud.desc}</p>
+            <button type="button" onClick={openLibrary}>{copy.modes.cloud.action}<i aria-hidden="true">→</i></button>
+          </article>
+        </div>
         <div className="kish2note-capabilities">
           {copy.flagship.capabilities.map((capability, index) => (
             <article key={capability.title}>
@@ -3039,6 +3399,50 @@ function HomeView() {
           ))}
         </div>
       </section>
+      <footer className="site-footer">
+        <span>© 2026 KishPoker · kish2note</span>
+        <div><a href="/?page=terms">用户协议</a><a href="/?page=privacy">隐私政策</a></div>
+      </footer>
+    </div>
+  );
+}
+
+function LegalView({ type }) {
+  const privacy = type === 'privacy';
+  useEffect(() => {
+    document.documentElement.lang = 'zh-CN';
+    document.title = `${privacy ? '隐私政策' : '用户协议'} | kish2note`;
+  }, [privacy]);
+
+  return (
+    <div className="site site--legal">
+      <nav className="top-nav">
+        <button type="button" className="brand brand--button" onClick={() => window.location.assign('/')}>KISHPOKER · KISH2NOTE</button>
+        <AccountControl />
+      </nav>
+      <main className="legal-document">
+        <p className="eyebrow">KISH2NOTE · 2026-07-15 生效</p>
+        <h1>{privacy ? '隐私政策' : '用户协议'}</h1>
+        {privacy ? (
+          <>
+            <section><h2>1. 两种使用方式</h2><p>你可以免登录使用单次牌谱分析。文件会在当前浏览器本地读取和解析，不会因为选择文件、拖入文件或查看报表而自动上传。只有当你登录后主动点击“保存到我的牌谱库”，并在保存确认框再次同意时，相应牌谱才会同步到云端。</p></section>
+            <section><h2>2. 我们处理的数据</h2><p>登录时处理你的中国大陆手机号、短信验证结果、账户标识和必要的安全日志。云端保存时处理你确认提交的 GGPoker 原始牌谱文本，以及由其解析出的时间、盲注、玩家名、底牌、公共牌、行动、输赢和统计结果。我们不会为了保存牌谱上传你的本地文件名或未被识别为牌谱的文件内容。</p></section>
+            <section><h2>3. 用途与存储</h2><p>这些数据仅用于身份认证、保存和恢复你的牌谱、跨 session 统计、去重、播放器与漏洞分析。当前云服务由腾讯云 CloudBase 上海地域提供。登录状态由 CloudBase SDK 在你的浏览器中管理；前端只使用可公开的 Publishable Key，不包含服务端管理密钥。</p></section>
+            <section><h2>4. 保留、删除与安全</h2><p>云端牌谱会保留到你主动删除牌谱库内容或账户相关服务终止。数据库启用了逐用户行级权限，每个已登录用户只能读取和操作自己的记录。你可以在“我的牌谱库”中删除 session；账户删除与数据导出入口将在后续版本补充，在此之前可通过网站公布的反馈渠道提出请求。</p></section>
+            <section><h2>5. 你的选择</h2><p>你可以始终选择只做本地分析，也可以随时退出登录。拒绝云端保存不影响本地分析。短信可能产生服务商侧的发送记录；请勿使用他人手机号登录，也不要上传你无权处理的牌谱。</p></section>
+            <section><h2>6. 未成年人</h2><p>本工具面向具备完全民事行为能力的成年人。未成年人不应创建账户或保存牌谱。</p></section>
+          </>
+        ) : (
+          <>
+            <section><h2>1. 服务内容</h2><p>kish2note 提供 GGPoker 牌谱的本地分析、数据报表、牌局复盘，以及由用户明确选择的云端牌谱保存功能。分析结果用于学习和复盘，不构成收益承诺、博彩建议或对第三方平台规则的保证。</p></section>
+            <section><h2>2. 账户与资格</h2><p>你应为具备完全民事行为能力的成年人，并使用本人可控制的中国大陆手机号登录。请妥善保护短信验证码和登录设备；发现异常使用时应及时退出登录。</p></section>
+            <section><h2>3. 内容责任</h2><p>你应确保对上传或保存的牌谱拥有合法处理权限。不得利用本服务侵犯他人权益、传播违法内容、攻击服务、绕过安全限制，或把工具用于第三方平台禁止的实时作弊行为。</p></section>
+            <section><h2>4. 数据与隐私</h2><p>本地分析与云端保存的边界、数据类型和删除方式以《隐私政策》为准。未经过你的保存确认，本地导入不会自动同步到服务器。</p></section>
+            <section><h2>5. 服务变更与责任限制</h2><p>测试阶段的统计口径、功能和可用性可能调整。我们会尽力保持数据完整和服务安全，但建议你保留原始牌谱备份。因网络、云服务、第三方平台格式变化或不可抗力造成的中断，将在法律允许范围内处理。</p></section>
+          </>
+        )}
+        <div className="legal-actions"><a className="primary" href="/">返回首页</a><a className="secondary" href={privacy ? '/?page=terms' : '/?page=privacy'}>{privacy ? '查看用户协议' : '查看隐私政策'}</a></div>
+      </main>
     </div>
   );
 }
@@ -3047,11 +3451,15 @@ function App() {
   const search = typeof window !== 'undefined' ? window.location.search : '';
   const params = new URLSearchParams(search);
   const tool = params.get('tool');
+  const page = params.get('page');
+
+  if (page === 'terms' || page === 'privacy') return <LegalView type={page} />;
 
   if (tool === 'range') return <RangeLabView />;
   if (tool === 'equity') return <EquityView />;
   if (tool === 'variance') return <VarianceView />;
   if (tool === 'history') return <HandHistoryView />;
+  if (tool === 'library') return <CloudLibraryView />;
   return <HomeView />;
 }
 

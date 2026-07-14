@@ -11,6 +11,7 @@
     "hands": "node scripts/build-hand-strength.js"
   },
   "dependencies": {
+    "@cloudbase/js-sdk": "3.6.2",
     "jszip": "^3.10.1",
     "libarchive.js": "^2.0.2",
     "pokersolver": "^2.1.4",
@@ -27,6 +28,6 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "sharp": "^0.34.5",
-    "vite": "^8.0.1"
+    "vite": "^8.1.4"
   }
 }

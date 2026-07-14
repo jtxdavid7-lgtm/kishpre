@@ -6,3 +6,4 @@ dist/
 vite.config.local.*
 .env
 .env.*
+!.env.example
