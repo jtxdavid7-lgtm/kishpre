@@ -1448,6 +1448,7 @@ function HistoryDetailSection({ title, items }) {
 }
 
 const HISTORY_PAGE_SIZES = [10, 25, 50, 100];
+const FILTER_RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
 const HISTORY_SORT_COLUMNS = [
   { key: 'date', label: '时间' },
   { key: 'id', label: '牌局号码' },
@@ -1482,22 +1483,28 @@ function normalizedRanks(cards = []) {
   return cards.map((card) => card[0]).sort((a, b) => order.indexOf(b) - order.indexOf(a)).join('');
 }
 
-function matchesCardFilter(cards, query, holeCards = false) {
-  const input = query.trim();
-  if (!input) return true;
-  const exactCards = [...input.matchAll(/([2-9TJQKA][shdc])/ig)].map((match) => `${match[1][0].toUpperCase()}${match[1][1].toLowerCase()}`);
-  if (exactCards.length) return exactCards.every((card) => cards.includes(card));
+function matchesHoleFilter(cards, filter) {
+  const selectedRanks = filter.ranks.filter(Boolean);
+  if (!selectedRanks.length && !filter.suitedOnly) return true;
+  if (cards.length !== 2) return false;
+  const cardRanks = cards.map((card) => card[0]);
+  const [first, second] = filter.ranks;
+  const rankMatch = first && second
+    ? (cardRanks[0] === first && cardRanks[1] === second) || (cardRanks[0] === second && cardRanks[1] === first)
+    : !first || cardRanks.includes(first)
+      ? !second || cardRanks.includes(second)
+      : false;
+  const suitedMatch = !filter.suitedOnly || cards[0][1] === cards[1][1];
+  return rankMatch && suitedMatch;
+}
 
-  const compact = input.toUpperCase().replace(/[^2-9TJQKASO]/g, '');
-  if (holeCards) {
-    const match = compact.match(/^([2-9TJQKA])([2-9TJQKA])([SO])?$/);
-    if (match && cards.length === 2) {
-      const sameRanks = normalizedRanks(cards) === normalizedRanks([`${match[1]}s`, `${match[2]}h`]);
-      const suited = cards[0][1] === cards[1][1];
-      return sameRanks && (!match[3] || (match[3] === 'S' ? suited : !suited));
-    }
-  }
-  return [...compact].every((rank) => cards.some((card) => card[0] === rank));
+function matchesBoardFilter(board, filter) {
+  const flopFilters = filter.slice(0, 3).filter(Boolean);
+  const flop = board.slice(0, 3);
+  if (!flopFilters.every((card) => flop.includes(card))) return false;
+  if (filter[3] && board[3] !== filter[3]) return false;
+  if (filter[4] && board[4] !== filter[4]) return false;
+  return true;
 }
 
 function historyAmount(value, bb, unit, signed = false) {
@@ -1580,7 +1587,11 @@ function HandReplay({ hand, hero, onClose }) {
                     </div>
                     <strong>{name}</strong>
                     <span>{player.position} · {historyAmount(player.stack, hand.bb, 'bb')}</span>
-                    {currentAction?.player === name && <em>{actionLabel(currentAction)}</em>}
+                    {currentAction?.player === name && (
+                      <em className={currentAction.amount > 0 && !['return', 'collect'].includes(currentAction.type) ? 'with-chips' : ''}>
+                        {actionLabel(currentAction)}
+                      </em>
+                    )}
                   </div>
                 );
               })}
@@ -1615,11 +1626,175 @@ function HandReplay({ hand, hero, onClose }) {
   );
 }
 
+function FilterCardTile({ card, fallback = '?' }) {
+  if (!card) return <i className="history-filter-card history-filter-card--empty">{fallback}</i>;
+  const rank = card[0] === 'T' ? '10' : card[0];
+  const suit = card[1];
+  return (
+    <i className={`history-filter-card history-filter-card--${suit}`}>
+      <b>{rank}</b><span>{SUIT_ICON[suit]}</span>
+    </i>
+  );
+}
+
+function HistoryFilterModal({ title, className = '', onClose, onReset, onConfirm, confirmDisabled = false, children }) {
+  useEffect(() => {
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="history-filter-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className={`history-filter-modal ${className}`} role="dialog" aria-modal="true" aria-label={title}>
+        <header><h3>{title}</h3><button type="button" onClick={onClose} aria-label="关闭">×</button></header>
+        <div className="history-filter-modal-body">{children}</div>
+        <footer>
+          <button type="button" className="secondary" onClick={onReset}>↶ 重置</button>
+          <button type="button" className="primary" onClick={onConfirm} disabled={confirmDisabled}>确认</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function HoleCardFilterModal({ initial, onClose, onApply }) {
+  const [ranks, setRanks] = useState(() => [...initial.ranks]);
+  const [suitedOnly, setSuitedOnly] = useState(initial.suitedOnly);
+  const selectRank = (index, rank) => {
+    setRanks((current) => {
+      const next = [...current];
+      next[index] = rank;
+      if (next[0] && next[0] === next[1]) setSuitedOnly(false);
+      return next;
+    });
+  };
+  const pairSelected = Boolean(ranks[0] && ranks[0] === ranks[1]);
+
+  return (
+    <HistoryFilterModal
+      title="选择底牌"
+      className="history-hole-filter-modal"
+      onClose={onClose}
+      onReset={() => { setRanks([null, null]); setSuitedOnly(false); }}
+      onConfirm={() => onApply({ ranks, suitedOnly: pairSelected ? false : suitedOnly })}
+    >
+      <p className="history-filter-instruction">两行分别代表两张底牌；问号表示任意点数。</p>
+      <div className="history-rank-picker">
+        {ranks.map((selected, rowIndex) => (
+          <div className="history-rank-row" key={`hole-rank-${rowIndex}`}>
+            <span>牌 {rowIndex + 1}</span>
+            <button type="button" className={!selected ? 'active' : ''} onClick={() => selectRank(rowIndex, null)}>?</button>
+            {FILTER_RANKS.map((rank) => (
+              <button
+                type="button"
+                key={`${rowIndex}-${rank}`}
+                className={selected === rank ? 'active' : ''}
+                onClick={() => selectRank(rowIndex, rank)}
+              >{rank}</button>
+            ))}
+          </div>
+        ))}
+      </div>
+      <label className={`history-suited-toggle${pairSelected ? ' disabled' : ''}`}>
+        <input
+          type="checkbox"
+          checked={suitedOnly && !pairSelected}
+          disabled={pairSelected}
+          onChange={(event) => setSuitedOnly(event.target.checked)}
+        />
+        <span>仅同花组合</span>
+      </label>
+    </HistoryFilterModal>
+  );
+}
+
+function BoardCardFilterModal({ initial, onClose, onApply }) {
+  const [cards, setCards] = useState(() => [...initial]);
+  const [activeSlot, setActiveSlot] = useState(() => initial.findIndex((card) => !card) >= 0 ? initial.findIndex((card) => !card) : 0);
+  const flopComplete = cards.slice(0, 3).every(Boolean);
+  const turnComplete = Boolean(cards[3]);
+  const flopCount = cards.slice(0, 3).filter(Boolean).length;
+  const valid = (flopCount === 0 || flopCount === 3) && (!cards[3] || flopComplete) && (!cards[4] || turnComplete);
+  const takenCards = new Set(cards.filter(Boolean));
+
+  const slotUnlocked = (index) => index < 3 || (index === 3 ? flopComplete : flopComplete && turnComplete);
+  const selectSlot = (index) => {
+    if (slotUnlocked(index)) setActiveSlot(index);
+  };
+  const selectCard = (card) => {
+    if (!slotUnlocked(activeSlot)) return;
+    setCards((current) => {
+      const next = [...current];
+      next[activeSlot] = card;
+      const nextEmpty = next.findIndex((value, index) => !value && (index < 3 || (index === 3 ? next.slice(0, 3).every(Boolean) : next.slice(0, 4).every(Boolean))));
+      if (nextEmpty >= 0) setActiveSlot(nextEmpty);
+      return next;
+    });
+  };
+  const clearActiveCard = () => {
+    setCards((current) => {
+      const next = [...current];
+      next[activeSlot] = null;
+      if (activeSlot < 3) { next[3] = null; next[4] = null; }
+      if (activeSlot === 3) next[4] = null;
+      return next;
+    });
+  };
+
+  return (
+    <HistoryFilterModal
+      title="选择公共牌"
+      className="history-board-filter-modal"
+      onClose={onClose}
+      onReset={() => { setCards(Array(5).fill(null)); setActiveSlot(0); }}
+      onConfirm={() => onApply(cards)}
+      confirmDisabled={!valid}
+    >
+      <p className="history-filter-instruction">先选择三张翻牌，再选择转牌和河牌。点击上方牌位可返回修改。</p>
+      <div className="history-board-streets">
+        <div><span>翻牌</span><div>{[0, 1, 2].map((index) => (
+          <button type="button" key={index} className={activeSlot === index ? 'active' : ''} onClick={() => selectSlot(index)}><FilterCardTile card={cards[index]} fallback="+" /></button>
+        ))}</div></div>
+        <div><span>转牌</span><div><button type="button" className={`${activeSlot === 3 ? 'active' : ''}${!flopComplete ? ' locked' : ''}`} disabled={!flopComplete} onClick={() => selectSlot(3)}><FilterCardTile card={cards[3]} fallback="+" /></button></div></div>
+        <div><span>河牌</span><div><button type="button" className={`${activeSlot === 4 ? 'active' : ''}${!turnComplete ? ' locked' : ''}`} disabled={!turnComplete} onClick={() => selectSlot(4)}><FilterCardTile card={cards[4]} fallback="+" /></button></div></div>
+      </div>
+      <div className="history-board-picker-head">
+        <strong>选择第 {activeSlot + 1} 张牌</strong>
+        <button type="button" onClick={clearActiveCard} disabled={!cards[activeSlot]}>清除此张</button>
+      </div>
+      <div className="history-board-card-grid">
+        {PICKER_SUITS.map((suit) => (
+          <div key={suit}>
+            <span className={`history-board-suit history-board-suit--${suit}`}>{SUIT_ICON[suit]}</span>
+            {FILTER_RANKS.map((rank) => {
+              const card = `${rank}${suit}`;
+              const disabled = takenCards.has(card) && cards[activeSlot] !== card;
+              return (
+                <button
+                  type="button"
+                  key={card}
+                  aria-label={card}
+                  className={`history-board-card-button history-board-card-button--${suit}${cards[activeSlot] === card ? ' active' : ''}`}
+                  disabled={disabled}
+                  onClick={() => selectCard(card)}
+                ><b>{rank === 'T' ? '10' : rank}</b><span>{SUIT_ICON[suit]}</span></button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      {!valid && <p className="history-board-filter-error">请先选满三张翻牌。</p>}
+    </HistoryFilterModal>
+  );
+}
+
 function HistoryRecords({ results, hands, hero }) {
-  const [handQuery, setHandQuery] = useState('');
-  const [holeQuery, setHoleQuery] = useState('');
-  const [boardQuery, setBoardQuery] = useState('');
-  const [winnerQuery, setWinnerQuery] = useState('');
+  const [holeFilter, setHoleFilter] = useState(() => ({ ranks: [null, null], suitedOnly: false }));
+  const [boardFilter, setBoardFilter] = useState(() => Array(5).fill(null));
+  const [filterModal, setFilterModal] = useState(null);
   const [unit, setUnit] = useState('bb');
   const [sort, setSort] = useState({ key: 'date', direction: 'desc' });
   const [pageSize, setPageSize] = useState(10);
@@ -1629,11 +1804,9 @@ function HistoryRecords({ results, hands, hero }) {
 
   const rows = useMemo(() => results.map((result) => ({ result, hand: handById.get(result.id) })).filter((row) => row.hand), [handById, results]);
   const filteredRows = useMemo(() => rows.filter(({ result, hand }) => (
-    (!handQuery.trim() || result.id.toLowerCase().includes(handQuery.trim().toLowerCase()))
-    && matchesCardFilter(result.cards ?? [], holeQuery, true)
-    && matchesCardFilter(hand.board ?? [], boardQuery)
-    && (!winnerQuery.trim() || historyWinnerLabel(hand.winners).toLowerCase().includes(winnerQuery.trim().toLowerCase()))
-  )), [boardQuery, handQuery, holeQuery, rows, winnerQuery]);
+    matchesHoleFilter(result.cards ?? [], holeFilter)
+    && matchesBoardFilter(hand.board ?? [], boardFilter)
+  )), [boardFilter, holeFilter, rows]);
   const sortedRows = useMemo(() => [...filteredRows].sort((a, b) => {
     const values = {
       date: [handDateValue(a.result), handDateValue(b.result)],
@@ -1657,9 +1830,12 @@ function HistoryRecords({ results, hands, hero }) {
       : { key, direction: key === 'date' || ['pot', 'profit'].includes(key) ? 'desc' : 'asc' }
   ));
   const reset = () => {
-    setHandQuery(''); setHoleQuery(''); setBoardQuery(''); setWinnerQuery('');
+    setHoleFilter({ ranks: [null, null], suitedOnly: false });
+    setBoardFilter(Array(5).fill(null));
     setSort({ key: 'date', direction: 'desc' }); setPage(1);
   };
+  const holeFilterActive = holeFilter.ranks.some(Boolean) || holeFilter.suitedOnly;
+  const boardFilterActive = boardFilter.some(Boolean);
 
   return (
     <section className="history-records">
@@ -1671,13 +1847,31 @@ function HistoryRecords({ results, hands, hero }) {
         </div>
       </header>
       <div className="history-record-filters">
-        <label><span>牌局号码</span><input value={handQuery} onChange={(event) => { setHandQuery(event.target.value); setPage(1); }} placeholder="输入号码" /></label>
-        <label><span>底牌</span><input value={holeQuery} onChange={(event) => { setHoleQuery(event.target.value); setPage(1); }} placeholder="AKs / AsKd" /></label>
-        <label><span>公共牌</span><input value={boardQuery} onChange={(event) => { setBoardQuery(event.target.value); setPage(1); }} placeholder="Ah Kd 7c" /></label>
-        <label><span>赢家</span><input value={winnerQuery} onChange={(event) => { setWinnerQuery(event.target.value); setPage(1); }} placeholder="玩家名称" /></label>
+        <label>
+          <span>底牌</span>
+          <button type="button" className={`history-card-filter-trigger${holeFilterActive ? ' active' : ''}`} onClick={() => setFilterModal('hole')}>
+            <span className="history-hole-filter-preview">
+              <i>{holeFilter.ranks[0] ?? '?'}</i><i>{holeFilter.ranks[1] ?? '?'}</i>
+              {holeFilter.suitedOnly && <b>同花</b>}
+            </span>
+            <strong>{holeFilterActive ? '已选择' : '任何底牌'}</strong>
+            <em>修改</em>
+          </button>
+        </label>
+        <label>
+          <span>公共牌</span>
+          <button type="button" className={`history-card-filter-trigger history-board-filter-trigger${boardFilterActive ? ' active' : ''}`} onClick={() => setFilterModal('board')}>
+            <span className="history-board-filter-preview">
+              {boardFilter.map((card, index) => (
+                <span key={index} className={index === 3 || index === 4 ? 'next-street' : ''}><FilterCardTile card={card} fallback="+" /></span>
+              ))}
+            </span>
+            <strong>{boardFilterActive ? '已选择' : '选择翻牌 / 转牌 / 河牌'}</strong>
+            <em>修改</em>
+          </button>
+        </label>
         <button type="button" className="secondary" onClick={reset}>重置</button>
       </div>
-      <p className="history-filter-tip">底牌支持牌型（AK、AKs、AKo）或精确花色（AsKd）；公共牌支持点数或精确牌面。</p>
       <div className="history-record-table-wrap">
         <table className="history-record-table">
           <thead><tr>
@@ -1713,6 +1907,20 @@ function HistoryRecords({ results, hands, hero }) {
         <div><button type="button" onClick={() => setPage(1)} disabled={safePage === 1}>首页</button><button type="button" onClick={() => setPage(safePage - 1)} disabled={safePage === 1}>上一页</button><button type="button" onClick={() => setPage(safePage + 1)} disabled={safePage === pageCount}>下一页</button><button type="button" onClick={() => setPage(pageCount)} disabled={safePage === pageCount}>末页</button></div>
       </footer>
       {replayHand && <HandReplay hand={replayHand} hero={hero} onClose={() => setReplayHand(null)} />}
+      {filterModal === 'hole' && (
+        <HoleCardFilterModal
+          initial={holeFilter}
+          onClose={() => setFilterModal(null)}
+          onApply={(next) => { setHoleFilter(next); setPage(1); setFilterModal(null); }}
+        />
+      )}
+      {filterModal === 'board' && (
+        <BoardCardFilterModal
+          initial={boardFilter}
+          onClose={() => setFilterModal(null)}
+          onApply={(next) => { setBoardFilter(next); setPage(1); setFilterModal(null); }}
+        />
+      )}
     </section>
   );
 }
@@ -1864,7 +2072,7 @@ function HandHistoryView() {
   };
 
   return (
-    <div className="site">
+    <div className="site site--history">
       <nav className="top-nav">
         <div className="brand">KISHPOKER · Hand History</div>
         <div className="cta-row">
