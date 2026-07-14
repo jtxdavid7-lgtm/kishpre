@@ -1449,6 +1449,7 @@ function HistoryDetailSection({ title, items }) {
 
 const HISTORY_PAGE_SIZES = [10, 25, 50, 100];
 const FILTER_RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
+const STARTING_HAND_RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
 const HISTORY_SORT_COLUMNS = [
   { key: 'date', label: '时间' },
   { key: 'id', label: '牌局号码' },
@@ -1517,6 +1518,123 @@ function historyWinnerLabel(winners = []) {
   return winners.map((winner) => winner.name).join('、') || '—';
 }
 
+function startingHandKey(cards = []) {
+  if (cards.length !== 2) return '';
+  const [firstCard, secondCard] = cards;
+  const firstRank = firstCard?.[0];
+  const secondRank = secondCard?.[0];
+  const firstIndex = STARTING_HAND_RANKS.indexOf(firstRank);
+  const secondIndex = STARTING_HAND_RANKS.indexOf(secondRank);
+  if (firstIndex < 0 || secondIndex < 0) return '';
+  if (firstRank === secondRank) return `${firstRank}${secondRank}`;
+  const [highRank, lowRank] = firstIndex < secondIndex
+    ? [firstRank, secondRank]
+    : [secondRank, firstRank];
+  return `${highRank}${lowRank}${firstCard[1] === secondCard[1] ? 's' : 'o'}`;
+}
+
+function matrixHandKey(rowIndex, columnIndex) {
+  const rowRank = STARTING_HAND_RANKS[rowIndex];
+  const columnRank = STARTING_HAND_RANKS[columnIndex];
+  if (rowIndex === columnIndex) return `${rowRank}${columnRank}`;
+  return rowIndex < columnIndex
+    ? `${rowRank}${columnRank}s`
+    : `${columnRank}${rowRank}o`;
+}
+
+function matrixAmount(value, unit) {
+  if (!Number.isFinite(value)) return '—';
+  const sign = value > 0 ? '+' : value < 0 ? '−' : '';
+  const digits = unit === 'bb' ? 1 : 2;
+  const amount = formatNumber(Math.abs(value), digits);
+  return unit === 'bb' ? `${sign}${amount} BB` : `${sign}$${amount}`;
+}
+
+function HoleCardReport({ results }) {
+  const [unit, setUnit] = useState('bb');
+  const statsByHand = useMemo(() => {
+    const grouped = new Map();
+    results.forEach((result) => {
+      const key = startingHandKey(result.cards);
+      if (!key) return;
+      const current = grouped.get(key) ?? { hands: 0, profit: 0, profitBB: 0 };
+      current.hands += 1;
+      current.profit += result.profit;
+      current.profitBB += result.profitBB;
+      grouped.set(key, current);
+    });
+    return grouped;
+  }, [results]);
+  const cells = useMemo(() => STARTING_HAND_RANKS.flatMap((_, rowIndex) => (
+    STARTING_HAND_RANKS.map((__, columnIndex) => {
+      const key = matrixHandKey(rowIndex, columnIndex);
+      return { key, rowIndex, columnIndex, stats: statsByHand.get(key) };
+    })
+  )), [statsByHand]);
+  const maxAbsoluteValue = useMemo(() => Math.max(0, ...cells.map(({ stats }) => (
+    Math.abs(unit === 'bb' ? stats?.profitBB ?? 0 : stats?.profit ?? 0)
+  ))), [cells, unit]);
+  const totalValue = results.reduce((sum, result) => sum + (unit === 'bb' ? result.profitBB : result.profit), 0);
+
+  return (
+    <section className="hole-card-report">
+      <header className="hole-card-report-head">
+        <div>
+          <span>底牌分析</span>
+          <strong>169 种起手牌盈亏</strong>
+          <p>按当前级别与位置筛选统计，每格显示累计输赢和样本数。</p>
+        </div>
+        <div className="hole-card-report-actions">
+          <div className="history-unit-toggle" aria-label="底牌盈亏单位">
+            <button type="button" aria-pressed={unit === 'bb'} className={unit === 'bb' ? 'active' : ''} onClick={() => setUnit('bb')}>BB</button>
+            <button type="button" aria-pressed={unit === 'money'} className={unit === 'money' ? 'active' : ''} onClick={() => setUnit('money')}>$</button>
+          </div>
+          <strong className={totalValue > 0 ? 'win' : totalValue < 0 ? 'loss' : ''}>{matrixAmount(totalValue, unit)}</strong>
+          <span>{results.length.toLocaleString()} 手牌 · {statsByHand.size} 种底牌</span>
+        </div>
+      </header>
+
+      <div className="hole-card-report-legend" aria-label="底牌盈亏图例">
+        <span><i className="win" />盈利</span>
+        <span><i className="neutral" />持平</span>
+        <span><i className="loss" />亏损</span>
+        <span><i className="empty" />无样本</span>
+        <em>右上：同花 · 左下：非同花 · 对角线：对子</em>
+      </div>
+
+      <div className="hole-card-matrix-scroll">
+        <div className="hole-card-matrix" role="grid" aria-label="起手牌盈亏矩阵">
+          {STARTING_HAND_RANKS.map((rank, rowIndex) => (
+            <div className="hole-card-matrix-row" role="row" key={rank}>
+              {cells.slice(rowIndex * STARTING_HAND_RANKS.length, (rowIndex + 1) * STARTING_HAND_RANKS.length).map(({ key, columnIndex, stats }) => {
+                const value = unit === 'bb' ? stats?.profitBB : stats?.profit;
+                const tone = !stats ? 'empty' : value > 0 ? 'win' : value < 0 ? 'loss' : 'neutral';
+                const strength = stats && maxAbsoluteValue
+                  ? 0.34 + (Math.sqrt(Math.abs(value) / maxAbsoluteValue) * 0.5)
+                  : 0;
+                const type = rowIndex === columnIndex ? 'pair' : rowIndex < columnIndex ? 'suited' : 'offsuit';
+                return (
+                  <div
+                    key={key}
+                    role="gridcell"
+                    className={`hole-card-matrix-cell hole-card-matrix-cell--${tone} hole-card-matrix-cell--${type}`}
+                    style={{ '--hole-card-strength': strength }}
+                    aria-label={`${key}，${stats ? `${stats.hands} 手牌，${matrixAmount(value, unit)}` : '无样本'}`}
+                  >
+                    <b>{key}</b>
+                    <strong>{stats ? matrixAmount(value, unit) : '—'}</strong>
+                    <span>{stats ? `${stats.hands.toLocaleString()} 手` : '无样本'}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function actionLabel(action) {
   const amount = action.amount ? ` $${formatNumber(action.amount, 2)}` : '';
   const labels = {
@@ -1526,12 +1644,77 @@ function actionLabel(action) {
   return `${labels[action.type] ?? action.text}${amount}`;
 }
 
+function replayStartingStep(actions) {
+  let step = 0;
+  while (step < actions.length && actions[step].type === 'post') step += 1;
+  return step;
+}
+
+const REPLAY_INVESTMENT_LABELS = {
+  post: '盲注',
+  call: '跟注',
+  bet: '下注',
+  raise: '加注'
+};
+
+function isReplayInvestment(action) {
+  return Boolean(action?.amount > 0 && REPLAY_INVESTMENT_LABELS[action.type]);
+}
+
+function buildReplayState(actions, step) {
+  const streetContributions = new Map();
+  const stackChanges = new Map();
+  const foldedPlayers = new Set();
+  let street = 'preflop';
+  let pot = 0;
+
+  for (const action of actions.slice(0, step)) {
+    if (action.street !== street) {
+      street = action.street;
+      streetContributions.clear();
+    }
+    const currentStackChange = stackChanges.get(action.player) ?? 0;
+    if (['post', 'call', 'bet', 'raise'].includes(action.type)) {
+      streetContributions.set(action.player, (streetContributions.get(action.player) ?? 0) + action.amount);
+      stackChanges.set(action.player, currentStackChange - action.amount);
+    } else if (action.type === 'return') {
+      streetContributions.set(action.player, Math.max(0, (streetContributions.get(action.player) ?? 0) - action.amount));
+      stackChanges.set(action.player, currentStackChange + action.amount);
+    } else if (action.type === 'collect') {
+      stackChanges.set(action.player, currentStackChange + action.amount);
+    } else if (action.type === 'fold') {
+      foldedPlayers.add(action.player);
+    }
+    pot = action.potAfter ?? pot;
+  }
+
+  return { street, pot, streetContributions, stackChanges, foldedPlayers };
+}
+
+function replayPosition(index, count, radiusX, radiusY) {
+  const angle = (-90 + (360 / Math.max(1, count)) * index) * (Math.PI / 180);
+  return {
+    left: 50 + Math.cos(angle) * radiusX,
+    top: 50 + Math.sin(angle) * radiusY
+  };
+}
+
+function ReplayChipStack({ compact = false }) {
+  return (
+    <i className={`history-chip-stack${compact ? ' history-chip-stack--compact' : ''}`} aria-hidden="true">
+      <span /><span /><span />
+    </i>
+  );
+}
+
 function HandReplay({ hand, hero, onClose }) {
-  const [step, setStep] = useState(0);
+  const actions = useMemo(() => hand.actions ?? [], [hand.actions]);
+  const initialStep = replayStartingStep(actions);
+  const [step, setStep] = useState(() => initialStep);
   const [playing, setPlaying] = useState(false);
-  const actions = hand.actions ?? [];
+  const replayState = useMemo(() => buildReplayState(actions, step), [actions, step]);
   const currentAction = step > 0 ? actions[step - 1] : null;
-  const street = currentAction?.street ?? 'preflop';
+  const street = replayState.street;
   const boardCount = street === 'flop' ? 3 : street === 'turn' ? 4 : ['river', 'showdown'].includes(street) ? 5 : 0;
   const visibleBoard = hand.board.slice(0, boardCount);
   const playerList = [...hand.players.entries()].sort((a, b) => a[1].seat - b[1].seat);
@@ -1568,38 +1751,54 @@ function HandReplay({ hand, hero, onClose }) {
               <div className="history-table-center">
                 <small>{street === 'preflop' ? '翻牌前' : street === 'showdown' ? '摊牌' : street.toUpperCase()}</small>
                 <PlayingCards cards={visibleBoard} />
-                <strong>底池 {historyAmount(currentAction?.potAfter ?? 0, hand.bb, 'bb')}</strong>
+                <strong>底池 {historyAmount(replayState.pot, hand.bb, 'bb')}</strong>
               </div>
+              {playerList.map(([name], index) => {
+                const contribution = replayState.streetContributions.get(name) ?? 0;
+                if (contribution <= 0 || street === 'showdown') return null;
+                const position = replayPosition(index, playerList.length, 28, 26);
+                const currentInvestment = currentAction?.player === name && isReplayInvestment(currentAction);
+                return (
+                  <div
+                    key={`bet-${name}`}
+                    className={`history-table-bet${currentInvestment ? ' active' : ''}`}
+                    style={{ left: `${position.left}%`, top: `${position.top}%` }}
+                    aria-label={`${name} 当前街投入 ${historyAmount(contribution, hand.bb, 'bb')}`}
+                  >
+                    <ReplayChipStack />
+                    <strong>{currentInvestment ? `${REPLAY_INVESTMENT_LABELS[currentAction.type]} · ` : ''}{historyAmount(contribution, hand.bb, 'bb')}</strong>
+                  </div>
+                );
+              })}
               {playerList.map(([name, player], index) => {
-                const angle = (-90 + (360 / Math.max(1, playerList.length)) * index) * (Math.PI / 180);
-                const left = 50 + Math.cos(angle) * 42;
-                const top = 50 + Math.sin(angle) * 39;
+                const position = replayPosition(index, playerList.length, 42, 39);
                 const knownCards = hand.holeCards.get(name) ?? [];
                 const showCards = name === hero || (showdown && knownCards.length);
+                const remainingStack = Math.max(0, player.stack + (replayState.stackChanges.get(name) ?? 0));
+                const folded = replayState.foldedPlayers.has(name);
                 return (
                   <div
                     key={name}
-                    className={`history-replay-seat${currentAction?.player === name ? ' active' : ''}${name === hero ? ' hero' : ''}`}
-                    style={{ left: `${left}%`, top: `${top}%` }}
+                    className={`history-replay-seat${currentAction?.player === name ? ' active' : ''}${name === hero ? ' hero' : ''}${folded ? ' folded' : ''}`}
+                    style={{ left: `${position.left}%`, top: `${position.top}%` }}
                   >
                     <div className="history-seat-cards">
                       {showCards ? <PlayingCards cards={knownCards} compact /> : <PlayingCards hidden compact />}
                     </div>
                     <strong>{name}</strong>
-                    <span>{player.position} · {historyAmount(player.stack, hand.bb, 'bb')}</span>
-                    {currentAction?.player === name && (
-                      <em className={currentAction.amount > 0 && !['return', 'collect'].includes(currentAction.type) ? 'with-chips' : ''}>
-                        {actionLabel(currentAction)}
-                      </em>
-                    )}
+                    <div className="history-seat-meta">
+                      <span>{player.position}</span>
+                      <b><ReplayChipStack compact />{historyAmount(remainingStack, hand.bb, 'bb')}</b>
+                    </div>
+                    {currentAction?.player === name && !isReplayInvestment(currentAction) && <em>{actionLabel(currentAction)}</em>}
                   </div>
                 );
               })}
             </div>
             <div className="history-replay-controls">
-              <button type="button" onClick={() => { setPlaying(false); setStep(Math.max(0, step - 1)); }} disabled={step === 0}>上一步</button>
+              <button type="button" onClick={() => { setPlaying(false); setStep(Math.max(initialStep, step - 1)); }} disabled={step <= initialStep}>上一步</button>
               <button type="button" className="primary" onClick={() => {
-                if (step >= actions.length) setStep(0);
+                if (step >= actions.length) setStep(initialStep);
                 setPlaying((value) => !value);
               }}>{playing ? '暂停' : step >= actions.length ? '重新播放' : '播放'}</button>
               <button type="button" onClick={() => { setPlaying(false); setStep(Math.min(actions.length, step + 1)); }} disabled={step >= actions.length}>下一步</button>
@@ -1842,8 +2041,8 @@ function HistoryRecords({ results, hands, hero }) {
       <header className="history-records-head">
         <div><span>牌局历史</span><strong>{filteredRows.length.toLocaleString()} 手牌</strong></div>
         <div className="history-unit-toggle" aria-label="金额单位">
-          <button type="button" className={unit === 'bb' ? 'active' : ''} onClick={() => setUnit('bb')}>BB</button>
-          <button type="button" className={unit === 'money' ? 'active' : ''} onClick={() => setUnit('money')}>$</button>
+          <button type="button" aria-pressed={unit === 'bb'} className={unit === 'bb' ? 'active' : ''} onClick={() => setUnit('bb')}>BB</button>
+          <button type="button" aria-pressed={unit === 'money'} className={unit === 'money' ? 'active' : ''} onClick={() => setUnit('money')}>$</button>
         </div>
       </header>
       <div className="history-record-filters">
@@ -1886,8 +2085,20 @@ function HistoryRecords({ results, hands, hero }) {
           </tr></thead>
           <tbody>
             {visibleRows.map(({ result, hand }) => (
-              <tr key={result.id}>
-                <td><button type="button" className="history-replay-button" onClick={() => setReplayHand(hand)}>▶ 重播</button></td>
+              <tr
+                key={result.id}
+                className="history-record-row"
+                tabIndex={0}
+                aria-label={`查看牌局 ${result.id} 的具体牌谱`}
+                title="点击查看这手具体牌谱"
+                onClick={() => setReplayHand(hand)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
+                  event.preventDefault();
+                  setReplayHand(hand);
+                }}
+              >
+                <td><button type="button" className="history-replay-button" onClick={(event) => { event.stopPropagation(); setReplayHand(hand); }}>▶ 重播</button></td>
                 <td><span className="history-record-date">{result.date.replace(/^\d{4}\//, '').replace(' ', ' · ')}</span></td>
                 <td><code>{result.id}</code></td>
                 <td><PlayingCards cards={result.cards} compact /></td>
@@ -2210,6 +2421,13 @@ function HandHistoryView() {
                   >
                     历史记录
                   </button>
+                  <button
+                    type="button"
+                    className={historyTab === 'holeCards' ? 'active' : ''}
+                    onClick={() => setHistoryTab('holeCards')}
+                  >
+                    底牌
+                  </button>
                 </nav>
 
                 {historyTab === 'overview' ? (
@@ -2272,6 +2490,8 @@ function HandHistoryView() {
                   </>
                 ) : historyTab === 'history' ? (
                   <HistoryRecords results={filteredResults} hands={hands} hero={hero} />
+                ) : historyTab === 'holeCards' ? (
+                  <HoleCardReport results={filteredResults} />
                 ) : (
                   <section className="history-detail-stack">
                     {detailSections.map((section) => (

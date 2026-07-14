@@ -995,18 +995,18 @@ input:focus {
 }
 
 .history-tabs {
-  width: min(480px, 100%);
+  width: 100%;
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-self: flex-end;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-self: stretch;
   gap: 4px;
   border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 15px;
+  border-radius: 16px;
   background: rgba(3, 7, 18, 0.76);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
   overflow: hidden;
-  padding: 4px;
+  padding: 5px;
 }
 
 .history-tabs button {
@@ -1015,10 +1015,10 @@ input:focus {
   background: transparent;
   color: #cbd5e1;
   cursor: pointer;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
-  min-height: 50px;
-  padding: 13px 18px;
+  min-height: 62px;
+  padding: 16px 18px;
   transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
@@ -1035,6 +1035,208 @@ input:focus {
 
 .history-tabs button:active {
   transform: translateY(1px);
+}
+
+.hole-card-report {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 18px;
+  background: rgba(4, 7, 16, 0.9);
+}
+
+.hole-card-report-head {
+  min-height: 92px;
+  box-sizing: border-box;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.hole-card-report-head > div:first-child {
+  min-width: 0;
+}
+
+.hole-card-report-head > div:first-child > span {
+  color: #facc15;
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.hole-card-report-head > div:first-child > strong {
+  color: #f8fafc;
+  display: block;
+  margin-top: 5px;
+  font-size: 20px;
+}
+
+.hole-card-report-head p {
+  margin: 6px 0 0;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.hole-card-report-actions {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  justify-items: end;
+  gap: 5px 14px;
+  white-space: nowrap;
+}
+
+.hole-card-report-actions .history-unit-toggle {
+  grid-row: 1 / span 2;
+}
+
+.hole-card-report-actions > strong {
+  color: #e2e8f0;
+  font-size: 18px;
+}
+
+.hole-card-report-actions > strong.win {
+  color: #86efac;
+}
+
+.hole-card-report-actions > strong.loss {
+  color: #fca5a5;
+}
+
+.hole-card-report-actions > span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.hole-card-report-legend {
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  background: rgba(15, 23, 42, 0.38);
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+.hole-card-report-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hole-card-report-legend i {
+  width: 22px;
+  height: 13px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 3px;
+}
+
+.hole-card-report-legend i.win {
+  background: rgba(77, 124, 15, 0.74);
+}
+
+.hole-card-report-legend i.neutral {
+  background: rgba(51, 65, 85, 0.72);
+}
+
+.hole-card-report-legend i.loss {
+  background: rgba(153, 27, 27, 0.72);
+}
+
+.hole-card-report-legend i.empty {
+  background: rgba(15, 23, 42, 0.74);
+}
+
+.hole-card-report-legend em {
+  margin-left: auto;
+  color: #64748b;
+  font-style: normal;
+}
+
+.hole-card-matrix-scroll {
+  overflow-x: auto;
+  padding: 14px;
+}
+
+.hole-card-matrix {
+  min-width: 1040px;
+  display: grid;
+  gap: 4px;
+}
+
+.hole-card-matrix-row {
+  display: grid;
+  grid-template-columns: repeat(13, minmax(72px, 1fr));
+  gap: 4px;
+}
+
+.hole-card-matrix-cell {
+  --hole-card-strength: 0;
+  min-height: 78px;
+  box-sizing: border-box;
+  border: 1px solid rgba(148, 163, 184, 0.17);
+  border-radius: 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 5px;
+  text-align: center;
+}
+
+.hole-card-matrix-cell--win {
+  background: rgba(77, 124, 15, var(--hole-card-strength));
+}
+
+.hole-card-matrix-cell--loss {
+  background: rgba(153, 27, 27, var(--hole-card-strength));
+}
+
+.hole-card-matrix-cell--neutral {
+  background: rgba(51, 65, 85, 0.72);
+}
+
+.hole-card-matrix-cell--empty {
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.hole-card-matrix-cell--pair {
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.52);
+}
+
+.hole-card-matrix-cell b {
+  color: #f8fafc;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.hole-card-matrix-cell--suited b {
+  color: #fde68a;
+}
+
+.hole-card-matrix-cell strong {
+  color: #f8fafc;
+  font-size: 11px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.hole-card-matrix-cell span {
+  color: rgba(226, 232, 240, 0.68);
+  font-size: 9px;
+  line-height: 1;
+}
+
+.hole-card-matrix-cell--empty b,
+.hole-card-matrix-cell--empty strong,
+.hole-card-matrix-cell--empty span {
+  color: #475569;
 }
 
 .history-pvi-controls {
@@ -2028,8 +2230,25 @@ input:focus {
   white-space: nowrap;
 }
 
-.history-record-table tbody tr:hover {
-  background: rgba(30, 41, 59, 0.48);
+.history-record-row {
+  cursor: pointer;
+  transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.history-record-row:hover {
+  background: rgba(30, 41, 59, 0.62);
+  box-shadow: inset 4px 0 0 #facc15;
+}
+
+.history-record-row:focus-visible {
+  outline: 2px solid #facc15;
+  outline-offset: -2px;
+  background: rgba(30, 41, 59, 0.72);
+  box-shadow: inset 4px 0 0 #facc15;
+}
+
+.history-record-row:active {
+  background: rgba(51, 65, 85, 0.72);
 }
 
 .history-record-table td code {
@@ -2311,11 +2530,105 @@ input:focus {
   padding: 8px 14px;
 }
 
+.history-table-bet {
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.history-table-bet > strong {
+  border: 1px solid rgba(250, 204, 21, 0.42);
+  border-radius: 999px;
+  background: rgba(3, 7, 18, 0.9);
+  color: #fef3c7;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.history-table-bet.active > strong {
+  border-color: #38bdf8;
+  background: #0369a1;
+  color: #fff;
+}
+
+.history-chip-stack {
+  position: relative;
+  width: 28px;
+  height: 23px;
+  display: inline-block;
+  flex: 0 0 auto;
+  font-style: normal;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.34));
+}
+
+.history-chip-stack > span {
+  position: absolute;
+  left: 1px;
+  width: 24px;
+  height: 9px;
+  box-sizing: border-box;
+  border: 2px dashed rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+.history-chip-stack > span:nth-child(1) {
+  bottom: 0;
+  background: #b45309;
+}
+
+.history-chip-stack > span:nth-child(2) {
+  bottom: 6px;
+  background: #f59e0b;
+}
+
+.history-chip-stack > span:nth-child(3) {
+  bottom: 12px;
+  background: #facc15;
+}
+
+.history-chip-stack--compact {
+  width: 18px;
+  height: 15px;
+  filter: none;
+}
+
+.history-chip-stack--compact > span {
+  width: 16px;
+  height: 6px;
+  border-width: 1px;
+}
+
+.history-chip-stack--compact > span:nth-child(2) {
+  bottom: 4px;
+}
+
+.history-chip-stack--compact > span:nth-child(3) {
+  bottom: 8px;
+}
+
+.history-table-bet.active .history-chip-stack {
+  animation: history-chip-drop 0.28s ease-out;
+}
+
+@keyframes history-chip-drop {
+  from { opacity: 0; translate: 0 -16px; scale: 0.72; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
 .history-replay-seat {
   position: absolute;
   z-index: 2;
   width: clamp(126px, 10vw, 164px);
-  min-height: 62px;
+  min-height: 72px;
   transform: translate(-50%, -50%);
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 13px;
@@ -2338,6 +2651,15 @@ input:focus {
   box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.18), 0 8px 28px rgba(0, 0, 0, 0.48);
 }
 
+.history-replay-seat.folded {
+  opacity: 0.46;
+  filter: saturate(0.35);
+}
+
+.history-replay-seat.folded.active {
+  opacity: 0.78;
+}
+
 .history-replay-seat > strong {
   max-width: 100%;
   overflow: hidden;
@@ -2346,10 +2668,28 @@ input:focus {
   white-space: nowrap;
 }
 
-.history-replay-seat > span {
+.history-seat-meta {
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   color: #94a3b8;
   font-size: clamp(10px, 0.72vw, 12px);
-  margin-top: 2px;
+}
+
+.history-seat-meta > span {
+  border-right: 1px solid rgba(148, 163, 184, 0.2);
+  padding-right: 7px;
+}
+
+.history-seat-meta > b {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #cbd5e1;
+  font-size: inherit;
+  white-space: nowrap;
 }
 
 .history-replay-seat em {
@@ -2364,24 +2704,6 @@ input:focus {
   padding: 7px 11px;
   white-space: nowrap;
   box-shadow: 0 7px 20px rgba(2, 132, 199, 0.32);
-}
-
-.history-replay-seat em.with-chips {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.history-replay-seat em.with-chips::before {
-  content: '●';
-  width: 20px;
-  height: 20px;
-  box-sizing: border-box;
-  border: 3px dashed rgba(255, 255, 255, 0.86);
-  border-radius: 50%;
-  background: #f59e0b;
-  color: transparent;
-  box-shadow: 2px -2px 0 #facc15, 4px -4px 0 #b45309;
 }
 
 .history-seat-cards {
@@ -2545,6 +2867,32 @@ input:focus {
 
   .history-analysis-layout {
     grid-template-columns: 1fr;
+  }
+
+  .history-tabs {
+    gap: 2px;
+    padding: 3px;
+  }
+
+  .history-tabs button {
+    min-height: 50px;
+    padding: 10px 4px;
+    font-size: 12px;
+  }
+
+  .hole-card-report-head {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .hole-card-report-actions {
+    justify-items: start;
+  }
+
+  .hole-card-report-legend em {
+    width: 100%;
+    margin-left: 0;
   }
 
   .site--history .history-analysis-layout {
