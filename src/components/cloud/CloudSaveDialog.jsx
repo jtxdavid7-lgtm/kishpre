@@ -48,7 +48,7 @@ export function CloudSaveDialog({
         tabIndex={-1}
       >
         <header>
-          <div><span>KISH2NOTE CLOUD LIBRARY</span><h2 id={titleId}>{enableAutoSave ? '开启牌谱自动保存' : `保存到${libraryName}`}</h2></div>
+          <div><span>K2note CLOUD LIBRARY</span><h2 id={titleId}>{enableAutoSave ? '开启牌谱自动保存' : `保存到${libraryName}`}</h2></div>
           <button type="button" aria-label="关闭保存确认" disabled={saving} onClick={onClose}>×</button>
         </header>
 

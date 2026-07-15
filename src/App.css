@@ -68,6 +68,7 @@ body {
 
 .account-login,
 .account-library,
+.account-google,
 .account-logout {
   min-height: 38px;
   padding: 8px 14px;
@@ -93,6 +94,32 @@ body {
   background: rgba(37, 99, 235, 0.3);
 }
 
+.account-google {
+  color: #e5edf9;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(203, 213, 225, 0.24);
+}
+
+.account-google:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(203, 213, 225, 0.42);
+}
+
+.account-google--linked,
+.account-google--linked:disabled {
+  color: #7de8aa;
+  background: rgba(38, 183, 103, 0.1);
+  border-color: rgba(75, 220, 139, 0.28);
+  cursor: default;
+  opacity: 1;
+}
+
+.account-google:disabled:not(.account-google--linked) {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .account-logout {
   padding-inline: 10px;
   color: #8ea2bf;
@@ -116,6 +143,17 @@ body {
   border-radius: 50%;
   background: #41df8b;
   box-shadow: 0 0 0 4px rgba(65, 223, 139, 0.1);
+}
+
+.account-notice {
+  max-width: 190px;
+  color: #75dda2;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.account-notice--error {
+  color: #ff9a9a;
 }
 
 .lang-switch {
@@ -4539,8 +4577,20 @@ input:focus {
     flex-wrap: wrap;
   }
 
+  .account-login,
+  .account-library,
+  .account-google,
+  .account-logout {
+    min-height: 44px;
+  }
+
   .account-identity {
     display: none;
+  }
+
+  .account-notice {
+    width: 100%;
+    max-width: none;
   }
 
   .site--home {

@@ -169,7 +169,7 @@ const HOMEPAGE_COPY = {
   zh: {
     hero: {
       eyebrow: 'KISHPOKER 旗舰工具',
-      product: 'kish2note',
+      product: 'K2note',
       title: '把 GG 牌谱，变成可以行动的数据',
       desc: '每个 session 打完后导入 GGPoker 手牌历史，立即在浏览器本地复盘；登录后可把牌谱持续积累到自己的云端牌谱库。',
       privacy: '免登录纯本地 · 登录后首次确认即可自动积累牌谱',
@@ -179,10 +179,10 @@ const HOMEPAGE_COPY = {
       previewFooter: '从结果出发，回到每一个决策'
     },
     flagship: {
-      eyebrow: 'KISH2NOTE · GG 牌谱分析',
+      eyebrow: 'K2note · GG 牌谱分析',
       title: '你的 GG 牌谱分析工作台',
       desc: '既能免登录分析单次 session，也能登录积累长期牌谱；从长期结果到单手复盘，用一套清晰的报告重新认识自己的打法。',
-      action: '进入 kish2note',
+      action: '进入 K2note',
       capabilities: [
         { title: '资金盈亏', desc: '查看总输赢、BB/100、资金与 EV 曲线，以及不同阶段的表现变化。' },
         { title: '数据分析', desc: '拆解 VPIP、PFR、3Bet 等核心数据，并按级别、位置和底牌深入筛选。' },
@@ -220,7 +220,7 @@ const HOMEPAGE_COPY = {
         desc: '在直播或牌桌边快速生成随机数，辅助混合策略执行。'
       },
       reports: {
-        label: 'KISH2NOTE',
+        label: 'K2note',
         title: 'GG 牌谱分析工作台',
         desc: '导入 GGPoker 手牌历史，从盈亏结果到打法结构完成一站式复盘。'
       }
@@ -229,14 +229,14 @@ const HOMEPAGE_COPY = {
       range: '查看演示',
       equity: '立即计算',
       variance: '开始模拟',
-      history: '进入 kish2note',
+      history: '进入 K2note',
       download: '下载插件'
     }
   },
   en: {
     hero: {
       eyebrow: 'KISHPOKER FLAGSHIP TOOL',
-      product: 'kish2note',
+      product: 'K2note',
       title: 'Turn GG hand histories into decisions you can act on',
       desc: 'Review each GGPoker session locally in your browser, or sign in and continuously build a private cloud library for long-term analysis.',
       privacy: 'Local while signed out · One clear opt-in enables signed-in auto-save',
@@ -246,10 +246,10 @@ const HOMEPAGE_COPY = {
       previewFooter: 'Start with results, then return to every decision'
     },
     flagship: {
-      eyebrow: 'KISH2NOTE · GG HAND ANALYSIS',
+      eyebrow: 'K2note · GG HAND ANALYSIS',
       title: 'Your GG hand-history analysis workspace',
       desc: 'Analyze a session without signing in, or build a private long-term library with clearly controlled auto-save after signing in.',
-      action: 'Open kish2note',
+      action: 'Open K2note',
       capabilities: [
         { title: 'Profit & loss', desc: 'Review net results, BB/100, bankroll and EV curves, and how performance changes over time.' },
         { title: 'Data analysis', desc: 'Break down VPIP, PFR, 3Bet, and more by stake, position, and starting hand.' },
@@ -287,7 +287,7 @@ const HOMEPAGE_COPY = {
         desc: 'Generate quick random numbers while streaming or playing to support mixed strategies.'
       },
       reports: {
-        label: 'KISH2NOTE',
+        label: 'K2note',
         title: 'GG hand-history analysis workspace',
         desc: 'Import GGPoker hands and move from results to a structured review of your game.'
       }
@@ -296,7 +296,7 @@ const HOMEPAGE_COPY = {
       range: 'View demo',
       equity: 'Calculate now',
       variance: 'Run simulation',
-      history: 'Open kish2note',
+      history: 'Open K2note',
       download: 'Download plugin'
     }
   }
@@ -2608,19 +2608,69 @@ function maskedAccountLabel(user) {
   const digits = String(raw).replace(/\D/g, '');
   const local = digits.length > 11 ? digits.slice(-11) : digits;
   if (/^1\d{10}$/.test(local)) return `${local.slice(0, 3)}****${local.slice(-4)}`;
+
+  const email = String(
+    user?.email
+      ?? user?.user_metadata?.email
+      ?? user?.identity_data?.email
+      ?? ''
+  ).trim();
+  const at = email.lastIndexOf('@');
+  if (at > 0 && at < email.length - 1) {
+    const localPart = email.slice(0, at);
+    const visible = localPart.slice(0, Math.min(2, localPart.length));
+    return `${visible}***${email.slice(at)}`;
+  }
+
+  const name = String(
+    user?.name
+      ?? user?.nickname
+      ?? user?.user_metadata?.name
+      ?? user?.user_metadata?.full_name
+      ?? ''
+  ).trim();
+  if (name) return name.length > 10 ? `${name.slice(0, 10)}…` : name;
   return '我的账户';
 }
 
-function AccountControl({ showLibrary = true }) {
-  const { authStatus, isAuthenticated, user, openLogin, logout } = useAuth();
+const GOOGLE_LOGIN_RELOAD_WARNING = 'Google 授权会刷新页面，当前尚未保存的导入会丢失。若要使用 Google，请先确认仍保留原始牌谱文件，刷新页面后登录，再重新导入；也可以继续使用手机号登录，当前结果会保留。';
+
+function AccountControl({ showLibrary = true, googleDisabledReason = '' }) {
+  const {
+    authStatus,
+    authNotice,
+    googleLinked,
+    identityError,
+    identityStatus,
+    isAuthenticated,
+    openGoogleLink,
+    user,
+    openLogin,
+    logout
+  } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [linkingGoogle, setLinkingGoogle] = useState(false);
 
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
       await logout();
+    } catch {
+      // 关联流程中的退出限制会显示在账户状态区域。
     } finally {
       setLoggingOut(false);
+    }
+  };
+
+  const handleLinkGoogle = async () => {
+    if (googleLinked || linkingGoogle || googleDisabledReason) return;
+    setLinkingGoogle(true);
+    try {
+      await openGoogleLink();
+    } catch {
+      // 具体错误由账户状态区域显示。
+    } finally {
+      setLinkingGoogle(false);
     }
   };
 
@@ -2629,14 +2679,52 @@ function AccountControl({ showLibrary = true }) {
   }
 
   if (!isAuthenticated) {
-    return <button type="button" className="account-login" onClick={() => openLogin()}>手机号登录</button>;
+    const visibleNotice = identityError || authNotice;
+    return (
+      <div className="account-control">
+        <button
+          type="button"
+          className="account-login"
+          onClick={() => openLogin({ googleDisabledReason })}
+        >登录 / 注册</button>
+        {visibleNotice && (
+          <span className={`account-notice${identityError ? ' account-notice--error' : ''}`} role={identityError ? 'alert' : 'status'}>
+            {visibleNotice}
+          </span>
+        )}
+      </div>
+    );
   }
+
+  const checkingIdentity = identityStatus === 'loading';
+  const googleLinkBlockedReason = googleLinked ? '' : googleDisabledReason;
+  const googleLabel = googleLinked
+    ? 'Google 已关联'
+    : googleLinkBlockedReason
+      ? '先保留牌谱'
+    : linkingGoogle || identityStatus === 'linking'
+      ? '前往 Google…'
+      : checkingIdentity
+        ? '确认登录方式…'
+        : '关联 Google';
 
   return (
     <div className="account-control">
       {showLibrary && <button type="button" className="account-library" onClick={() => window.location.assign('?tool=library')}>我的牌谱库</button>}
       <span className="account-identity"><i aria-hidden="true" />{maskedAccountLabel(user)}</span>
+      <button
+        type="button"
+        className={`account-google${googleLinked ? ' account-google--linked' : ''}`}
+        disabled={googleLinked || Boolean(googleLinkBlockedReason) || checkingIdentity || linkingGoogle || identityStatus === 'linking'}
+        onClick={handleLinkGoogle}
+        title={googleLinkBlockedReason || identityError || (googleLinked ? '可使用手机号或 Google 登录同一个牌谱库' : '把 Google 登录关联到当前账户')}
+      >{googleLabel}</button>
       <button type="button" className="account-logout" disabled={loggingOut} onClick={handleLogout}>{loggingOut ? '退出中…' : '退出'}</button>
+      {(googleLinkBlockedReason || authNotice || identityError) && (
+        <span className={`account-notice${identityError ? ' account-notice--error' : ''}`} role={identityError ? 'alert' : 'status'}>
+          {identityError || googleLinkBlockedReason || authNotice}
+        </span>
+      )}
     </div>
   );
 }
@@ -3016,7 +3104,7 @@ function HandHistoryView() {
 
   const exportCsv = () => {
     if (!filteredResults.length) return;
-    downloadText(`kish2note-${hero || 'hero'}-hands.csv`, exportSummaryCsv(filteredResults));
+    downloadText(`K2note-${hero || 'hero'}-hands.csv`, exportSummaryCsv(filteredResults));
   };
 
   const openCloudSave = () => {
@@ -3027,7 +3115,10 @@ function HandHistoryView() {
       setCloudSaveOpen(true);
       return;
     }
-    openLogin({ onSuccess: () => setCloudSaveOpen(true) });
+    openLogin({
+      onSuccess: () => setCloudSaveOpen(true),
+      googleDisabledReason: GOOGLE_LOGIN_RELOAD_WARNING
+    });
   };
 
   const confirmCloudSave = async ({ sessionName } = {}) => {
@@ -3054,10 +3145,12 @@ function HandHistoryView() {
   return (
     <div className="site site--history">
       <nav className="top-nav">
-        <div className="brand">KISHPOKER · KISH2NOTE</div>
+        <div className="brand">KISHPOKER · K2note</div>
         <div className="cta-row">
           <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
-          <AccountControl />
+          <AccountControl
+            googleDisabledReason={sourceMode === 'local' && hands.length > 0 ? GOOGLE_LOGIN_RELOAD_WARNING : ''}
+          />
           <button type="button" className="secondary" onClick={() => window.location.assign('?tool=range')}>Range Lab</button>
           <button type="button" className="secondary" onClick={() => window.location.assign('?tool=variance')}>波动计算</button>
         </div>
@@ -3066,7 +3159,7 @@ function HandHistoryView() {
       <section className="range-panel history-panel" style={{ marginTop: 0 }}>
         <header>
           <p className="eyebrow">GGPoker · Local analysis</p>
-          <h2>kish2note</h2>
+          <h2>K2note</h2>
           <p className="subtext">免登录时，牌谱始终只在浏览器本地解析。登录后，导入的已支持牌谱默认保存到你的“我的牌谱”；首次同步会明确确认，之后可随时关闭自动保存。</p>
         </header>
 
@@ -3250,7 +3343,7 @@ function HandHistoryView() {
               </aside>
 
               <div className="history-analysis-main">
-                <nav className="history-tabs" aria-label="kish2note 分析视图">
+                <nav className="history-tabs" aria-label="K2note 分析视图">
                   <button
                     type="button"
                     className={historyTab === 'overview' ? 'active' : ''}
@@ -3488,7 +3581,7 @@ function CloudLibraryView() {
   return (
     <div className="site site--library">
       <nav className="top-nav">
-        <button type="button" className="brand brand--button" onClick={() => window.location.assign('/')}>KISHPOKER · KISH2NOTE</button>
+        <button type="button" className="brand brand--button" onClick={() => window.location.assign('/')}>KISHPOKER · K2note</button>
         <div className="cta-row">
           <button type="button" className="secondary" onClick={() => window.location.assign('?tool=history')}>分析新 Session</button>
           <AccountControl showLibrary={false} />
@@ -3496,7 +3589,7 @@ function CloudLibraryView() {
       </nav>
 
       <header className="library-hero">
-        <div><p className="eyebrow">KISH2NOTE CLOUD LIBRARY</p><h1>我的牌谱库</h1><p>每个账户都有一座独立的逻辑牌谱库。登录后导入的新牌谱默认保存进来，再按时间、级别和游戏类型挑选需要分析的数据。</p></div>
+        <div><p className="eyebrow">K2note CLOUD LIBRARY</p><h1>我的牌谱库</h1><p>每个账户都有一座独立的逻辑牌谱库。登录后导入的新牌谱默认保存进来，再按时间、级别和游戏类型挑选需要分析的数据。</p></div>
         {isAuthenticated && (
           <div className="library-totals">
             <span><small>已保存</small><strong>{sessions.length.toLocaleString()} Sessions</strong></span>
@@ -3512,8 +3605,8 @@ function CloudLibraryView() {
         <section className="library-state">
           <span className="library-lock" aria-hidden="true">◇</span>
           <h2>登录后查看你的长期牌谱</h2>
-          <p>支持全部中国大陆手机号。首次导入时确认一次云端范围，之后可自动积累长期牌谱。</p>
-          <button type="button" className="primary" onClick={() => openLogin()}>手机号登录 / 注册</button>
+          <p>支持全部中国大陆手机号和 Google 账号。首次导入时确认一次云端范围，之后可自动积累长期牌谱。</p>
+          <button type="button" className="primary" onClick={() => openLogin({ returnTo: '/?tool=library' })}>登录 / 注册</button>
         </section>
       )}
 
@@ -3611,7 +3704,7 @@ function HomeView() {
       window.location.assign('?tool=library');
       return;
     }
-    openLogin({ onSuccess: () => window.location.assign('?tool=library') });
+    openLogin({ returnTo: '/?tool=library' });
   };
 
   const downloadPlugin = () => {
@@ -3628,12 +3721,12 @@ function HomeView() {
 
   useEffect(() => {
     document.documentElement.lang = language === 'en' ? 'en' : 'zh-CN';
-    document.title = 'kish2note | KishPoker';
+    document.title = 'K2note | KishPoker';
     document.querySelector('meta[name="description"]')?.setAttribute(
       'content',
       language === 'en'
-        ? 'kish2note is KishPoker’s local-first GG hand-history workspace with an optional private cloud library for long-term review.'
-        : 'kish2note 是 KishPoker 的 GG 手牌分析工具，支持免登录本地复盘，也可登录后持续积累个人云端牌谱库。'
+        ? 'K2note is KishPoker’s local-first GG hand-history workspace with an optional private cloud library for long-term review.'
+        : 'K2note 是 KishPoker 的 GG 手牌分析工具，支持免登录本地复盘，也可登录后持续积累个人云端牌谱库。'
     );
   }, [language]);
 
@@ -3781,7 +3874,7 @@ function HomeView() {
         </div>
       </section>
       <footer className="site-footer">
-        <span>© 2026 KishPoker · kish2note</span>
+        <span>© 2026 KishPoker · K2note</span>
         <div><a href="/?page=terms">用户协议</a><a href="/?page=privacy">隐私政策</a></div>
       </footer>
     </div>
@@ -3792,31 +3885,31 @@ function LegalView({ type }) {
   const privacy = type === 'privacy';
   useEffect(() => {
     document.documentElement.lang = 'zh-CN';
-    document.title = `${privacy ? '隐私政策' : '用户协议'} | kish2note`;
+    document.title = `${privacy ? '隐私政策' : '用户协议'} | K2note`;
   }, [privacy]);
 
   return (
     <div className="site site--legal">
       <nav className="top-nav">
-        <button type="button" className="brand brand--button" onClick={() => window.location.assign('/')}>KISHPOKER · KISH2NOTE</button>
+        <button type="button" className="brand brand--button" onClick={() => window.location.assign('/')}>KISHPOKER · K2note</button>
         <AccountControl />
       </nav>
       <main className="legal-document">
-        <p className="eyebrow">KISH2NOTE · 2026-07-15 生效</p>
+        <p className="eyebrow">K2note · 2026-07-15 生效</p>
         <h1>{privacy ? '隐私政策' : '用户协议'}</h1>
         {privacy ? (
           <>
             <section><h2>1. 两种使用方式</h2><p>免登录使用时，文件只在当前浏览器读取和解析，选择文件、拖入文件或查看报表不会触发上传。登录后首次导入牌谱时，我们会明确说明云端保存范围并请你确认；确认后，登录状态下新导入的受支持牌谱默认自动保存到你的“我的牌谱”。</p></section>
-            <section><h2>2. 我们处理的数据</h2><p>登录时处理你的中国大陆手机号、短信验证结果、账户标识和必要的安全日志。云端保存时处理你授权提交的 GGPoker 原始牌谱文本，以及由其解析出的时间、级别、游戏类型、玩家名、底牌、公共牌、行动、输赢和统计结果。我们不会上传本地文件名、未识别为受支持牌谱的内容或你关闭自动保存后新导入的牌谱。</p></section>
-            <section><h2>3. 用途与存储</h2><p>这些数据用于身份认证、保存和恢复牌谱、按时间/级别/游戏类型筛选、跨 session 统计、去重、播放器与漏洞分析。每个账户使用共享数据库中的独立逻辑牌谱库，并通过用户归属和行级权限隔离。当前云服务由腾讯云 CloudBase 上海地域提供；前端只使用可公开的 Publishable Key，不包含服务端管理密钥。</p></section>
+            <section><h2>2. 我们处理的数据</h2><p>登录时，根据你选择的方式处理中国大陆手机号、在浏览器中临时输入并直接交由认证服务校验的密码与短信验证结果，或 Google 提供的账号标识、邮箱、昵称和头像（以授权返回内容为准），以及统一的 K2note 账户标识和必要安全日志。云端保存时处理你授权提交的 GGPoker 原始牌谱文本，以及由其解析出的时间、级别、游戏类型、玩家名、底牌、公共牌、行动、输赢和统计结果。我们不会上传本地文件名、未识别为受支持牌谱的内容或你关闭自动保存后新导入的牌谱。</p></section>
+            <section><h2>3. 用途与存储</h2><p>这些数据用于身份认证、保存和恢复牌谱、按时间/级别/游戏类型筛选、跨 session 统计、去重、播放器与漏洞分析。每个账户使用共享数据库中的独立逻辑牌谱库，并通过用户归属和行级权限隔离。当前云服务由腾讯云 CloudBase 上海地域提供，Google 作为可选的第三方身份提供方；手机号密码由 CloudBase 身份认证服务处理，我们不会把明文密码写入牌谱数据库、本地存储或业务日志。Google OAuth 客户端密钥仅配置在 CloudBase 服务端，前端只使用可公开的 Publishable Key，不包含服务端管理密钥。</p></section>
             <section><h2>4. 保留、删除与安全</h2><p>云端牌谱会保留到你主动删除相应导入记录、提出账户数据删除请求或账户相关服务终止。数据库启用了逐用户行级权限，每个已登录用户只能读取和操作自己的记录。你可以在“我的牌谱库”中删除 session；账户删除与数据导出入口将在后续版本补充，在此之前可通过网站公布的反馈渠道提出请求。</p></section>
-            <section><h2>5. 你的选择</h2><p>你可以在“我的牌谱”或分析页随时关闭自动保存，也可以退出登录继续只做本地分析。关闭或拒绝云端保存不会影响本地分析；云端保存失败也不会阻断本地结果。再次开启时，系统仍按本政策处理新导入数据。短信可能产生服务商侧发送记录；请勿使用他人手机号登录，也不要保存你无权处理的牌谱。</p></section>
+            <section><h2>5. 你的选择</h2><p>你可以选择手机号或 Google 登录，也可以在“我的牌谱”或分析页随时关闭自动保存，或退出登录继续只做本地分析。关闭或拒绝云端保存不会影响本地分析；云端保存失败也不会阻断本地结果。再次开启时，系统仍按本政策处理新导入数据。短信可能产生服务商侧发送记录；请勿使用他人的手机号或 Google 账号登录，也不要保存你无权处理的牌谱。已有手机号账户应先用手机号登录，再主动关联 Google，以继续使用同一个牌谱库。</p></section>
             <section><h2>6. 未成年人</h2><p>本工具面向具备完全民事行为能力的成年人。未成年人不应创建账户或保存牌谱。</p></section>
           </>
         ) : (
           <>
-            <section><h2>1. 服务内容</h2><p>kish2note 提供 GGPoker 牌谱的本地分析、数据报表、牌局复盘，以及由用户明确选择的云端牌谱保存功能。分析结果用于学习和复盘，不构成收益承诺、博彩建议或对第三方平台规则的保证。</p></section>
-            <section><h2>2. 账户与资格</h2><p>你应为具备完全民事行为能力的成年人，并使用本人可控制的中国大陆手机号登录。请妥善保护短信验证码和登录设备；发现异常使用时应及时退出登录。</p></section>
+            <section><h2>1. 服务内容</h2><p>K2note 提供 GGPoker 牌谱的本地分析、数据报表、牌局复盘，以及由用户明确选择的云端牌谱保存功能。分析结果用于学习和复盘，不构成收益承诺、博彩建议或对第三方平台规则的保证。</p></section>
+            <section><h2>2. 账户与资格</h2><p>你应为具备完全民事行为能力的成年人，并使用本人可控制的中国大陆手机号或 Google 账号登录。请妥善保护登录密码、短信验证码、Google 账号和登录设备；发现异常使用时应及时重置密码并退出登录。若你已有手机号账户，应先登录该账户，并再次验证当前绑定手机号后再关联 Google；不同账户不会仅凭邮箱自动合并。</p></section>
             <section><h2>3. 内容责任</h2><p>你应确保对上传或保存的牌谱拥有合法处理权限。不得利用本服务侵犯他人权益、传播违法内容、攻击服务、绕过安全限制，或把工具用于第三方平台禁止的实时作弊行为。</p></section>
             <section><h2>4. 数据与隐私</h2><p>本地分析与云端保存的边界、数据类型和删除方式以《隐私政策》为准。免登录导入不会上传；登录用户在首次明确授权后可启用自动保存，并能随时关闭。</p></section>
             <section><h2>5. 服务变更与责任限制</h2><p>测试阶段的统计口径、功能和可用性可能调整。我们会尽力保持数据完整和服务安全，但建议你保留原始牌谱备份。因网络、云服务、第三方平台格式变化或不可抗力造成的中断，将在法律允许范围内处理。</p></section>
