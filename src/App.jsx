@@ -7,11 +7,17 @@ import { getRangePayload } from './lib/rangeEngine';
 import { simulateEquity } from './lib/equityEngine';
 import { useAuth } from './auth/AuthProvider.jsx';
 import { CloudSaveDialog } from './components/cloud/CloudSaveDialog.jsx';
+import { DatasetFilterPanel } from './components/DatasetFilterPanel.jsx';
 import {
   deleteCloudSession,
+  ensureDefaultCloudLibrary,
+  getCloudLibraryOverview,
+  hasCloudStorageConsent,
   listCloudSessions,
+  loadCloudLibraryHands,
   loadCloudSession,
-  saveHandsToCloud
+  saveHandsToCloud,
+  updateCloudLibrarySettings
 } from './lib/cloudLibrary.js';
 import JSZip from 'jszip';
 import { Archive } from 'libarchive.js';
@@ -24,6 +30,108 @@ import {
   summarizeHeroResults
 } from './lib/handHistoryAnalyzer';
 import './App.css';
+
+const DEFAULT_DATASET_FILTERS = Object.freeze({
+  timePreset: 'all',
+  dateFrom: '',
+  dateTo: '',
+  stakes: [],
+  gameTypes: []
+});
+
+function emptyDatasetFilters() {
+  return { ...DEFAULT_DATASET_FILTERS, stakes: [], gameTypes: [] };
+}
+
+function resultGameTypeKey(hand) {
+  return `${hand?.gameVariant ?? 'unknown'}:${hand?.bettingStructure ?? 'unknown'}:${hand?.tableType ?? 'unknown'}:${hand?.maxPlayers ?? 'unknown'}`;
+}
+
+function gameTypeDisplayLabel(hand) {
+  const variant = hand?.gameVariant === 'holdem' ? 'NLH'
+    : hand?.gameVariant?.startsWith('omaha') ? 'PLO'
+      : hand?.gameVariant === 'short_deck' ? '短牌' : '游戏未知';
+  const table = hand?.tableType === 'rush_cash' ? 'Rush & Cash'
+    : hand?.tableType === 'regular' ? '常规桌'
+      : hand?.tableType === 'all_in_or_fold' ? 'All-In or Fold'
+        : hand?.tableType === 'tournament' ? '锦标赛' : '桌型未知';
+  return `${variant} · ${table}`;
+}
+
+function dateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function addLocalDays(value, amount) {
+  const [year, month, day] = String(value).split('-').map(Number);
+  if (!year || !month || !day) return '';
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + amount);
+  return dateKey(date);
+}
+
+function datasetDateRange(filters, now = new Date()) {
+  const preset = filters?.timePreset ?? 'all';
+  if (preset === 'all') return { from: '', to: '' };
+  if (preset === 'custom') {
+    return { from: filters?.dateFrom || '', to: filters?.dateTo || '' };
+  }
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let start = new Date(today);
+  if (preset === 'week') {
+    const mondayOffset = (today.getDay() + 6) % 7;
+    start.setDate(today.getDate() - mondayOffset);
+  } else if (preset === 'month') {
+    start = new Date(today.getFullYear(), today.getMonth(), 1);
+  } else if (preset === 'last30') {
+    start.setDate(today.getDate() - 29);
+  }
+  return { from: dateKey(start), to: dateKey(today) };
+}
+
+function matchesDatasetFilters(hand, filters) {
+  const range = datasetDateRange(filters);
+  const handDate = String(hand?.date ?? '').slice(0, 10).replaceAll('/', '-');
+  if ((range.from || range.to) && !handDate) return false;
+  if (range.from && handDate < range.from) return false;
+  if (range.to && handDate > range.to) return false;
+  if (filters?.stakes?.length && !filters.stakes.includes(hand?.stakes)) return false;
+  if (filters?.gameTypes?.length && !filters.gameTypes.includes(resultGameTypeKey(hand))) return false;
+  return true;
+}
+
+function filtersFromSearch(params) {
+  const timePreset = params.get('period') || 'all';
+  return {
+    timePreset: ['all', 'today', 'week', 'month', 'last30', 'custom'].includes(timePreset) ? timePreset : 'all',
+    dateFrom: params.get('from') || '',
+    dateTo: params.get('to') || '',
+    stakes: params.getAll('stake').filter(Boolean),
+    gameTypes: params.getAll('game').filter(Boolean)
+  };
+}
+
+function filtersToSearch(filters) {
+  const params = new URLSearchParams();
+  if (filters.timePreset && filters.timePreset !== 'all') params.set('period', filters.timePreset);
+  if (filters.dateFrom) params.set('from', filters.dateFrom);
+  if (filters.dateTo) params.set('to', filters.dateTo);
+  filters.stakes.forEach((value) => params.append('stake', value));
+  filters.gameTypes.forEach((value) => params.append('game', value));
+  return params;
+}
+
+function cloudDateFilters(filters) {
+  const range = datasetDateRange(filters);
+  return {
+    ...filters,
+    from: range.from ? `${range.from}T00:00:00+08:00` : '',
+    to: range.to ? `${addLocalDays(range.to, 1)}T00:00:00+08:00` : ''
+  };
+}
 
 const sceneOptions = Object.values(BASE_RANGES).map((range) => ({
   value: range.key,
@@ -64,8 +172,8 @@ const HOMEPAGE_COPY = {
       eyebrow: 'KISHPOKER 旗舰工具',
       product: 'kish2note',
       title: '把 GG 牌谱，变成可以行动的数据',
-      desc: '每个 session 打完后导入 GGPoker 手牌历史，立即在浏览器本地复盘；登录后也可以把确认过的牌谱长期保存到自己的云端牌谱库。',
-      privacy: '默认本地解析 · 只有你确认保存时才会同步云端',
+      desc: '每个 session 打完后导入 GGPoker 手牌历史，立即在浏览器本地复盘；登录后可把牌谱持续积累到自己的云端牌谱库。',
+      privacy: '免登录纯本地 · 登录后首次确认即可自动积累牌谱',
       primaryCta: '开始分析 GG 牌谱',
       previewLabel: '分析视图预览',
       previewTitle: '一份牌谱，重新看清你的打法',
@@ -85,7 +193,7 @@ const HOMEPAGE_COPY = {
     },
     modes: {
       local: { label: '免登录', title: '分析这次 Session', desc: '导入刚打完的牌谱，只在当前浏览器本地解析和查看。', action: '开始本地分析' },
-      cloud: { label: '登录后', title: '积累我的全部牌谱', desc: '每次由你确认保存，跨 session 查看长期趋势和历史数据。', action: '进入我的牌谱库' }
+      cloud: { label: '登录后', title: '积累我的全部牌谱', desc: '首次确认后自动保存新牌谱，按时间、级别和游戏类型分析长期数据。', action: '进入我的牌谱库' }
     },
     section: {
       title: '更多扑克工具',
@@ -131,8 +239,8 @@ const HOMEPAGE_COPY = {
       eyebrow: 'KISHPOKER FLAGSHIP TOOL',
       product: 'kish2note',
       title: 'Turn GG hand histories into decisions you can act on',
-      desc: 'Review each GGPoker session locally in your browser, or sign in and explicitly save selected hands to your private cloud library for long-term analysis.',
-      privacy: 'Local by default · Cloud sync happens only after your confirmation',
+      desc: 'Review each GGPoker session locally in your browser, or sign in and continuously build a private cloud library for long-term analysis.',
+      privacy: 'Local while signed out · One clear opt-in enables signed-in auto-save',
       primaryCta: 'Analyze GG Hand Histories',
       previewLabel: 'ANALYSIS PREVIEW',
       previewTitle: 'One hand-history file. A clearer view of your game.',
@@ -141,7 +249,7 @@ const HOMEPAGE_COPY = {
     flagship: {
       eyebrow: 'KISH2NOTE · GG HAND ANALYSIS',
       title: 'Your GG hand-history analysis workspace',
-      desc: 'Analyze a session without signing in, or build a private long-term library after signing in and explicitly choosing what to save.',
+      desc: 'Analyze a session without signing in, or build a private long-term library with clearly controlled auto-save after signing in.',
       action: 'Open kish2note',
       capabilities: [
         { title: 'Profit & loss', desc: 'Review net results, BB/100, bankroll and EV curves, and how performance changes over time.' },
@@ -152,7 +260,7 @@ const HOMEPAGE_COPY = {
     },
     modes: {
       local: { label: 'NO SIGN-IN', title: 'Analyze this session', desc: 'Import your latest hands and keep parsing entirely in this browser.', action: 'Start local analysis' },
-      cloud: { label: 'SIGNED IN', title: 'Build my full library', desc: 'Explicitly choose what to save and review trends across sessions.', action: 'Open my library' }
+      cloud: { label: 'SIGNED IN', title: 'Build my full library', desc: 'Confirm once, then auto-save new imports and filter them by date, stake, and game type.', action: 'Open my library' }
     },
     section: {
       title: 'More poker tools',
@@ -2536,32 +2644,40 @@ function AccountControl({ showLibrary = true }) {
 
 function HandHistoryView() {
   const { authStatus, isAuthenticated, openLogin } = useAuth();
-  const cloudSessionId = typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search).get('session')
-    : null;
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const cloudSessionId = searchParams.get('session');
+  const cloudLibraryId = searchParams.get('library');
+  const cloudSourceId = cloudSessionId ? `session:${cloudSessionId}` : cloudLibraryId ? `library:${cloudLibraryId}` : '';
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const cloudLoadRef = useRef('');
   const cloudLoginPromptedRef = useRef(false);
-  const [status, setStatus] = useState(cloudSessionId ? 'loading' : 'idle');
-  const [message, setMessage] = useState(cloudSessionId ? '正在确认登录状态…' : '');
+  const [status, setStatus] = useState(cloudSourceId ? 'loading' : 'idle');
+  const [message, setMessage] = useState(cloudSourceId ? '正在确认登录状态…' : '');
   const [hands, setHands] = useState([]);
   const [fileMeta, setFileMeta] = useState(null);
   const [hero, setHero] = useState('');
-  const [stakeFilter, setStakeFilter] = useState('all');
+  const [datasetFilters, setDatasetFilters] = useState(() => (
+    cloudLibraryId ? filtersFromSearch(searchParams) : emptyDatasetFilters()
+  ));
   const [positionFilter, setPositionFilter] = useState('all');
   const [holeCardFilter, setHoleCardFilter] = useState(() => ({ ranks: [null, null], suitedOnly: false }));
   const [holeCardFilterOpen, setHoleCardFilterOpen] = useState(false);
   const [startTp, setStartTp] = useState('0');
   const [endTp, setEndTp] = useState('0');
   const [historyTab, setHistoryTab] = useState('overview');
-  const [sourceMode, setSourceMode] = useState(cloudSessionId ? 'cloud' : 'local');
+  const [sourceMode, setSourceMode] = useState(cloudSourceId ? 'cloud' : 'local');
   const [cloudSession, setCloudSession] = useState(null);
+  const [cloudLibrary, setCloudLibrary] = useState(null);
   const [cloudSaveOpen, setCloudSaveOpen] = useState(false);
   const [cloudSaving, setCloudSaving] = useState(false);
   const [cloudSaveProgress, setCloudSaveProgress] = useState(null);
   const [cloudSaveError, setCloudSaveError] = useState('');
   const [savedSessionId, setSavedSessionId] = useState(null);
+  const [cloudSaveIntent, setCloudSaveIntent] = useState('manual');
+  const cloudLoadKey = cloudLibraryId
+    ? `${cloudSourceId}:${filtersToSearch(datasetFilters).toString()}`
+    : cloudSourceId;
 
   const players = useMemo(() => rankedPlayers(hands), [hands]);
   const rawResults = useMemo(() => (
@@ -2571,23 +2687,38 @@ function HandHistoryView() {
   const positionOptions = useMemo(() => (
     POSITIONS.filter((pos) => rawResults.some((hand) => hand.position === pos))
   ), [rawResults]);
-  const stakeFilterOptions = useMemo(() => [
-    { value: 'all', label: '全部' },
-    ...stakeOptions.map((stake) => ({ value: stake, label: stakeLabel(stake) }))
-  ], [stakeOptions]);
+  const datasetStakeOptions = useMemo(() => stakeOptions
+    .map((stake) => ({
+      value: stake,
+      label: stakeLabel(stake),
+      count: rawResults.filter((hand) => hand.stakes === stake).length
+    })), [rawResults, stakeOptions]);
+  const datasetGameTypeOptions = useMemo(() => {
+    const byType = new Map();
+    for (const hand of rawResults) {
+      const key = resultGameTypeKey(hand);
+      const existing = byType.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        byType.set(key, { value: key, label: gameTypeDisplayLabel(hand), count: 1 });
+      }
+    }
+    return [...byType.values()];
+  }, [rawResults]);
   const positionFilterOptions = useMemo(() => [
     { value: 'all', label: '全部' },
     ...positionOptions.map((position) => ({ value: position, label: position }))
   ], [positionOptions]);
   const filteredResults = useMemo(() => rawResults.filter((hand) => (
-    (stakeFilter === 'all' || hand.stakes === stakeFilter)
+    matchesDatasetFilters(hand, datasetFilters)
     && (positionFilter === 'all' || hand.position === positionFilter)
     && matchesHoleFilter(hand.cards ?? [], holeCardFilter)
-  )), [holeCardFilter, positionFilter, rawResults, stakeFilter]);
+  )), [datasetFilters, holeCardFilter, positionFilter, rawResults]);
   const holeCardFilterActive = holeCardFilter.ranks.some(Boolean) || holeCardFilter.suitedOnly;
   const overallSummary = useMemo(() => summarizeHeroResults(rawResults), [rawResults]);
   const summary = useMemo(() => summarizeHeroResults(filteredResults), [filteredResults]);
-  const mainStake = stakeOptions[0] ? stakeLabel(stakeOptions[0]) : '-';
+  const mainStake = summary.stakes?.[0]?.label ? stakeLabel(summary.stakes[0].label) : '-';
   const tpDelta = Number(endTp) - Number(startTp);
   const expectedTp = overallSummary.gameRake * 100;
   const pvi = expectedTp ? (tpDelta / expectedTp) * 100 : 0;
@@ -2666,12 +2797,26 @@ function HandHistoryView() {
   ];
 
   useEffect(() => {
-    if (!cloudSessionId) return undefined;
+    if (!isAuthenticated) {
+      const timer = window.setTimeout(() => setCloudLibrary(null), 0);
+      return () => window.clearTimeout(timer);
+    }
+    let active = true;
+    ensureDefaultCloudLibrary().then((library) => {
+      if (active) setCloudLibrary(library);
+    }).catch(() => {
+      // Cloud readiness errors are surfaced when the user actually saves or opens the library.
+    });
+    return () => { active = false; };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!cloudSourceId) return undefined;
     if (authStatus === 'loading') return undefined;
     if (!isAuthenticated) {
       const timer = window.setTimeout(() => {
         setStatus(authStatus === 'error' ? 'error' : 'idle');
-        setMessage(authStatus === 'error' ? '暂时无法读取登录状态，请检查网络后重试。' : '登录后才能读取这个云端 Session。');
+        setMessage(authStatus === 'error' ? '暂时无法读取登录状态，请检查网络后重试。' : '登录后才能读取这个云端牌谱库。');
       }, 0);
       if (authStatus === 'guest' && !cloudLoginPromptedRef.current) {
         cloudLoginPromptedRef.current = true;
@@ -2679,15 +2824,17 @@ function HandHistoryView() {
       }
       return () => window.clearTimeout(timer);
     }
-    if (cloudLoadRef.current === cloudSessionId) return undefined;
+    if (cloudLoadRef.current === cloudLoadKey) return undefined;
 
-    cloudLoadRef.current = cloudSessionId;
+    cloudLoadRef.current = cloudLoadKey;
     let active = true;
     Promise.resolve().then(() => {
       if (!active) return null;
       setStatus('loading');
-      setMessage('正在读取云端 Session…');
-      return loadCloudSession(cloudSessionId);
+      setMessage(cloudSessionId ? '正在读取云端 Session…' : '正在按条件读取我的牌谱…');
+      return cloudSessionId
+        ? loadCloudSession(cloudSessionId)
+        : loadCloudLibraryHands({ libraryId: cloudLibraryId, filters: cloudDateFilters(datasetFilters) });
     }).then((result) => {
       if (!result) return;
       if (!active) return;
@@ -2703,27 +2850,76 @@ function HandHistoryView() {
         hands: nextHands.length,
         duplicates: 0,
         cloud: true,
-        sessionName: result.session?.name ?? ''
+        sessionName: result.session?.name ?? '',
+        libraryName: result.library?.name ?? ''
       });
       setCloudSession(result.session ?? null);
+      if (result.library) setCloudLibrary(result.library);
       setStartTp(String(result.startTp ?? 0));
       setEndTp(String(result.endTp ?? 0));
-      setStakeFilter('all');
+      if (cloudSessionId) setDatasetFilters(emptyDatasetFilters());
       setPositionFilter('all');
       setHoleCardFilter({ ranks: [null, null], suitedOnly: false });
       setHistoryTab('overview');
       setSourceMode('cloud');
       setStatus(nextHands.length ? 'ready' : 'empty');
-      setMessage(nextHands.length ? '' : '这个云端 Session 暂时没有牌谱。');
+      setMessage(nextHands.length ? '' : '当前筛选条件下暂时没有牌谱。');
     }).catch((error) => {
       if (!active) return;
       setStatus('error');
-      setMessage(error instanceof Error ? error.message : '读取云端 Session 失败。');
+      setMessage(error instanceof Error ? error.message : '读取云端牌谱失败。');
     });
     return () => {
       active = false;
     };
-  }, [authStatus, cloudSessionId, isAuthenticated, openLogin]);
+  }, [authStatus, cloudLibraryId, cloudLoadKey, cloudSessionId, cloudSourceId, datasetFilters, isAuthenticated, openLogin]);
+
+  const persistHandsToCloud = async ({
+    targetHands = hands,
+    targetHero = hero,
+    sessionName,
+    automatic = false
+  } = {}) => {
+    setCloudSaving(true);
+    setCloudSaveError('');
+    setCloudSaveProgress({ done: 0, total: targetHands.length });
+    if (automatic) setMessage(`正在自动保存到“${cloudLibrary?.name || '我的牌谱'}”…`);
+    try {
+      const library = cloudLibrary ?? await ensureDefaultCloudLibrary();
+      setCloudLibrary(library);
+      const result = await saveHandsToCloud({
+        hands: targetHands,
+        hero: targetHero,
+        libraryId: library.id,
+        sessionName,
+        startTp,
+        endTp,
+        consentAction: automatic ? 'automatic_import_after_prior_consent' : (
+          cloudSaveIntent === 'enable-auto-save' ? 'first_auto_save_opt_in' : 'manual_cloud_save'
+        ),
+        onProgress: ({ completed, total, message: progressMessage }) => {
+          setCloudSaveProgress({ done: completed, total, message: progressMessage });
+        }
+      });
+      setSavedSessionId(result.sessionId ?? (result.alreadySaved ? 'existing' : null));
+      setStatus('ready');
+      setMessage(result.alreadySaved
+        ? '这些牌谱已经在“我的牌谱”中，本次没有重复保存。'
+        : `${automatic ? '已自动保存' : '已保存'} ${result.insertedCount.toLocaleString()} 手牌${result.duplicateCount ? `，跳过 ${result.duplicateCount.toLocaleString()} 手重复牌谱` : ''}。`);
+      return result;
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : '保存云牌谱失败。';
+      if (automatic) {
+        setStatus('ready');
+        setMessage(`本地分析已完成，但自动保存失败：${errorText}`);
+      } else {
+        setCloudSaveError(errorText);
+      }
+      return null;
+    } finally {
+      setCloudSaving(false);
+    }
+  };
 
   const handleFiles = async (files) => {
     setStatus('loading');
@@ -2733,8 +2929,11 @@ function HandHistoryView() {
       const parsed = await parseHistoryChunks(chunks);
       const unique = new Map();
       for (const hand of parsed) unique.set(hand.id, hand);
-      const nextHands = sortHandsByTime([...unique.values()]);
+      const allHands = sortHandsByTime([...unique.values()]);
+      const unsupportedCount = allHands.filter((hand) => hand.analysisSupported === false).length;
+      const nextHands = allHands.filter((hand) => hand.analysisSupported !== false);
       const nextPlayers = rankedPlayers(nextHands);
+      const nextHero = nextPlayers[0]?.name ?? '';
       setHands(nextHands);
       setSourceMode('local');
       setCloudSession(null);
@@ -2742,16 +2941,38 @@ function HandHistoryView() {
       setFileMeta({
         files: chunks.length,
         hands: nextHands.length,
-        duplicates: parsed.length - nextHands.length
+        duplicates: parsed.length - allHands.length,
+        unsupported: unsupportedCount
       });
-      setHero(nextPlayers[0]?.name ?? '');
-      setStakeFilter('all');
+      setHero(nextHero);
+      setDatasetFilters(emptyDatasetFilters());
       setPositionFilter('all');
       setHoleCardFilter({ ranks: [null, null], suitedOnly: false });
       setHoleCardFilterOpen(false);
       setHistoryTab('overview');
       setStatus(nextHands.length ? 'ready' : 'empty');
-      setMessage(nextHands.length ? '' : '没有识别到 GGPoker 手牌。');
+      setMessage(nextHands.length
+        ? (unsupportedCount ? `已识别牌谱；其中 ${unsupportedCount.toLocaleString()} 手暂不支持当前德州分析，已安全跳过。` : '')
+        : '没有识别到当前支持分析的 GGPoker 德州牌谱。');
+
+      if (nextHands.length && nextHero && isAuthenticated) {
+        try {
+          const library = cloudLibrary ?? await ensureDefaultCloudLibrary();
+          setCloudLibrary(library);
+          if (library.autoSaveEnabled) {
+            const consented = await hasCloudStorageConsent();
+            if (consented) {
+              await persistHandsToCloud({ targetHands: nextHands, targetHero: nextHero, automatic: true });
+            } else {
+              setCloudSaveIntent('enable-auto-save');
+              setCloudSaveOpen(true);
+              setMessage('本地分析已完成。首次开启“我的牌谱”自动保存前，请确认一次云端存储范围。');
+            }
+          }
+        } catch (cloudError) {
+          setMessage(`本地分析已完成，但暂时无法连接“我的牌谱”：${cloudError instanceof Error ? cloudError.message : '请稍后重试。'}`);
+        }
+      }
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof Error ? error.message : '解析失败');
@@ -2766,6 +2987,7 @@ function HandHistoryView() {
   const openCloudSave = () => {
     setCloudSaveError('');
     setCloudSaveProgress(null);
+    setCloudSaveIntent('manual');
     if (isAuthenticated) {
       setCloudSaveOpen(true);
       return;
@@ -2774,30 +2996,23 @@ function HandHistoryView() {
   };
 
   const confirmCloudSave = async ({ sessionName } = {}) => {
-    setCloudSaving(true);
-    setCloudSaveError('');
-    setCloudSaveProgress({ done: 0, total: hands.length });
-    try {
-      const result = await saveHandsToCloud({
-        hands,
-        hero,
-        sessionName,
-        startTp,
-        endTp,
-        onProgress: ({ completed, total, message: progressMessage }) => {
-          setCloudSaveProgress({ done: completed, total, message: progressMessage });
-        }
-      });
+    const result = await persistHandsToCloud({ sessionName });
+    if (result) {
       setCloudSaveOpen(false);
-      setSavedSessionId(result.sessionId ?? (result.alreadySaved ? 'existing' : null));
-      setStatus('ready');
-      setMessage(result.alreadySaved
-        ? '这批牌谱已存在于你的云端牌谱库，本次没有重复上传。'
-        : `已保存 ${result.insertedCount.toLocaleString()} 手牌到云端${result.duplicateCount ? `，跳过 ${result.duplicateCount.toLocaleString()} 手重复牌谱` : ''}。`);
+      setCloudSaveIntent('manual');
+    }
+  };
+
+  const handleAutoSaveToggle = async (enabled) => {
+    try {
+      const library = cloudLibrary ?? await ensureDefaultCloudLibrary();
+      const updated = await updateCloudLibrarySettings(library.id, { autoSaveEnabled: enabled });
+      setCloudLibrary(updated);
+      setMessage(enabled
+        ? '已开启自动保存。首次同步前会请你确认一次存储范围。'
+        : '已关闭自动保存；之后导入仍只在本地分析，除非你手动保存。');
     } catch (error) {
-      setCloudSaveError(error instanceof Error ? error.message : '保存云牌谱失败。');
-    } finally {
-      setCloudSaving(false);
+      setMessage(error instanceof Error ? error.message : '更新自动保存设置失败。');
     }
   };
 
@@ -2817,7 +3032,7 @@ function HandHistoryView() {
         <header>
           <p className="eyebrow">GGPoker · Local analysis</p>
           <h2>kish2note</h2>
-          <p className="subtext">导入 GG 手牌历史，在浏览器本地查看资金盈亏和打法数据。选择文件不会自动上传；只有登录后主动点击保存并再次确认，牌谱才会同步到你自己的云端牌谱库。</p>
+          <p className="subtext">免登录时，牌谱始终只在浏览器本地解析。登录后，导入的已支持牌谱默认保存到你的“我的牌谱”；首次同步会明确确认，之后可随时关闭自动保存。</p>
         </header>
 
         <input
@@ -2869,6 +3084,18 @@ function HandHistoryView() {
 
         {message && <div className={`history-message history-message--${status}`}>{message}</div>}
 
+        {sourceMode === 'cloud' && cloudLibraryId && hands.length === 0 && status !== 'loading' && (
+          <DatasetFilterPanel
+            filters={datasetFilters}
+            onChange={setDatasetFilters}
+            onClear={() => setDatasetFilters(emptyDatasetFilters())}
+            stakeOptions={datasetStakeOptions}
+            gameTypeOptions={datasetGameTypeOptions}
+            filteredCount={0}
+            totalCount={0}
+          />
+        )}
+
         {hands.length > 0 && (
           <>
             <section className="history-controls">
@@ -2883,6 +3110,17 @@ function HandHistoryView() {
                 </select>
               </label>
               <div className="history-control-actions">
+                {isAuthenticated && cloudLibrary && sourceMode === 'local' && (
+                  <label className="history-auto-save-toggle">
+                    <input
+                      type="checkbox"
+                      checked={cloudLibrary.autoSaveEnabled}
+                      disabled={cloudSaving}
+                      onChange={(event) => handleAutoSaveToggle(event.target.checked)}
+                    />
+                    <span>自动存入 {cloudLibrary.name}</span>
+                  </label>
+                )}
                 <button type="button" className="secondary" onClick={exportCsv} disabled={!filteredResults.length}>导出 CSV</button>
                 {sourceMode === 'cloud' ? (
                   <button type="button" className="history-cloud-button history-cloud-button--saved" onClick={() => window.location.assign('?tool=library')}>✓ 已从云端读取</button>
@@ -2896,31 +3134,41 @@ function HandHistoryView() {
 
             <section className="history-meta">
               {fileMeta?.cloud
-                ? <span>云端 Session · {fileMeta.sessionName || cloudSession?.name || '未命名'}</span>
+                ? <span>{cloudLibraryId
+                  ? `云端牌谱库 · ${fileMeta.libraryName || cloudLibrary?.name}`
+                  : `云端 Session · ${fileMeta.sessionName || cloudSession?.name || '未命名'}`}</span>
                 : <span>本地导入 {fileMeta?.files ?? 0} 个文本源</span>}
               <span>识别 {fileMeta?.hands?.toLocaleString() ?? 0} 手牌</span>
               {!!fileMeta?.duplicates && <span>去重 {fileMeta.duplicates.toLocaleString()} 手牌</span>}
+              {!!fileMeta?.unsupported && <span>暂不支持 {fileMeta.unsupported.toLocaleString()} 手牌</span>}
               <span>当前筛选 {filteredResults.length.toLocaleString()} 手牌</span>
             </section>
 
+            <DatasetFilterPanel
+              filters={datasetFilters}
+              onChange={setDatasetFilters}
+              onClear={() => setDatasetFilters(emptyDatasetFilters())}
+              stakeOptions={datasetStakeOptions}
+              gameTypeOptions={datasetGameTypeOptions}
+              filteredCount={filteredResults.length}
+              totalCount={rawResults.length}
+              disabled={status === 'loading'}
+            />
+
             <section className="history-analysis-layout">
               <aside className="history-side-panel">
-                <section className="history-pvi-controls">
-                  <label>
-                    <span>起始 TP</span>
-                    <input type="number" value={startTp} onChange={(event) => setStartTp(event.target.value)} />
-                  </label>
-                  <label>
-                    <span>终止 TP</span>
-                    <input type="number" value={endTp} onChange={(event) => setEndTp(event.target.value)} />
-                  </label>
-                </section>
-                <HistoryFilterGroup
-                  label="级别"
-                  options={stakeFilterOptions}
-                  value={stakeFilter}
-                  onChange={setStakeFilter}
-                />
+                {!cloudLibraryId && (
+                  <section className="history-pvi-controls">
+                    <label>
+                      <span>起始 TP</span>
+                      <input type="number" value={startTp} onChange={(event) => setStartTp(event.target.value)} />
+                    </label>
+                    <label>
+                      <span>终止 TP</span>
+                      <input type="number" value={endTp} onChange={(event) => setEndTp(event.target.value)} />
+                    </label>
+                  </section>
+                )}
                 <HistoryFilterGroup
                   label="位置"
                   options={positionFilterOptions}
@@ -2989,7 +3237,7 @@ function HandHistoryView() {
                       <div className="history-stat-row history-stat-row--basic">
                         <HistoryStatCard label="总手数" value={summary.totalHands.toLocaleString()} />
                         <HistoryStatCard label="常驻级别" value={mainStake} />
-                        <HistoryStatCard label="PVI" value={formatPercent(pvi, 2)} />
+                        <HistoryStatCard label="PVI" value={cloudLibraryId ? '-' : formatPercent(pvi, 2)} />
                       </div>
                       <div className="history-stat-row history-stat-row--profit">
                         <HistoryStatCard label="水后 $" value={formatMoney(summary.totalProfit)} tone={statTone(summary.totalProfit)} />
@@ -3072,6 +3320,8 @@ function HandHistoryView() {
             saving={cloudSaving}
             progress={cloudSaveProgress}
             error={cloudSaveError}
+            enableAutoSave={cloudSaveIntent === 'enable-auto-save'}
+            libraryName={cloudLibrary?.name || '我的牌谱'}
             onClose={() => !cloudSaving && setCloudSaveOpen(false)}
             onConfirm={confirmCloudSave}
           />
@@ -3100,9 +3350,13 @@ function formatCloudDate(value) {
 function CloudLibraryView() {
   const { authStatus, isAuthenticated, openLogin } = useAuth();
   const [loadState, setLoadState] = useState('idle');
+  const [library, setLibrary] = useState(null);
+  const [libraryOverview, setLibraryOverview] = useState(null);
   const [sessions, setSessions] = useState([]);
+  const [filters, setFilters] = useState(() => emptyDatasetFilters());
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState('');
+  const [updatingSettings, setUpdatingSettings] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
@@ -3111,10 +3365,19 @@ function CloudLibraryView() {
       if (!active) return null;
       setLoadState('loading');
       setError('');
-      return listCloudSessions();
-    }).then((rows) => {
-      if (!active || !rows) return;
-      setSessions(rows);
+      return ensureDefaultCloudLibrary();
+    }).then(async (nextLibrary) => {
+      if (!active || !nextLibrary) return null;
+      const [rows, overview] = await Promise.all([
+        listCloudSessions({ libraryId: nextLibrary.id }),
+        getCloudLibraryOverview({ libraryId: nextLibrary.id })
+      ]);
+      return { nextLibrary, rows, overview };
+    }).then((result) => {
+      if (!active || !result) return;
+      setLibrary(result.nextLibrary);
+      setSessions(result.rows);
+      setLibraryOverview(result.overview);
       setLoadState('ready');
     }).catch((requestError) => {
       if (!active) return;
@@ -3126,8 +3389,55 @@ function CloudLibraryView() {
     };
   }, [isAuthenticated]);
 
-  const totalHands = sessions.reduce((sum, session) => sum + session.handCount, 0);
+  const totalHands = libraryOverview?.totalHands ?? sessions.reduce((sum, session) => sum + session.handCount, 0);
   const totalProfitBB = sessions.reduce((sum, session) => sum + Number(session.summary?.totalProfitBB ?? 0), 0);
+  const libraryStakeOptions = useMemo(() => {
+    if (libraryOverview?.stakes?.length) {
+      return libraryOverview.stakes.map(({ value, count }) => ({ value, label: stakeLabel(value), count }));
+    }
+    const counts = new Map();
+    sessions.forEach((session) => (session.summary?.stakes ?? []).forEach((item) => {
+      if (item?.label) counts.set(item.label, (counts.get(item.label) ?? 0) + Number(item.count ?? 0));
+    }));
+    return [...counts.entries()].map(([value, count]) => ({ value, label: stakeLabel(value), count }));
+  }, [libraryOverview, sessions]);
+  const libraryGameTypeOptions = useMemo(() => {
+    const items = new Map();
+    if (libraryOverview?.gameTypes?.length) {
+      libraryOverview.gameTypes.forEach((item) => {
+        items.set(item.key, { value: item.key, label: gameTypeDisplayLabel(item), count: Number(item.count ?? 0) });
+      });
+      return [...items.values()];
+    }
+    sessions.forEach((session) => (session.summary?.gameTypes ?? []).forEach((item) => {
+      if (!item?.key || item.analysisSupported === false) return;
+      const current = items.get(item.key);
+      if (current) current.count += Number(item.count ?? 0);
+      else items.set(item.key, { value: item.key, label: gameTypeDisplayLabel(item), count: Number(item.count ?? 0) });
+    }));
+    return [...items.values()];
+  }, [libraryOverview, sessions]);
+
+  const analyzeLibrary = () => {
+    if (!library) return;
+    const params = filtersToSearch(filters);
+    params.set('tool', 'history');
+    params.set('library', library.id);
+    window.location.assign(`?${params.toString()}`);
+  };
+
+  const toggleLibraryAutoSave = async (enabled) => {
+    if (!library) return;
+    setUpdatingSettings(true);
+    setError('');
+    try {
+      setLibrary(await updateCloudLibrarySettings(library.id, { autoSaveEnabled: enabled }));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : '更新自动保存设置失败。');
+    } finally {
+      setUpdatingSettings(false);
+    }
+  };
 
   const removeSession = async (session) => {
     if (!window.confirm(`确定删除“${session.name || '未命名 Session'}”吗？该 Session 的云端牌谱会一并删除，本地原文件不受影响。`)) return;
@@ -3136,6 +3446,13 @@ function CloudLibraryView() {
     try {
       await deleteCloudSession(session.id);
       setSessions((current) => current.filter((item) => item.id !== session.id));
+      if (library) {
+        try {
+          setLibraryOverview(await getCloudLibraryOverview({ libraryId: library.id }));
+        } catch {
+          setLibraryOverview(null);
+        }
+      }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '删除云牌谱失败。');
     } finally {
@@ -3154,7 +3471,7 @@ function CloudLibraryView() {
       </nav>
 
       <header className="library-hero">
-        <div><p className="eyebrow">KISH2NOTE CLOUD LIBRARY</p><h1>我的牌谱库</h1><p>长期保存由你确认过的 GG 牌谱，按 Session 回到完整数据分析与每一手牌。导入文件仍然默认只在本地解析。</p></div>
+        <div><p className="eyebrow">KISH2NOTE CLOUD LIBRARY</p><h1>我的牌谱库</h1><p>每个账户都有一座独立的逻辑牌谱库。登录后导入的新牌谱默认保存进来，再按时间、级别和游戏类型挑选需要分析的数据。</p></div>
         {isAuthenticated && (
           <div className="library-totals">
             <span><small>已保存</small><strong>{sessions.length.toLocaleString()} Sessions</strong></span>
@@ -3170,24 +3487,63 @@ function CloudLibraryView() {
         <section className="library-state">
           <span className="library-lock" aria-hidden="true">◇</span>
           <h2>登录后查看你的长期牌谱</h2>
-          <p>支持中国大陆手机号。登录本身不会上传牌谱，保存时仍会逐次确认。</p>
+          <p>支持全部中国大陆手机号。首次导入时确认一次云端范围，之后可自动积累长期牌谱。</p>
           <button type="button" className="primary" onClick={() => openLogin()}>手机号登录 / 注册</button>
         </section>
       )}
 
       {isAuthenticated && loadState === 'loading' && <section className="library-state"><i aria-hidden="true" /><h2>正在读取云端 Sessions…</h2></section>}
       {isAuthenticated && error && <div className="library-error" role="alert">{error}</div>}
+      {isAuthenticated && loadState === 'ready' && library && (
+        <section className="library-database-card">
+          <header>
+            <div>
+              <span>默认数据库</span>
+              <h2>{library.name}</h2>
+              <p>当前所有自动保存的 GG 牌谱都会进入这里；后续版本会支持创建多个牌谱数据库。</p>
+            </div>
+            <label className="library-auto-save-setting">
+              <input
+                type="checkbox"
+                checked={library.autoSaveEnabled}
+                disabled={updatingSettings}
+                onChange={(event) => toggleLibraryAutoSave(event.target.checked)}
+              />
+              <span><strong>自动保存新牌谱</strong><small>{library.autoSaveEnabled ? '已开启' : '已关闭'}</small></span>
+            </label>
+          </header>
+          {sessions.length > 0 && (
+            <>
+              <DatasetFilterPanel
+                filters={filters}
+                onChange={setFilters}
+                onClear={() => setFilters(emptyDatasetFilters())}
+                stakeOptions={libraryStakeOptions}
+                gameTypeOptions={libraryGameTypeOptions}
+                filteredCount={filters.timePreset === 'all' && !filters.stakes.length && !filters.gameTypes.length ? totalHands : null}
+                totalCount={totalHands}
+                title="选择要分析的牌谱"
+              />
+              <div className="library-analyze-bar">
+                <p><strong>筛选会作用于整座牌谱库</strong><span>进入分析后显示精确手数，并同步驱动资金曲线、数据、历史记录和底牌报告。</span></p>
+                <button type="button" className="primary" onClick={analyzeLibrary}>分析筛选结果 <span aria-hidden="true">→</span></button>
+              </div>
+            </>
+          )}
+        </section>
+      )}
       {isAuthenticated && loadState === 'ready' && !sessions.length && (
         <section className="library-state library-state--empty">
           <span aria-hidden="true">＋</span>
           <h2>你的牌谱库还是空的</h2>
-          <p>先分析一次 Session，再点击“保存到我的牌谱库”。只有确认后才会同步。</p>
+          <p>导入第一批 GG 牌谱。首次确认云端存储后，它会保存到“我的牌谱”，以后登录状态下可自动积累。</p>
           <button type="button" className="primary" onClick={() => window.location.assign('?tool=history')}>分析第一个 Session</button>
         </section>
       )}
 
       {isAuthenticated && sessions.length > 0 && (
-        <section className="library-list" aria-label="云端牌谱 Sessions">
+        <section className="library-list" aria-label="云端牌谱导入记录">
+          <header className="library-list-heading"><div><span>IMPORT HISTORY</span><h2>导入记录</h2></div><p>每次导入仍可单独打开、复盘或删除。</p></header>
           {sessions.map((session) => {
             const profit = Number(session.summary?.totalProfitBB ?? 0);
             const bbPer100 = Number(session.summary?.bbPer100 ?? 0);
@@ -3214,7 +3570,7 @@ function CloudLibraryView() {
         </section>
       )}
 
-      <footer className="library-privacy-note"><strong>你的选择始终优先</strong><span>本地分析不需要登录，也不会自动上传。云端只保存你在确认框中明确选择的牌谱。</span></footer>
+      <footer className="library-privacy-note"><strong>你的选择始终优先</strong><span>免登录分析不会上传；登录后的自动保存需要首次明确确认，也可以随时关闭。每位用户只能访问自己的逻辑牌谱库。</span></footer>
     </div>
   );
 }
@@ -3251,8 +3607,8 @@ function HomeView() {
     document.querySelector('meta[name="description"]')?.setAttribute(
       'content',
       language === 'en'
-        ? 'kish2note is KishPoker’s local-first GG hand-history workspace with optional private cloud sessions for long-term review.'
-        : 'kish2note 是 KishPoker 的 GG 手牌分析工具，支持免登录本地复盘，也可在确认后保存到个人云端牌谱库。'
+        ? 'kish2note is KishPoker’s local-first GG hand-history workspace with an optional private cloud library for long-term review.'
+        : 'kish2note 是 KishPoker 的 GG 手牌分析工具，支持免登录本地复盘，也可登录后持续积累个人云端牌谱库。'
     );
   }, [language]);
 
@@ -3425,11 +3781,11 @@ function LegalView({ type }) {
         <h1>{privacy ? '隐私政策' : '用户协议'}</h1>
         {privacy ? (
           <>
-            <section><h2>1. 两种使用方式</h2><p>你可以免登录使用单次牌谱分析。文件会在当前浏览器本地读取和解析，不会因为选择文件、拖入文件或查看报表而自动上传。只有当你登录后主动点击“保存到我的牌谱库”，并在保存确认框再次同意时，相应牌谱才会同步到云端。</p></section>
-            <section><h2>2. 我们处理的数据</h2><p>登录时处理你的中国大陆手机号、短信验证结果、账户标识和必要的安全日志。云端保存时处理你确认提交的 GGPoker 原始牌谱文本，以及由其解析出的时间、盲注、玩家名、底牌、公共牌、行动、输赢和统计结果。我们不会为了保存牌谱上传你的本地文件名或未被识别为牌谱的文件内容。</p></section>
-            <section><h2>3. 用途与存储</h2><p>这些数据仅用于身份认证、保存和恢复你的牌谱、跨 session 统计、去重、播放器与漏洞分析。当前云服务由腾讯云 CloudBase 上海地域提供。登录状态由 CloudBase SDK 在你的浏览器中管理；前端只使用可公开的 Publishable Key，不包含服务端管理密钥。</p></section>
-            <section><h2>4. 保留、删除与安全</h2><p>云端牌谱会保留到你主动删除牌谱库内容或账户相关服务终止。数据库启用了逐用户行级权限，每个已登录用户只能读取和操作自己的记录。你可以在“我的牌谱库”中删除 session；账户删除与数据导出入口将在后续版本补充，在此之前可通过网站公布的反馈渠道提出请求。</p></section>
-            <section><h2>5. 你的选择</h2><p>你可以始终选择只做本地分析，也可以随时退出登录。拒绝云端保存不影响本地分析。短信可能产生服务商侧的发送记录；请勿使用他人手机号登录，也不要上传你无权处理的牌谱。</p></section>
+            <section><h2>1. 两种使用方式</h2><p>免登录使用时，文件只在当前浏览器读取和解析，选择文件、拖入文件或查看报表不会触发上传。登录后首次导入牌谱时，我们会明确说明云端保存范围并请你确认；确认后，登录状态下新导入的受支持牌谱默认自动保存到你的“我的牌谱”。</p></section>
+            <section><h2>2. 我们处理的数据</h2><p>登录时处理你的中国大陆手机号、短信验证结果、账户标识和必要的安全日志。云端保存时处理你授权提交的 GGPoker 原始牌谱文本，以及由其解析出的时间、级别、游戏类型、玩家名、底牌、公共牌、行动、输赢和统计结果。我们不会上传本地文件名、未识别为受支持牌谱的内容或你关闭自动保存后新导入的牌谱。</p></section>
+            <section><h2>3. 用途与存储</h2><p>这些数据用于身份认证、保存和恢复牌谱、按时间/级别/游戏类型筛选、跨 session 统计、去重、播放器与漏洞分析。每个账户使用共享数据库中的独立逻辑牌谱库，并通过用户归属和行级权限隔离。当前云服务由腾讯云 CloudBase 上海地域提供；前端只使用可公开的 Publishable Key，不包含服务端管理密钥。</p></section>
+            <section><h2>4. 保留、删除与安全</h2><p>云端牌谱会保留到你主动删除相应导入记录、提出账户数据删除请求或账户相关服务终止。数据库启用了逐用户行级权限，每个已登录用户只能读取和操作自己的记录。你可以在“我的牌谱库”中删除 session；账户删除与数据导出入口将在后续版本补充，在此之前可通过网站公布的反馈渠道提出请求。</p></section>
+            <section><h2>5. 你的选择</h2><p>你可以在“我的牌谱”或分析页随时关闭自动保存，也可以退出登录继续只做本地分析。关闭或拒绝云端保存不会影响本地分析；云端保存失败也不会阻断本地结果。再次开启时，系统仍按本政策处理新导入数据。短信可能产生服务商侧发送记录；请勿使用他人手机号登录，也不要保存你无权处理的牌谱。</p></section>
             <section><h2>6. 未成年人</h2><p>本工具面向具备完全民事行为能力的成年人。未成年人不应创建账户或保存牌谱。</p></section>
           </>
         ) : (
@@ -3437,7 +3793,7 @@ function LegalView({ type }) {
             <section><h2>1. 服务内容</h2><p>kish2note 提供 GGPoker 牌谱的本地分析、数据报表、牌局复盘，以及由用户明确选择的云端牌谱保存功能。分析结果用于学习和复盘，不构成收益承诺、博彩建议或对第三方平台规则的保证。</p></section>
             <section><h2>2. 账户与资格</h2><p>你应为具备完全民事行为能力的成年人，并使用本人可控制的中国大陆手机号登录。请妥善保护短信验证码和登录设备；发现异常使用时应及时退出登录。</p></section>
             <section><h2>3. 内容责任</h2><p>你应确保对上传或保存的牌谱拥有合法处理权限。不得利用本服务侵犯他人权益、传播违法内容、攻击服务、绕过安全限制，或把工具用于第三方平台禁止的实时作弊行为。</p></section>
-            <section><h2>4. 数据与隐私</h2><p>本地分析与云端保存的边界、数据类型和删除方式以《隐私政策》为准。未经过你的保存确认，本地导入不会自动同步到服务器。</p></section>
+            <section><h2>4. 数据与隐私</h2><p>本地分析与云端保存的边界、数据类型和删除方式以《隐私政策》为准。免登录导入不会上传；登录用户在首次明确授权后可启用自动保存，并能随时关闭。</p></section>
             <section><h2>5. 服务变更与责任限制</h2><p>测试阶段的统计口径、功能和可用性可能调整。我们会尽力保持数据完整和服务安全，但建议你保留原始牌谱备份。因网络、云服务、第三方平台格式变化或不可抗力造成的中断，将在法律允许范围内处理。</p></section>
           </>
         )}

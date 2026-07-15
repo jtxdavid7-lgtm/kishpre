@@ -5,7 +5,7 @@ const PLATFORM = 'ggpoker';
 const PARSER_VERSION = 'kish2note-browser-v1';
 const METRIC_VERSION = 'kish2note-hero-v1';
 const CONSENT_PURPOSE = 'cloud_hand_history_storage';
-const CONSENT_POLICY_VERSION = '2026-07-15-v1';
+const CONSENT_POLICY_VERSION = '2026-07-15-v2-auto-library';
 const LOOKUP_BATCH_SIZE = 50;
 const READ_PAGE_SIZE = 500;
 const WRITE_BATCH_SIZE = 50;
@@ -202,6 +202,7 @@ function normalizeSessionRow(row) {
   const metadata = row?.metadata && typeof row.metadata === 'object' ? row.metadata : {};
   return {
     id: row.id,
+    libraryId: row.library_id,
     pokerAccountId: row.poker_account_id,
     name: row.name,
     hero: metadata.hero ?? '',
@@ -214,6 +215,17 @@ function normalizeSessionRow(row) {
     summary: metadata.heroSummary ?? null,
     createdAt: row.created_at,
     metadata
+  };
+}
+
+function normalizeLibraryRow(row) {
+  return {
+    id: row.id,
+    name: row.name || '我的牌谱',
+    isDefault: Boolean(row.is_default),
+    autoSaveEnabled: row.auto_save_enabled !== false,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 
@@ -246,17 +258,71 @@ async function fetchAll(buildQuery, operation) {
   return rows;
 }
 
-async function findRowsInBatches(database, table, column, values, select, operation) {
+async function findRowsInBatches(database, table, column, values, select, operation, equals = {}) {
   const found = [];
   const uniqueValues = [...new Set(values.filter(Boolean))];
   for (const valuesBatch of chunk(uniqueValues, LOOKUP_BATCH_SIZE)) {
+    let query = database.from(table).select(select).in(column, valuesBatch);
+    for (const [filterColumn, filterValue] of Object.entries(equals)) {
+      query = query.eq(filterColumn, filterValue);
+    }
     const rows = await runQuery(
-      database.from(table).select(select).in(column, valuesBatch),
+      query,
       operation
     );
     if (Array.isArray(rows)) found.push(...rows);
   }
   return found;
+}
+
+async function resolveDefaultLibrary(database) {
+  const select = 'id,name,is_default,auto_save_enabled,created_at,updated_at';
+  const existing = await runQuery(
+    database.from('hand_libraries')
+      .select(select)
+      .eq('is_default', true)
+      .maybeSingle(),
+    '读取默认牌谱库'
+  );
+  if (existing) return existing;
+
+  const id = createClientUuid();
+  try {
+    return await runQuery(
+      database.from('hand_libraries')
+        .insert({ id, name: '我的牌谱', is_default: true, auto_save_enabled: true }, { defaultToNull: false })
+        .select(select)
+        .single(),
+      '创建默认牌谱库'
+    );
+  } catch (error) {
+    if (String(error.code) !== '23505') throw error;
+    return runQuery(
+      database.from('hand_libraries')
+        .select(select)
+        .eq('is_default', true)
+        .single(),
+      '读取默认牌谱库'
+    );
+  }
+}
+
+async function resolveLibrary(database, libraryId) {
+  const id = String(libraryId ?? '').trim();
+  if (!id) return resolveDefaultLibrary(database);
+  const row = await runQuery(
+    database.from('hand_libraries')
+      .select('id,name,is_default,auto_save_enabled,created_at,updated_at')
+      .eq('id', id)
+      .maybeSingle(),
+    '读取牌谱库'
+  );
+  if (!row) {
+    throw new CloudLibraryError('没有找到这个牌谱库，或你没有访问权限。', {
+      code: 'cloud-library/library-not-found'
+    });
+  }
+  return row;
 }
 
 async function resolvePokerAccount(database, hero) {
@@ -298,7 +364,7 @@ async function resolvePokerAccount(database, hero) {
   }
 }
 
-async function resolvePrivacyConsent(database) {
+async function resolvePrivacyConsent(database, action = 'manual_cloud_save') {
   const select = 'id,purpose,policy_version,granted';
   const existing = await runQuery(
     database.from('privacy_consents')
@@ -321,7 +387,7 @@ async function resolvePrivacyConsent(database) {
             policy_version: CONSENT_POLICY_VERSION,
             granted: true,
             source: 'web',
-            evidence: { action: 'save_hands_to_cloud', explicit: true }
+            evidence: { action, explicit: true, autoSavePolicy: true }
           },
           { defaultToNull: false }
         )
@@ -340,6 +406,55 @@ async function resolvePrivacyConsent(database) {
       '读取隐私同意记录'
     );
   }
+}
+
+export async function ensureDefaultCloudLibrary() {
+  await requireSignedIn();
+  const database = getCloudbaseDatabase();
+  return normalizeLibraryRow(await resolveDefaultLibrary(database));
+}
+
+export async function listCloudLibraries() {
+  await requireSignedIn();
+  const database = getCloudbaseDatabase();
+  let rows = await fetchAll(
+    () => database.from('hand_libraries')
+      .select('id,name,is_default,auto_save_enabled,created_at,updated_at')
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: true }),
+    '读取牌谱库列表'
+  );
+  if (!rows.length) rows = [await resolveDefaultLibrary(database)];
+  return rows.map(normalizeLibraryRow);
+}
+
+export async function hasCloudStorageConsent() {
+  await requireSignedIn();
+  const database = getCloudbaseDatabase();
+  const row = await runQuery(
+    database.from('privacy_consents')
+      .select('id,granted')
+      .eq('purpose', CONSENT_PURPOSE)
+      .eq('policy_version', CONSENT_POLICY_VERSION)
+      .maybeSingle(),
+    '读取自动保存授权'
+  );
+  return Boolean(row?.granted);
+}
+
+export async function updateCloudLibrarySettings(libraryId, { autoSaveEnabled } = {}) {
+  await requireSignedIn();
+  const database = getCloudbaseDatabase();
+  const library = await resolveLibrary(database, libraryId);
+  const updated = await runQuery(
+    database.from('hand_libraries')
+      .update({ auto_save_enabled: Boolean(autoSaveEnabled) })
+      .eq('id', library.id)
+      .select('id,name,is_default,auto_save_enabled,created_at,updated_at')
+      .single(),
+    '更新牌谱库设置'
+  );
+  return normalizeLibraryRow(updated);
 }
 
 async function prepareHands(hands, hero, onProgress) {
@@ -434,24 +549,33 @@ async function removeCreatedRecords(database, state) {
 }
 
 /**
- * Persist an explicitly confirmed local analysis to the signed-in user's cloud library.
- * This function has no automatic caller; importing files locally never invokes it.
+ * Persist a local analysis to one of the signed-in user's logical hand libraries.
+ * Callers must obtain the user's current cloud-storage consent before automatic saves.
  */
 export async function saveHandsToCloud({
   hands,
   hero,
+  libraryId,
   sessionName,
   startTp,
   endTp,
+  consentAction = 'manual_cloud_save',
   onProgress
 } = {}) {
   await requireSignedIn();
   const database = getCloudbaseDatabase();
+  const library = await resolveLibrary(database, libraryId);
   const inputHands = Array.isArray(hands) ? hands : [];
   const normalizedHero = String(hero ?? '').trim();
   const normalizedSessionName = String(sessionName ?? '').trim();
   if (!inputHands.length) {
     throw new CloudLibraryError('没有可保存的牌谱。', { code: 'cloud-library/no-hands' });
+  }
+  const unsupported = inputHands.find((hand) => hand?.analysisSupported === false);
+  if (unsupported) {
+    throw new CloudLibraryError('这批牌谱包含当前尚未支持分析的游戏类型。为避免生成错误统计，本次没有上传。', {
+      code: 'cloud-library/unsupported-game'
+    });
   }
   if (!normalizedHero || normalizedHero.length > 80) {
     throw new CloudLibraryError('请选择正确的 Hero 后再保存。', { code: 'cloud-library/invalid-hero' });
@@ -469,16 +593,18 @@ export async function saveHandsToCloud({
     'hands',
     'external_hand_id',
     locallyPrepared.prepared.map((item) => item.externalHandId),
-    'id,poker_account_id,external_hand_id,content_sha256',
-    '检查云端牌局号码'
+    'id,library_id,poker_account_id,external_hand_id,content_sha256',
+    '检查云端牌局号码',
+    { library_id: library.id }
   );
   const existingByHash = await findRowsInBatches(
     database,
     'hands',
     'content_sha256',
     locallyPrepared.prepared.map((item) => item.contentSha256),
-    'id,poker_account_id,external_hand_id,content_sha256',
-    '检查云端牌谱指纹'
+    'id,library_id,poker_account_id,external_hand_id,content_sha256',
+    '检查云端牌谱指纹',
+    { library_id: library.id }
   );
   const byExternalId = new Map(existingById.map((row) => [row.external_hand_id, row]));
   const byHash = new Map(existingByHash.map((row) => [row.content_sha256, row]));
@@ -521,6 +647,7 @@ export async function saveHandsToCloud({
   }
 
   const state = {
+    libraryId: library.id,
     accountId: null,
     accountCreated: false,
     batchId: createClientUuid(),
@@ -534,7 +661,7 @@ export async function saveHandsToCloud({
     const account = await resolvePokerAccount(database, normalizedHero);
     state.accountId = account.row.id;
     state.accountCreated = account.created;
-    const consent = await resolvePrivacyConsent(database);
+    const consent = await resolvePrivacyConsent(database, consentAction);
 
     const acceptedDuplicateRows = duplicateRows.filter(({ existing }) => (
       existing.poker_account_id === state.accountId
@@ -550,6 +677,7 @@ export async function saveHandsToCloud({
       database.from('import_batches').insert(
         {
           id: state.batchId,
+          library_id: state.libraryId,
           poker_account_id: state.accountId,
           privacy_consent_id: consent.id,
           idempotency_key: state.batchId,
@@ -580,6 +708,7 @@ export async function saveHandsToCloud({
       database.from('sessions').insert(
         {
           id: state.sessionId,
+          library_id: state.libraryId,
           poker_account_id: state.accountId,
           source_import_batch_id: state.batchId,
           name: normalizedSessionName || (
@@ -611,6 +740,7 @@ export async function saveHandsToCloud({
       const stakes = parseStakes(hand.stakes, hand.bb);
       return {
         id: createClientUuid(),
+        library_id: state.libraryId,
         poker_account_id: state.accountId,
         session_id: state.sessionId,
         platform: PLATFORM,
@@ -624,6 +754,13 @@ export async function saveHandsToCloud({
         small_blind: stakes.smallBlind,
         big_blind: stakes.bigBlind,
         stakes_label: hand.stakes || null,
+        game_variant: hand.gameVariant || 'unknown',
+        betting_structure: hand.bettingStructure || 'unknown',
+        table_type: hand.tableType || 'unknown',
+        max_players: Number.isInteger(hand.maxPlayers) ? hand.maxPlayers : null,
+        game_descriptor_raw: hand.gameDescriptorRaw || null,
+        table_name_raw: hand.tableNameRaw || null,
+        analysis_supported: hand.analysisSupported !== false,
         hero_position: heroResult.position || null,
         hero_cards: [...(heroResult.cards ?? [])],
         starting_hand_key: startingHandKey(heroResult.cards),
@@ -681,12 +818,14 @@ export async function saveHandsToCloud({
 
     const relationRows = [
       ...handRows.map((row) => ({
+        library_id: state.libraryId,
         poker_account_id: state.accountId,
         import_batch_id: state.batchId,
         hand_id: row.savedId,
         outcome: 'inserted'
       })),
       ...acceptedDuplicateRows.map(({ existing, outcome }) => ({
+        library_id: state.libraryId,
         poker_account_id: state.accountId,
         import_batch_id: state.batchId,
         hand_id: existing.id,
@@ -723,17 +862,59 @@ export async function saveHandsToCloud({
   }
 }
 
-export async function listCloudSessions() {
+export async function listCloudSessions({ libraryId } = {}) {
   await requireSignedIn();
   const database = getCloudbaseDatabase();
+  const library = await resolveLibrary(database, libraryId);
   const rows = await fetchAll(
     () => database.from('sessions')
-      .select('id,poker_account_id,name,started_at,ended_at,timezone,hand_count,tp_start,tp_end,metadata,created_at')
+      .select('id,library_id,poker_account_id,name,started_at,ended_at,timezone,hand_count,tp_start,tp_end,metadata,created_at')
+      .eq('library_id', library.id)
       .order('started_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false }),
     '读取云牌谱场次'
   );
   return rows.map(normalizeSessionRow);
+}
+
+export async function getCloudLibraryOverview({ libraryId } = {}) {
+  await requireSignedIn();
+  const database = getCloudbaseDatabase();
+  const library = await resolveLibrary(database, libraryId);
+  const rows = await fetchAll(
+    () => database.from('hands')
+      .select('played_at,stakes_label,game_variant,betting_structure,table_type,max_players,analysis_supported')
+      .eq('library_id', library.id)
+      .eq('analysis_supported', true)
+      .order('played_at', { ascending: true, nullsFirst: false }),
+    '读取牌谱库概览'
+  );
+  const stakes = new Map();
+  const gameTypes = new Map();
+  for (const row of rows) {
+    if (row.stakes_label) stakes.set(row.stakes_label, (stakes.get(row.stakes_label) ?? 0) + 1);
+    const key = `${row.game_variant ?? 'unknown'}:${row.betting_structure ?? 'unknown'}:${row.table_type ?? 'unknown'}:${row.max_players ?? 'unknown'}`;
+    const existing = gameTypes.get(key);
+    if (existing) existing.count += 1;
+    else gameTypes.set(key, {
+      key,
+      gameVariant: row.game_variant ?? 'unknown',
+      bettingStructure: row.betting_structure ?? 'unknown',
+      tableType: row.table_type ?? 'unknown',
+      maxPlayers: row.max_players ?? null,
+      analysisSupported: row.analysis_supported !== false,
+      count: 1
+    });
+  }
+  const playedTimes = rows.map((row) => row.played_at).filter(Boolean);
+  return {
+    library: normalizeLibraryRow(library),
+    totalHands: rows.length,
+    startedAt: playedTimes[0] ?? null,
+    endedAt: playedTimes.at(-1) ?? null,
+    stakes: [...stakes.entries()].map(([value, count]) => ({ value, count })),
+    gameTypes: [...gameTypes.values()]
+  };
 }
 
 export async function loadCloudSession(sessionId) {
@@ -743,7 +924,7 @@ export async function loadCloudSession(sessionId) {
   const database = getCloudbaseDatabase();
   const sessionRow = await runQuery(
     database.from('sessions')
-      .select('id,poker_account_id,name,started_at,ended_at,timezone,hand_count,tp_start,tp_end,metadata,created_at')
+      .select('id,library_id,poker_account_id,name,started_at,ended_at,timezone,hand_count,tp_start,tp_end,metadata,created_at')
       .eq('id', id)
       .maybeSingle(),
     '读取云牌谱场次'
@@ -784,6 +965,65 @@ export async function loadCloudSession(sessionId) {
     startTp: session.startTp,
     endTp: session.endTp
   };
+}
+
+function parseCloudHandRows(rows) {
+  return rows.map((row) => {
+    try {
+      const parsed = parseGgHand(row.raw_text);
+      if (!parsed?.id) throw new Error('missing hand id');
+      return parsed;
+    } catch (error) {
+      throw new CloudLibraryError(`牌局 ${row.external_hand_id} 的云端原文无法解析。`, {
+        code: 'cloud-library/invalid-cloud-hand',
+        operation: '重建云端牌谱',
+        cause: error
+      });
+    }
+  });
+}
+
+function gameTypeKey(hand) {
+  return `${hand?.gameVariant ?? 'unknown'}:${hand?.bettingStructure ?? 'unknown'}:${hand?.tableType ?? 'unknown'}:${hand?.maxPlayers ?? 'unknown'}`;
+}
+
+export async function loadCloudLibraryHands({ libraryId, filters = {} } = {}) {
+  await requireSignedIn();
+  const database = getCloudbaseDatabase();
+  const library = await resolveLibrary(database, libraryId);
+  const stakes = [...new Set((filters.stakes ?? []).map(String).filter(Boolean))];
+  const gameTypes = [...new Set((filters.gameTypes ?? []).map(String).filter(Boolean))];
+  const gameParts = gameTypes.map((key) => key.split(':'));
+  const variants = [...new Set(gameParts.map((parts) => parts[0]).filter(Boolean))];
+  const structures = [...new Set(gameParts.map((parts) => parts[1]).filter(Boolean))];
+  const tableTypes = [...new Set(gameParts.map((parts) => parts[2]).filter(Boolean))];
+  const from = String(filters.from ?? '').trim();
+  const to = String(filters.to ?? '').trim();
+
+  const rows = await fetchAll(
+    () => {
+      let query = database.from('hands')
+        .select('id,external_hand_id,raw_text,played_at,source_ordinal,stakes_label,game_variant,betting_structure,table_type,max_players')
+        .eq('library_id', library.id)
+        .eq('analysis_supported', true)
+        .order('played_at', { ascending: true, nullsFirst: false })
+        .order('source_ordinal', { ascending: true })
+        .order('external_hand_id', { ascending: true });
+      if (from) query = query.gte('played_at', from);
+      if (to) query = query.lt('played_at', to);
+      if (stakes.length) query = query.in('stakes_label', stakes);
+      if (variants.length) query = query.in('game_variant', variants);
+      if (structures.length) query = query.in('betting_structure', structures);
+      if (tableTypes.length) query = query.in('table_type', tableTypes);
+      return query;
+    },
+    '读取牌谱库筛选结果'
+  );
+
+  const hands = parseCloudHandRows(rows).filter((hand) => (
+    !gameTypes.length || gameTypes.includes(gameTypeKey(hand))
+  ));
+  return { library: normalizeLibraryRow(library), hands, filters };
 }
 
 export async function deleteCloudSession(sessionId) {

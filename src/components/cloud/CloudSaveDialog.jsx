@@ -8,6 +8,8 @@ export function CloudSaveDialog({
   saving = false,
   progress = null,
   error = '',
+  enableAutoSave = false,
+  libraryName = '我的牌谱',
   onClose,
   onConfirm
 }) {
@@ -46,7 +48,7 @@ export function CloudSaveDialog({
         tabIndex={-1}
       >
         <header>
-          <div><span>KISH2NOTE CLOUD LIBRARY</span><h2 id={titleId}>保存到我的牌谱库</h2></div>
+          <div><span>KISH2NOTE CLOUD LIBRARY</span><h2 id={titleId}>{enableAutoSave ? '开启牌谱自动保存' : `保存到${libraryName}`}</h2></div>
           <button type="button" aria-label="关闭保存确认" disabled={saving} onClick={onClose}>×</button>
         </header>
 
@@ -72,13 +74,14 @@ export function CloudSaveDialog({
           <ul>
             <li>这 {handCount.toLocaleString()} 手牌的 GG 原始文本，便于以后重新解析和播放。</li>
             <li>牌局时间、盲注、玩家名、底牌、公共牌、行动、输赢及统计摘要。</li>
-            <li>不会上传本地文件名，也不会自动同步你之后导入的文件。</li>
+            <li>不会上传本地文件名，也不会上传未识别为受支持牌谱的内容。</li>
+            {enableAutoSave && <li>本次确认后，登录状态下之后导入的受支持牌谱会自动存入“{libraryName}”；你可以随时关闭。</li>}
           </ul>
         </div>
 
         <label className="cloud-save-consent">
           <input type="checkbox" checked={confirmed} disabled={saving} onChange={(event) => setConfirmed(event.target.checked)} />
-          <span>我确认保存上述牌谱到自己的云端牌谱库，并同意按<a href="/?page=privacy" target="_blank" rel="noreferrer">《隐私政策》</a>处理这些数据。</span>
+          <span>我确认将上述牌谱保存到“{libraryName}”{enableAutoSave ? '，并开启后续导入自动保存' : ''}，同意按<a href="/?page=privacy" target="_blank" rel="noreferrer">《隐私政策》</a>处理这些数据。</span>
         </label>
 
         {saving && <div className="cloud-save-progress" role="status"><i aria-hidden="true" />{progressLabel}</div>}
@@ -91,7 +94,7 @@ export function CloudSaveDialog({
             className="primary"
             disabled={!confirmed || !handCount || !hero || saving}
             onClick={() => onConfirm?.({ sessionName: sessionName.trim() })}
-          >{saving ? '保存中…' : '确认并保存'}</button>
+          >{saving ? '保存中…' : enableAutoSave ? '确认并开启' : '确认并保存'}</button>
         </footer>
       </section>
     </div>

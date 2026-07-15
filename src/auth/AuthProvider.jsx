@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { LoginDialog } from '../components/auth/LoginDialog.jsx';
 import { cloudbaseClient, getCloudbaseAuthReadiness } from '../lib/cloudbaseClient.js';
+import { ensureDefaultCloudLibrary } from '../lib/cloudLibrary.js';
 
 const AuthContext = createContext(null);
 
@@ -79,6 +80,7 @@ export function AuthProvider({ children, onLoginSuccess }) {
     const pendingCallback = successCallbackRef.current;
     successCallbackRef.current = null;
     Promise.resolve()
+      .then(() => ensureDefaultCloudLibrary().catch((error) => console.error('创建默认牌谱库失败', error)))
       .then(() => onLoginSuccess?.(nextUser))
       .then(() => pendingCallback?.(nextUser))
       .catch((error) => console.error('登录后操作失败', error));

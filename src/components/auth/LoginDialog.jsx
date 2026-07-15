@@ -180,7 +180,7 @@ export function LoginDialog({
         </header>
 
         <p id={descriptionId} className="login-dialog-intro">
-          使用中国大陆手机号登录。登录只建立账户，不会上传任何牌谱；保存牌谱时会再次请你确认。
+          使用中国大陆手机号登录。首次导入牌谱时会明确确认云端存储；确认后，登录状态下的新牌谱默认自动保存到你的“我的牌谱”，可随时关闭。
         </p>
 
         {!available && (
@@ -256,7 +256,7 @@ export function LoginDialog({
             />
             <span>
               我已阅读并同意 <a href={termsHref} target="_blank" rel="noreferrer">《用户协议》</a> 和{' '}
-              <a href={privacyHref} target="_blank" rel="noreferrer">《隐私政策》</a>
+              <a href={privacyHref} target="_blank" rel="noreferrer">《隐私政策》</a>，知悉登录后可开启个人牌谱库自动保存
             </span>
           </label>
 

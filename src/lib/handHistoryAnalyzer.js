@@ -7,6 +7,27 @@ const POSTFLOP_STREETS = ['flop', 'turn', 'river'];
 const CARD_RE = /([2-9TJQKA][shdc])/g;
 const RANK_VALUE = Object.freeze({ 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, T: 10, J: 11, Q: 12, K: 13, A: 14 });
 const RANK_LABEL = Object.freeze({ 14: 'A', 13: 'K', 12: 'Q', 11: 'J', 10: 'T', 9: '9', 8: '8', 7: '7', 6: '6', 5: '5', 4: '4', 3: '3', 2: '2' });
+const GAME_VARIANT_LABELS = Object.freeze({
+  holdem: "Hold'em",
+  omaha4: 'Omaha',
+  omaha5: 'Omaha 5 Cards',
+  omaha6: 'Omaha 6 Cards',
+  short_deck: 'Short Deck',
+  unknown: 'Unknown'
+});
+const BETTING_STRUCTURE_LABELS = Object.freeze({
+  no_limit: 'No Limit',
+  pot_limit: 'Pot Limit',
+  fixed_limit: 'Fixed Limit',
+  unknown: 'Unknown'
+});
+const TABLE_TYPE_LABELS = Object.freeze({
+  rush_cash: 'Rush & Cash',
+  all_in_or_fold: 'All-In or Fold',
+  tournament: 'Tournament',
+  regular: 'Regular',
+  unknown: 'Unknown'
+});
 
 export const POSITIONS = ['BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO', 'MP', 'EP'];
 
@@ -16,6 +37,93 @@ export function splitHandHistories(text) {
     .split(HAND_SPLIT_RE)
     .map((hand) => hand.trim())
     .filter((hand) => hand.startsWith('Poker Hand #'));
+}
+
+function normalizeClassificationText(value = '') {
+  return String(value)
+    .normalize('NFKC')
+    .replace(/[‘’`]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function classifyGameVariant(descriptor) {
+  const normalized = normalizeClassificationText(descriptor);
+  if (/short[\s-]*deck|(?:^|\s)6\+\s*(?:hold'?em)?(?:\s|$)/.test(normalized)) return 'short_deck';
+  if (/omaha/.test(normalized)) {
+    if (/omaha\s*(?:6|six)(?:\s|-)*(?:cards?)?|(?:6|six)(?:\s|-)*(?:cards?)?\s*omaha/.test(normalized)) return 'omaha6';
+    if (/omaha\s*(?:5|five)(?:\s|-)*(?:cards?)?|(?:5|five)(?:\s|-)*(?:cards?)?\s*omaha/.test(normalized)) return 'omaha5';
+    return 'omaha4';
+  }
+  if (/hold'?em|texas hold/.test(normalized)) return 'holdem';
+  return 'unknown';
+}
+
+function classifyBettingStructure(descriptor) {
+  const normalized = normalizeClassificationText(descriptor);
+  if (/\bno[\s-]*limit\b/.test(normalized)) return 'no_limit';
+  if (/\bpot[\s-]*limit\b/.test(normalized)) return 'pot_limit';
+  if (/\bfixed[\s-]*limit\b|(?:^|\s)limit(?:\s|$)/.test(normalized)) return 'fixed_limit';
+  return 'unknown';
+}
+
+function parseGameClassification(header, lines, handId) {
+  const gameDescriptorRaw = header.match(/^Poker Hand #[^:]+:\s*(.+?)\s+\([^)]*\)\s+-\s+/)?.[1]?.trim() ?? '';
+  const tableLine = lines.find((line) => /^Table\s+/.test(line)) ?? '';
+  const tableMatch = tableLine.match(/^Table\s+'(.+?)'(?:\s+(\d+)-max\b)?/i);
+  const tableNameRaw = tableMatch?.[1]?.trim() ?? '';
+  const maxPlayers = tableMatch?.[2] ? Number(tableMatch[2]) : null;
+  const gameVariant = classifyGameVariant(gameDescriptorRaw);
+  const bettingStructure = classifyBettingStructure(gameDescriptorRaw);
+  const normalizedTableName = normalizeClassificationText(tableNameRaw).replaceAll('&', 'and');
+  let tableType = 'unknown';
+
+  if (/rush\s*and\s*cash|rushandcash/.test(normalizedTableName)) {
+    tableType = 'rush_cash';
+  } else if (/all[\s-]*in\s*(?:or|and)\s*fold|allinorfold|(?:^|\W)aof(?:\W|$)/.test(normalizedTableName)) {
+    tableType = 'all_in_or_fold';
+  } else if (/tournament|spin\s*and\s*gold|spinandgold/.test(normalizedTableName)
+    || /\btournament\b/i.test(header)) {
+    tableType = 'tournament';
+  } else if (tableNameRaw) {
+    tableType = 'regular';
+  } else if (/^RC/i.test(handId)) {
+    tableType = 'rush_cash';
+  }
+
+  return {
+    gameVariant,
+    bettingStructure,
+    tableType,
+    maxPlayers,
+    gameDescriptorRaw,
+    tableNameRaw,
+    analysisSupported: gameVariant === 'holdem' && bettingStructure === 'no_limit'
+  };
+}
+
+function gameTypeSummaryEntry(hand) {
+  const gameVariant = hand.gameVariant ?? 'unknown';
+  const bettingStructure = hand.bettingStructure ?? 'unknown';
+  const tableType = hand.tableType ?? 'unknown';
+  const maxPlayers = Number.isInteger(hand.maxPlayers) ? hand.maxPlayers : null;
+  const analysisSupported = Boolean(hand.analysisSupported);
+  const parts = [
+    GAME_VARIANT_LABELS[gameVariant] ?? GAME_VARIANT_LABELS.unknown,
+    BETTING_STRUCTURE_LABELS[bettingStructure] ?? BETTING_STRUCTURE_LABELS.unknown,
+    TABLE_TYPE_LABELS[tableType] ?? TABLE_TYPE_LABELS.unknown
+  ];
+  if (maxPlayers) parts.push(`${maxPlayers}-max`);
+  return {
+    key: `${gameVariant}:${bettingStructure}:${tableType}:${maxPlayers ?? 'unknown'}`,
+    label: parts.join(' · '),
+    gameVariant,
+    bettingStructure,
+    tableType,
+    maxPlayers,
+    analysisSupported
+  };
 }
 
 function money(line) {
@@ -395,6 +503,7 @@ export function parseGgHand(raw) {
   const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
   const header = lines[0] ?? '';
   const id = header.match(/Poker Hand #([^:]+):/)?.[1] ?? header.slice(0, 48);
+  const gameClassification = parseGameClassification(header, lines, id);
   const stakes = header.match(/\((\$[\d.]+\/\$[\d.]+)\)/)?.[1] ?? 'Unknown';
   const bb = Number((stakes.split('/')[1] ?? '').replace('$', '')) || 1;
   const date = header.match(/ - ([\d/]+ [\d:]+)/)?.[1] ?? '';
@@ -533,6 +642,7 @@ export function parseGgHand(raw) {
     date,
     stakes,
     bb,
+    ...gameClassification,
     players,
     holeCards,
     board,
@@ -562,6 +672,7 @@ export function parseGgHand(raw) {
         date,
         stakes,
         bb,
+        ...gameClassification,
         position: player.position,
         cards: holeCards.get(hero) ?? [],
         board,
@@ -671,6 +782,7 @@ export function summarizeHeroResults(results) {
   const wonWhenSawFlopCount = results.filter((hand) => hand.wonWhenSawFlop).length;
   const byPosition = new Map();
   const byStakes = new Map();
+  const byGameType = new Map();
   const postflop = summarizePostflopStats(results);
   let running = 0;
   let runningBeforeRake = 0;
@@ -701,8 +813,14 @@ export function summarizeHeroResults(results) {
   for (const hand of results) {
     const pos = hand.position || 'Unknown';
     const stake = hand.stakes || 'Unknown';
+    const gameType = gameTypeSummaryEntry(hand);
     byPosition.set(pos, (byPosition.get(pos) ?? 0) + 1);
     byStakes.set(stake, (byStakes.get(stake) ?? 0) + 1);
+    const previousGameType = byGameType.get(gameType.key);
+    byGameType.set(gameType.key, {
+      ...gameType,
+      count: (previousGameType?.count ?? 0) + 1
+    });
   }
 
   return {
@@ -745,7 +863,8 @@ export function summarizeHeroResults(results) {
     postflop,
     curve,
     positions: [...byPosition.entries()].map(([label, count]) => ({ label, count })),
-    stakes: [...byStakes.entries()].map(([label, count]) => ({ label, count }))
+    stakes: [...byStakes.entries()].map(([label, count]) => ({ label, count })),
+    gameTypes: [...byGameType.values()]
   };
 }
 
