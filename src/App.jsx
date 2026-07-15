@@ -11,9 +11,8 @@ import { DatasetFilterPanel } from './components/DatasetFilterPanel.jsx';
 import {
   deleteCloudSession,
   ensureDefaultCloudLibrary,
-  getCloudLibraryOverview,
   hasCloudStorageConsent,
-  listCloudSessions,
+  loadCloudLibraryIndex,
   loadCloudLibraryHands,
   loadCloudSession,
   saveHandsToCloud,
@@ -2660,6 +2659,9 @@ function HandHistoryView() {
   const [datasetFilters, setDatasetFilters] = useState(() => (
     cloudLibraryId ? filtersFromSearch(searchParams) : emptyDatasetFilters()
   ));
+  const [appliedCloudFilters, setAppliedCloudFilters] = useState(() => (
+    cloudLibraryId ? filtersFromSearch(searchParams) : emptyDatasetFilters()
+  ));
   const [positionFilter, setPositionFilter] = useState('all');
   const [holeCardFilter, setHoleCardFilter] = useState(() => ({ ranks: [null, null], suitedOnly: false }));
   const [holeCardFilterOpen, setHoleCardFilterOpen] = useState(false);
@@ -2675,9 +2677,14 @@ function HandHistoryView() {
   const [cloudSaveError, setCloudSaveError] = useState('');
   const [savedSessionId, setSavedSessionId] = useState(null);
   const [cloudSaveIntent, setCloudSaveIntent] = useState('manual');
-  const cloudLoadKey = cloudLibraryId
-    ? `${cloudSourceId}:${filtersToSearch(datasetFilters).toString()}`
-    : cloudSourceId;
+  const [cloudReloadNonce, setCloudReloadNonce] = useState(0);
+  const isCloudLibrarySource = sourceMode === 'cloud' && Boolean(cloudLibraryId);
+  const datasetFilterKey = filtersToSearch(datasetFilters).toString();
+  const appliedCloudFilterKey = filtersToSearch(appliedCloudFilters).toString();
+  const cloudFiltersPending = Boolean(isCloudLibrarySource && datasetFilterKey !== appliedCloudFilterKey);
+  const cloudLoadKey = isCloudLibrarySource
+    ? `${cloudSourceId}:${appliedCloudFilterKey}:${cloudReloadNonce}`
+    : cloudSourceId ? `${cloudSourceId}:${cloudReloadNonce}` : '';
 
   const players = useMemo(() => rankedPlayers(hands), [hands]);
   const rawResults = useMemo(() => (
@@ -2710,14 +2717,26 @@ function HandHistoryView() {
     { value: 'all', label: '全部' },
     ...positionOptions.map((position) => ({ value: position, label: position }))
   ], [positionOptions]);
-  const filteredResults = useMemo(() => rawResults.filter((hand) => (
-    matchesDatasetFilters(hand, datasetFilters)
-    && (positionFilter === 'all' || hand.position === positionFilter)
-    && matchesHoleFilter(hand.cards ?? [], holeCardFilter)
-  )), [datasetFilters, holeCardFilter, positionFilter, rawResults]);
+  const effectiveDatasetFilters = isCloudLibrarySource ? appliedCloudFilters : datasetFilters;
+  const filteredResults = useMemo(() => {
+    const hasDatasetFilter = effectiveDatasetFilters.timePreset !== 'all'
+      || Boolean(effectiveDatasetFilters.dateFrom)
+      || Boolean(effectiveDatasetFilters.dateTo)
+      || effectiveDatasetFilters.stakes.length > 0
+      || effectiveDatasetFilters.gameTypes.length > 0;
+    const hasHoleFilter = holeCardFilter.ranks.some(Boolean) || holeCardFilter.suitedOnly;
+    if (!hasDatasetFilter && positionFilter === 'all' && !hasHoleFilter) return rawResults;
+    return rawResults.filter((hand) => (
+      matchesDatasetFilters(hand, effectiveDatasetFilters)
+      && (positionFilter === 'all' || hand.position === positionFilter)
+      && matchesHoleFilter(hand.cards ?? [], holeCardFilter)
+    ));
+  }, [effectiveDatasetFilters, holeCardFilter, positionFilter, rawResults]);
   const holeCardFilterActive = holeCardFilter.ranks.some(Boolean) || holeCardFilter.suitedOnly;
   const overallSummary = useMemo(() => summarizeHeroResults(rawResults), [rawResults]);
-  const summary = useMemo(() => summarizeHeroResults(filteredResults), [filteredResults]);
+  const summary = useMemo(() => (
+    filteredResults === rawResults ? overallSummary : summarizeHeroResults(filteredResults)
+  ), [filteredResults, overallSummary, rawResults]);
   const mainStake = summary.stakes?.[0]?.label ? stakeLabel(summary.stakes[0].label) : '-';
   const tpDelta = Number(endTp) - Number(startTp);
   const expectedTp = overallSummary.gameRake * 100;
@@ -2812,11 +2831,19 @@ function HandHistoryView() {
 
   useEffect(() => {
     if (!cloudSourceId) return undefined;
+    if (sourceMode !== 'cloud') return undefined;
     if (authStatus === 'loading') return undefined;
     if (!isAuthenticated) {
+      cloudLoadRef.current = '';
       const timer = window.setTimeout(() => {
         setStatus(authStatus === 'error' ? 'error' : 'idle');
         setMessage(authStatus === 'error' ? '暂时无法读取登录状态，请检查网络后重试。' : '登录后才能读取这个云端牌谱库。');
+        setHands([]);
+        setHero('');
+        setFileMeta(null);
+        setCloudSession(null);
+        setCloudLibrary(null);
+        setSavedSessionId(null);
       }, 0);
       if (authStatus === 'guest' && !cloudLoginPromptedRef.current) {
         cloudLoginPromptedRef.current = true;
@@ -2834,11 +2861,11 @@ function HandHistoryView() {
       setMessage(cloudSessionId ? '正在读取云端 Session…' : '正在按条件读取我的牌谱…');
       return cloudSessionId
         ? loadCloudSession(cloudSessionId)
-        : loadCloudLibraryHands({ libraryId: cloudLibraryId, filters: cloudDateFilters(datasetFilters) });
+        : loadCloudLibraryHands({ libraryId: cloudLibraryId, filters: cloudDateFilters(appliedCloudFilters) });
     }).then((result) => {
       if (!result) return;
       if (!active) return;
-      const nextHands = sortHandsByTime(result.hands ?? []);
+      const nextHands = result.hands ?? [];
       const nextPlayers = rankedPlayers(nextHands);
       const nextHero = result.hero && nextPlayers.some((player) => player.name === result.hero)
         ? result.hero
@@ -2857,7 +2884,11 @@ function HandHistoryView() {
       if (result.library) setCloudLibrary(result.library);
       setStartTp(String(result.startTp ?? 0));
       setEndTp(String(result.endTp ?? 0));
-      if (cloudSessionId) setDatasetFilters(emptyDatasetFilters());
+      if (cloudSessionId) {
+        const emptyFilters = emptyDatasetFilters();
+        setDatasetFilters(emptyFilters);
+        setAppliedCloudFilters(emptyFilters);
+      }
       setPositionFilter('all');
       setHoleCardFilter({ ranks: [null, null], suitedOnly: false });
       setHistoryTab('overview');
@@ -2866,13 +2897,14 @@ function HandHistoryView() {
       setMessage(nextHands.length ? '' : '当前筛选条件下暂时没有牌谱。');
     }).catch((error) => {
       if (!active) return;
+      if (cloudLoadRef.current === cloudLoadKey) cloudLoadRef.current = '';
       setStatus('error');
       setMessage(error instanceof Error ? error.message : '读取云端牌谱失败。');
     });
     return () => {
       active = false;
     };
-  }, [authStatus, cloudLibraryId, cloudLoadKey, cloudSessionId, cloudSourceId, datasetFilters, isAuthenticated, openLogin]);
+  }, [appliedCloudFilters, authStatus, cloudLibraryId, cloudLoadKey, cloudSessionId, cloudSourceId, isAuthenticated, openLogin, sourceMode]);
 
   const persistHandsToCloud = async ({
     targetHands = hands,
@@ -2936,6 +2968,7 @@ function HandHistoryView() {
       const nextHero = nextPlayers[0]?.name ?? '';
       setHands(nextHands);
       setSourceMode('local');
+      cloudLoadRef.current = '';
       setCloudSession(null);
       setSavedSessionId(null);
       setFileMeta({
@@ -2945,7 +2978,9 @@ function HandHistoryView() {
         unsupported: unsupportedCount
       });
       setHero(nextHero);
-      setDatasetFilters(emptyDatasetFilters());
+      const emptyFilters = emptyDatasetFilters();
+      setDatasetFilters(emptyFilters);
+      setAppliedCloudFilters(emptyFilters);
       setPositionFilter('all');
       setHoleCardFilter({ ranks: [null, null], suitedOnly: false });
       setHoleCardFilterOpen(false);
@@ -3082,16 +3117,28 @@ function HandHistoryView() {
           </div>
         </section>
 
-        {message && <div className={`history-message history-message--${status}`}>{message}</div>}
+        {message && (
+          <div className={`history-message history-message--${status}`}>
+            <span>{message}</span>
+            {sourceMode === 'cloud' && cloudSourceId && status === 'error' && isAuthenticated && (
+              <button type="button" className="secondary" onClick={() => setCloudReloadNonce((value) => value + 1)}>
+                重新读取
+              </button>
+            )}
+          </div>
+        )}
 
         {sourceMode === 'cloud' && cloudLibraryId && hands.length === 0 && status !== 'loading' && (
           <DatasetFilterPanel
             filters={datasetFilters}
             onChange={setDatasetFilters}
             onClear={() => setDatasetFilters(emptyDatasetFilters())}
+            onApply={() => setAppliedCloudFilters(datasetFilters)}
+            applyDisabled={!cloudFiltersPending || status === 'loading'}
+            hasPendingChanges={cloudFiltersPending}
             stakeOptions={datasetStakeOptions}
             gameTypeOptions={datasetGameTypeOptions}
-            filteredCount={0}
+            filteredCount={cloudFiltersPending ? null : 0}
             totalCount={0}
           />
         )}
@@ -3148,9 +3195,12 @@ function HandHistoryView() {
               filters={datasetFilters}
               onChange={setDatasetFilters}
               onClear={() => setDatasetFilters(emptyDatasetFilters())}
+              onApply={isCloudLibrarySource ? () => setAppliedCloudFilters(datasetFilters) : undefined}
+              applyDisabled={!cloudFiltersPending || status === 'loading'}
+              hasPendingChanges={cloudFiltersPending}
               stakeOptions={datasetStakeOptions}
               gameTypeOptions={datasetGameTypeOptions}
-              filteredCount={filteredResults.length}
+              filteredCount={cloudFiltersPending ? null : filteredResults.length}
               totalCount={rawResults.length}
               disabled={status === 'loading'}
             />
@@ -3351,7 +3401,6 @@ function CloudLibraryView() {
   const { authStatus, isAuthenticated, openLogin } = useAuth();
   const [loadState, setLoadState] = useState('idle');
   const [library, setLibrary] = useState(null);
-  const [libraryOverview, setLibraryOverview] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [filters, setFilters] = useState(() => emptyDatasetFilters());
   const [error, setError] = useState('');
@@ -3365,19 +3414,11 @@ function CloudLibraryView() {
       if (!active) return null;
       setLoadState('loading');
       setError('');
-      return ensureDefaultCloudLibrary();
-    }).then(async (nextLibrary) => {
-      if (!active || !nextLibrary) return null;
-      const [rows, overview] = await Promise.all([
-        listCloudSessions({ libraryId: nextLibrary.id }),
-        getCloudLibraryOverview({ libraryId: nextLibrary.id })
-      ]);
-      return { nextLibrary, rows, overview };
+      return loadCloudLibraryIndex();
     }).then((result) => {
       if (!active || !result) return;
-      setLibrary(result.nextLibrary);
-      setSessions(result.rows);
-      setLibraryOverview(result.overview);
+      setLibrary(result.library);
+      setSessions(result.sessions);
       setLoadState('ready');
     }).catch((requestError) => {
       if (!active) return;
@@ -3389,26 +3430,17 @@ function CloudLibraryView() {
     };
   }, [isAuthenticated]);
 
-  const totalHands = libraryOverview?.totalHands ?? sessions.reduce((sum, session) => sum + session.handCount, 0);
+  const totalHands = sessions.reduce((sum, session) => sum + session.handCount, 0);
   const totalProfitBB = sessions.reduce((sum, session) => sum + Number(session.summary?.totalProfitBB ?? 0), 0);
   const libraryStakeOptions = useMemo(() => {
-    if (libraryOverview?.stakes?.length) {
-      return libraryOverview.stakes.map(({ value, count }) => ({ value, label: stakeLabel(value), count }));
-    }
     const counts = new Map();
     sessions.forEach((session) => (session.summary?.stakes ?? []).forEach((item) => {
       if (item?.label) counts.set(item.label, (counts.get(item.label) ?? 0) + Number(item.count ?? 0));
     }));
     return [...counts.entries()].map(([value, count]) => ({ value, label: stakeLabel(value), count }));
-  }, [libraryOverview, sessions]);
+  }, [sessions]);
   const libraryGameTypeOptions = useMemo(() => {
     const items = new Map();
-    if (libraryOverview?.gameTypes?.length) {
-      libraryOverview.gameTypes.forEach((item) => {
-        items.set(item.key, { value: item.key, label: gameTypeDisplayLabel(item), count: Number(item.count ?? 0) });
-      });
-      return [...items.values()];
-    }
     sessions.forEach((session) => (session.summary?.gameTypes ?? []).forEach((item) => {
       if (!item?.key || item.analysisSupported === false) return;
       const current = items.get(item.key);
@@ -3416,7 +3448,7 @@ function CloudLibraryView() {
       else items.set(item.key, { value: item.key, label: gameTypeDisplayLabel(item), count: Number(item.count ?? 0) });
     }));
     return [...items.values()];
-  }, [libraryOverview, sessions]);
+  }, [sessions]);
 
   const analyzeLibrary = () => {
     if (!library) return;
@@ -3446,13 +3478,6 @@ function CloudLibraryView() {
     try {
       await deleteCloudSession(session.id);
       setSessions((current) => current.filter((item) => item.id !== session.id));
-      if (library) {
-        try {
-          setLibraryOverview(await getCloudLibraryOverview({ libraryId: library.id }));
-        } catch {
-          setLibraryOverview(null);
-        }
-      }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '删除云牌谱失败。');
     } finally {

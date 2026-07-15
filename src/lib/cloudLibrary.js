@@ -7,8 +7,14 @@ const METRIC_VERSION = 'kish2note-hero-v1';
 const CONSENT_PURPOSE = 'cloud_hand_history_storage';
 const CONSENT_POLICY_VERSION = '2026-07-15-v2-auto-library';
 const LOOKUP_BATCH_SIZE = 50;
+const LOOKUP_CONCURRENCY = 4;
 const READ_PAGE_SIZE = 500;
-const WRITE_BATCH_SIZE = 50;
+const READ_PAGE_CONCURRENCY = 4;
+const HASH_BATCH_SIZE = 32;
+const HASH_PROGRESS_INTERVAL = 256;
+const HAND_WRITE_BATCH_SIZE = 200;
+const RELATION_WRITE_BATCH_SIZE = 500;
+const WRITE_CONCURRENCY = 3;
 const WRITE_BATCH_BYTES = 750_000;
 const MAX_RAW_TEXT_BYTES = 262_144;
 
@@ -114,7 +120,7 @@ async function sha256(value) {
       code: 'cloud-library/crypto-unavailable'
     });
   }
-  const bytes = new TextEncoder().encode(value);
+  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value;
   const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
@@ -127,6 +133,31 @@ function chunk(values, size) {
   return chunks;
 }
 
+async function runWithConcurrency(values, concurrency, operation) {
+  if (!values.length) return [];
+  const results = new Array(values.length);
+  const workerCount = Math.min(Math.max(1, concurrency), values.length);
+  let nextIndex = 0;
+  let firstError = null;
+
+  const worker = async () => {
+    while (!firstError) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= values.length) return;
+      try {
+        results[index] = await operation(values[index], index);
+      } catch (error) {
+        if (!firstError) firstError = error;
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  if (firstError) throw firstError;
+  return results;
+}
+
 function chunkRowsByPayload(rows) {
   const result = [];
   let current = [];
@@ -134,7 +165,7 @@ function chunkRowsByPayload(rows) {
 
   for (const row of rows) {
     const rowBytes = new TextEncoder().encode(JSON.stringify(row)).byteLength + 1;
-    if (current.length && (current.length >= WRITE_BATCH_SIZE || currentBytes + rowBytes > WRITE_BATCH_BYTES)) {
+    if (current.length && (current.length >= HAND_WRITE_BATCH_SIZE || currentBytes + rowBytes > WRITE_BATCH_BYTES)) {
       result.push(current);
       current = [];
       currentBytes = 2;
@@ -246,33 +277,48 @@ async function requireSignedIn() {
 
 async function fetchAll(buildQuery, operation) {
   const rows = [];
-  for (let offset = 0; ; offset += READ_PAGE_SIZE) {
-    const page = await runQuery(
-      buildQuery().range(offset, offset + READ_PAGE_SIZE - 1),
-      operation
+  const firstPage = await runQuery(
+    buildQuery().range(0, READ_PAGE_SIZE - 1),
+    operation
+  );
+  const firstRows = Array.isArray(firstPage) ? firstPage : [];
+  rows.push(...firstRows);
+  if (firstRows.length < READ_PAGE_SIZE) return rows;
+
+  for (let offset = READ_PAGE_SIZE; ;) {
+    const offsets = Array.from(
+      { length: READ_PAGE_CONCURRENCY },
+      (_, index) => offset + index * READ_PAGE_SIZE
     );
-    const pageRows = Array.isArray(page) ? page : [];
-    rows.push(...pageRows);
-    if (pageRows.length < READ_PAGE_SIZE) break;
+    const pages = await Promise.all(offsets.map((pageOffset) => runQuery(
+      buildQuery().range(pageOffset, pageOffset + READ_PAGE_SIZE - 1),
+      operation
+    )));
+    let complete = false;
+    for (const page of pages) {
+      const pageRows = Array.isArray(page) ? page : [];
+      rows.push(...pageRows);
+      if (pageRows.length < READ_PAGE_SIZE) {
+        complete = true;
+        break;
+      }
+    }
+    if (complete) return rows;
+    offset += READ_PAGE_SIZE * READ_PAGE_CONCURRENCY;
   }
-  return rows;
 }
 
 async function findRowsInBatches(database, table, column, values, select, operation, equals = {}) {
-  const found = [];
   const uniqueValues = [...new Set(values.filter(Boolean))];
-  for (const valuesBatch of chunk(uniqueValues, LOOKUP_BATCH_SIZE)) {
+  const batches = chunk(uniqueValues, LOOKUP_BATCH_SIZE);
+  const pages = await runWithConcurrency(batches, LOOKUP_CONCURRENCY, async (valuesBatch) => {
     let query = database.from(table).select(select).in(column, valuesBatch);
     for (const [filterColumn, filterValue] of Object.entries(equals)) {
       query = query.eq(filterColumn, filterValue);
     }
-    const rows = await runQuery(
-      query,
-      operation
-    );
-    if (Array.isArray(rows)) found.push(...rows);
-  }
-  return found;
+    return runQuery(query, operation);
+  });
+  return pages.flatMap((rows) => Array.isArray(rows) ? rows : []);
 }
 
 async function resolveDefaultLibrary(database) {
@@ -465,56 +511,76 @@ async function prepareHands(hands, hero, onProgress) {
   let duplicateCount = 0;
   let conflictCount = 0;
 
-  for (let index = 0; index < hands.length; index += 1) {
-    const hand = hands[index];
-    const rawText = normalizeRawText(hand?.raw);
-    const rawBytes = encoder.encode(rawText).byteLength;
-    if (!rawText || rawBytes > MAX_RAW_TEXT_BYTES) {
-      throw new CloudLibraryError(`第 ${index + 1} 手牌的原文为空或超过云端大小限制。`, {
-        code: 'cloud-library/invalid-raw-text'
-      });
-    }
-    const externalHandId = String(hand?.id ?? '').trim();
-    if (!externalHandId) {
-      throw new CloudLibraryError(`第 ${index + 1} 手牌缺少 GG 牌局号码。`, {
-        code: 'cloud-library/invalid-hand-id'
-      });
-    }
-    const heroResult = hand.getHeroResult?.(hero);
-    if (!heroResult) {
-      throw new CloudLibraryError(`牌手 ${hero} 不在牌局 ${externalHandId} 中。`, {
-        code: 'cloud-library/hero-not-found'
+  for (let batchStart = 0; batchStart < hands.length; batchStart += HASH_BATCH_SIZE) {
+    const candidates = [];
+    const batchEnd = Math.min(hands.length, batchStart + HASH_BATCH_SIZE);
+
+    for (let index = batchStart; index < batchEnd; index += 1) {
+      const hand = hands[index];
+      const rawText = normalizeRawText(hand?.raw);
+      const rawBuffer = encoder.encode(rawText);
+      const rawBytes = rawBuffer.byteLength;
+      if (!rawText || rawBytes > MAX_RAW_TEXT_BYTES) {
+        throw new CloudLibraryError(`第 ${index + 1} 手牌的原文为空或超过云端大小限制。`, {
+          code: 'cloud-library/invalid-raw-text'
+        });
+      }
+      const externalHandId = String(hand?.id ?? '').trim();
+      if (!externalHandId) {
+        throw new CloudLibraryError(`第 ${index + 1} 手牌缺少 GG 牌局号码。`, {
+          code: 'cloud-library/invalid-hand-id'
+        });
+      }
+      const heroResult = hand.getHeroResult?.(hero);
+      if (!heroResult) {
+        throw new CloudLibraryError(`牌手 ${hero} 不在牌局 ${externalHandId} 中。`, {
+          code: 'cloud-library/hero-not-found'
+        });
+      }
+      candidates.push({
+        hand,
+        heroResult,
+        rawText,
+        rawBuffer,
+        rawBytes,
+        externalHandId,
+        sourceOrdinal: index,
+        playedAt: handDateToIso(hand.date)
       });
     }
 
-    const contentSha256 = await sha256(rawText);
-    const duplicateId = uniqueByExternalId.get(externalHandId);
-    if (duplicateId) {
-      if (duplicateId.contentSha256 === contentSha256) duplicateCount += 1;
-      else conflictCount += 1;
-      notify(onProgress, 'hashing', index + 1, hands.length, '正在校验牌谱…');
-      continue;
-    }
-    if (uniqueByHash.has(contentSha256)) {
-      duplicateCount += 1;
-      notify(onProgress, 'hashing', index + 1, hands.length, '正在校验牌谱…');
-      continue;
-    }
+    const hashes = await Promise.all(candidates.map((item) => sha256(item.rawBuffer)));
+    candidates.forEach((candidate, index) => {
+      const item = {
+        hand: candidate.hand,
+        heroResult: candidate.heroResult,
+        rawText: candidate.rawText,
+        rawBytes: candidate.rawBytes,
+        externalHandId: candidate.externalHandId,
+        sourceOrdinal: candidate.sourceOrdinal,
+        playedAt: candidate.playedAt
+      };
+      const contentSha256 = hashes[index];
+      const duplicateId = uniqueByExternalId.get(item.externalHandId);
+      if (duplicateId) {
+        if (duplicateId.contentSha256 === contentSha256) duplicateCount += 1;
+        else conflictCount += 1;
+        return;
+      }
+      if (uniqueByHash.has(contentSha256)) {
+        duplicateCount += 1;
+        return;
+      }
 
-    const item = {
-      hand,
-      heroResult,
-      rawText,
-      rawBytes,
-      externalHandId,
-      contentSha256,
-      sourceOrdinal: index,
-      playedAt: handDateToIso(hand.date)
-    };
-    uniqueByExternalId.set(externalHandId, item);
-    uniqueByHash.set(contentSha256, item);
-    prepared.push(item);
-    notify(onProgress, 'hashing', index + 1, hands.length, '正在校验牌谱…');
+      const preparedItem = { ...item, contentSha256 };
+      uniqueByExternalId.set(item.externalHandId, preparedItem);
+      uniqueByHash.set(contentSha256, preparedItem);
+      prepared.push(preparedItem);
+    });
+
+    if (batchEnd === hands.length || batchEnd % HASH_PROGRESS_INTERVAL === 0) {
+      notify(onProgress, 'hashing', batchEnd, hands.length, '正在校验牌谱…');
+    }
   }
   return { prepared, duplicateCount, conflictCount };
 }
@@ -595,18 +661,19 @@ export async function saveHandsToCloud({
     locallyPrepared.prepared.map((item) => item.externalHandId),
     'id,library_id,poker_account_id,external_hand_id,content_sha256',
     '检查云端牌局号码',
-    { library_id: library.id }
+    { library_id: library.id, platform: PLATFORM }
   );
+  const byExternalId = new Map(existingById.map((row) => [row.external_hand_id, row]));
+  const hashCandidates = locallyPrepared.prepared.filter((item) => !byExternalId.has(item.externalHandId));
   const existingByHash = await findRowsInBatches(
     database,
     'hands',
     'content_sha256',
-    locallyPrepared.prepared.map((item) => item.contentSha256),
+    hashCandidates.map((item) => item.contentSha256),
     'id,library_id,poker_account_id,external_hand_id,content_sha256',
     '检查云端牌谱指纹',
     { library_id: library.id }
   );
-  const byExternalId = new Map(existingById.map((row) => [row.external_hand_id, row]));
   const byHash = new Map(existingByHash.map((row) => [row.content_sha256, row]));
   const newItems = [];
   const duplicateRows = [];
@@ -787,7 +854,7 @@ export async function saveHandsToCloud({
 
     const handBatches = chunkRowsByPayload(handRows);
     let inserted = 0;
-    for (const rows of handBatches) {
+    await runWithConcurrency(handBatches, WRITE_CONCURRENCY, async (rows) => {
       const savedRows = await runQuery(
         database.from('hands')
           .insert(rows, { defaultToNull: false })
@@ -814,7 +881,7 @@ export async function saveHandsToCloud({
       }
       inserted += rows.length;
       notify(onProgress, 'uploading', inserted, handRows.length, `正在保存牌谱 ${inserted}/${handRows.length}…`);
-    }
+    });
 
     const relationRows = [
       ...handRows.map((row) => ({
@@ -832,12 +899,13 @@ export async function saveHandsToCloud({
         outcome
       }))
     ];
-    for (const rows of chunk(relationRows, WRITE_BATCH_SIZE)) {
-      await runQuery(
+    const relationBatches = chunk(relationRows, RELATION_WRITE_BATCH_SIZE);
+    await runWithConcurrency(relationBatches, WRITE_CONCURRENCY, (rows) => (
+      runQuery(
         database.from('import_batch_hands').insert(rows, { defaultToNull: false }),
         '记录导入去重结果'
-      );
-    }
+      )
+    ));
 
     notify(onProgress, 'complete', handRows.length, handRows.length, '云牌谱保存完成。');
     return {
@@ -862,19 +930,31 @@ export async function saveHandsToCloud({
   }
 }
 
-export async function listCloudSessions({ libraryId } = {}) {
-  await requireSignedIn();
-  const database = getCloudbaseDatabase();
-  const library = await resolveLibrary(database, libraryId);
-  const rows = await fetchAll(
+async function fetchSessionRows(database, libraryId) {
+  return fetchAll(
     () => database.from('sessions')
       .select('id,library_id,poker_account_id,name,started_at,ended_at,timezone,hand_count,tp_start,tp_end,metadata,created_at')
-      .eq('library_id', library.id)
+      .eq('library_id', libraryId)
       .order('started_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false }),
     '读取云牌谱场次'
   );
-  return rows.map(normalizeSessionRow);
+}
+
+export async function loadCloudLibraryIndex({ libraryId } = {}) {
+  await requireSignedIn();
+  const database = getCloudbaseDatabase();
+  const library = await resolveLibrary(database, libraryId);
+  const rows = await fetchSessionRows(database, library.id);
+  return {
+    library: normalizeLibraryRow(library),
+    sessions: rows.map(normalizeSessionRow)
+  };
+}
+
+export async function listCloudSessions({ libraryId } = {}) {
+  const result = await loadCloudLibraryIndex({ libraryId });
+  return result.sessions;
 }
 
 export async function getCloudLibraryOverview({ libraryId } = {}) {
@@ -997,6 +1077,13 @@ export async function loadCloudLibraryHands({ libraryId, filters = {} } = {}) {
   const variants = [...new Set(gameParts.map((parts) => parts[0]).filter(Boolean))];
   const structures = [...new Set(gameParts.map((parts) => parts[1]).filter(Boolean))];
   const tableTypes = [...new Set(gameParts.map((parts) => parts[2]).filter(Boolean))];
+  const hasUnknownMaxPlayers = gameParts.some((parts) => {
+    const value = parts[3];
+    return value === undefined || value === '' || value === 'unknown' || !Number.isInteger(Number(value));
+  });
+  const maxPlayers = [...new Set(gameParts
+    .map((parts) => Number(parts[3]))
+    .filter(Number.isInteger))];
   const from = String(filters.from ?? '').trim();
   const to = String(filters.to ?? '').trim();
 
@@ -1015,6 +1102,7 @@ export async function loadCloudLibraryHands({ libraryId, filters = {} } = {}) {
       if (variants.length) query = query.in('game_variant', variants);
       if (structures.length) query = query.in('betting_structure', structures);
       if (tableTypes.length) query = query.in('table_type', tableTypes);
+      if (maxPlayers.length && !hasUnknownMaxPlayers) query = query.in('max_players', maxPlayers);
       return query;
     },
     '读取牌谱库筛选结果'

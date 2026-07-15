@@ -70,6 +70,9 @@ export function DatasetFilterPanel({
   filters = EMPTY_DATASET_FILTERS,
   onChange,
   onClear,
+  onApply,
+  applyDisabled = false,
+  hasPendingChanges = false,
   stakeOptions = [],
   gameTypeOptions = [],
   filteredCount = 0,
@@ -136,6 +139,16 @@ export function DatasetFilterPanel({
           <small>{countPending ? `${formatCount(totalCount)} 手牌可筛选` : `/ ${formatCount(totalCount)} 手牌`}</small>
         </div>
         <div className="dataset-filter-actions">
+          {onApply && (
+            <button
+              type="button"
+              className="dataset-filter-apply"
+              disabled={disabled || applyDisabled}
+              onClick={onApply}
+            >
+              {disabled ? '读取中…' : hasPendingChanges ? '应用筛选' : '已应用'}
+            </button>
+          )}
           {activeCount > 0 && (
             <button type="button" className="dataset-filter-clear" disabled={disabled} onClick={clearAll}>
               清除全部
