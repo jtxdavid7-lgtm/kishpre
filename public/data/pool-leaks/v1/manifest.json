@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "datasetVersion": "real_pool_vulnerability_explorer_v2",
+  "generatedAt": "2026-07-16T19:15:25",
+  "privacy": "仅包含匿名汇总统计，不含原始手牌、玩家身份或本机路径",
+  "summary": {
+    "handsAnalyzed": 39488382,
+    "headsUpPressureResponses": 20128857,
+    "flopBoardOpportunities": 7957321,
+    "minimumReliableSample": 500,
+    "browserMinimumSample": 100,
+    "explorerRows": 4211,
+    "flopBoardRows": 1831,
+    "boardClassesDeclared": 35,
+    "boardClassesObserved": 34,
+    "boardClassificationCoverage": 1,
+    "verifiedSpotExamples": 70
+  },
+  "boardClasses": [
+    {
+      "key": "01_A_HIGH_PAIRED",
+      "label": "A高配对面",
+      "observed": true
+    },
+    {
+      "key": "02_A_HIGH_MONOTONE",
+      "label": "A高三同花面",
+      "observed": true
+    },
+    {
+      "key": "03_A_HIGH_CONNECTED",
+      "label": "A高强连接面",
+      "observed": true
+    },
+    {
+      "key": "04_A_HIGH_GUTSHOT",
+      "label": "A高卡顺面",
+      "observed": true
+    },
+    {
+      "key": "05_A_HIGH_LOW_CONNECTED",
+      "label": "A高＋低张相连",
+      "observed": true
+    },
+    {
+      "key": "06_A_HIGH_LOW_GUTSHOT",
+      "label": "A高＋低张卡顺",
+      "observed": true
+    },
+    {
+      "key": "07_A_HIGH_TWO_TONE_DRY",
+      "label": "A高两同花干燥面",
+      "observed": true
+    },
+    {
+      "key": "08_A_HIGH_RAINBOW_DRY",
+      "label": "A高彩虹干燥面",
+      "observed": true
+    },
+    {
+      "key": "09_KQ_HIGH_PAIRED",
+      "label": "K/Q高配对面",
+      "observed": true
+    },
+    {
+      "key": "10_KQ_HIGH_MONOTONE",
+      "label": "K/Q高三同花面",
+      "observed": true
+    },
+    {
+      "key": "11_KQ_HIGH_CONNECTED",
+      "label": "K/Q高强连接面",
+      "observed": true
+    },
+    {
+      "key": "12_KQ_HIGH_HIGH_OESD",
+      "label": "K/Q高两头顺面",
+      "observed": true
+    },
+    {
+      "key": "13_KQ_HIGH_HIGH_GUTSHOT",
+      "label": "K/Q高卡顺面",
+      "observed": true
+    },
+    {
+      "key": "14_KQ_HIGH_LOW_CONNECTED",
+      "label": "K/Q高＋低张相连",
+      "observed": true
+    },
+    {
+      "key": "15_KQ_HIGH_TWO_TONE_DRY",
+      "label": "K/Q高两同花干燥面",
+      "observed": true
+    },
+    {
+      "key": "16_KQ_HIGH_RAINBOW_DRY",
+      "label": "K/Q高彩虹干燥面",
+      "observed": true
+    },
+    {
+      "key": "17_JT_HIGH_PAIRED",
+      "label": "J/T高配对面",
+      "observed": true
+    },
+    {
+      "key": "18_JT_HIGH_MONOTONE",
+      "label": "J/T高三同花面",
+      "observed": true
+    },
+    {
+      "key": "19_JT_HIGH_HEAVY_CONNECTED",
+      "label": "J/T高强连接面",
+      "observed": true
+    },
+    {
+      "key": "20_JT_HIGH_OESD",
+      "label": "J/T高两头顺面",
+      "observed": true
+    },
+    {
+      "key": "21_JT_HIGH_HIGH_GUTSHOT",
+      "label": "J/T高卡顺面",
+      "observed": true
+    },
+    {
+      "key": "22_JT_HIGH_LOW_GUTSHOT",
+      "label": "J/T高＋低张卡顺",
+      "observed": true
+    },
+    {
+      "key": "23_JT_HIGH_LOW_CONNECTED",
+      "label": "J/T高＋低张相连",
+      "observed": true
+    },
+    {
+      "key": "24_JT_HIGH_TWO_TONE_DRY",
+      "label": "J/T高两同花干燥面",
+      "observed": true
+    },
+    {
+      "key": "25_JT_HIGH_RAINBOW_DRY",
+      "label": "J/T高彩虹干燥面",
+      "observed": true
+    },
+    {
+      "key": "26_LOW_PAIRED",
+      "label": "低牌配对面",
+      "observed": true
+    },
+    {
+      "key": "27_LOW_MONOTONE",
+      "label": "低牌三同花面",
+      "observed": true
+    },
+    {
+      "key": "28_LOW_HEAVY_CONNECTED",
+      "label": "低牌强连接面",
+      "observed": true
+    },
+    {
+      "key": "29_LOW_OESD",
+      "label": "低牌两头顺面",
+      "observed": true
+    },
+    {
+      "key": "30_LOW_CONNECTED_GUTSHOT",
+      "label": "低牌相连卡顺面",
+      "observed": false
+    },
+    {
+      "key": "31_LOW_DISCONNECTED_GUTSHOT",
+      "label": "低牌断张卡顺面",
+      "observed": true
+    },
+    {
+      "key": "32_LOW_TWO_TONE_DRY",
+      "label": "低牌两同花干燥面",
+      "observed": true
+    },
+    {
+      "key": "33_LOW_RAINBOW_DRY",
+      "label": "低牌彩虹干燥面",
+      "observed": true
+    },
+    {
+      "key": "34_TRIPS_BOARD",
+      "label": "公共牌三条面",
+      "observed": true
+    },
+    {
+      "key": "35_MONOTONE_CONNECTED",
+      "label": "三同花强连接面",
+      "observed": true
+    }
+  ],
+  "files": {
+    "explorer": {
+      "path": "explorer.json",
+      "bytes": 1525965,
+      "sha256": "130c690f5e5d807a1476dca6dd7b6d2c83c4f6537ee267d2f6ac0a8dbc41cd2e",
+      "rows": 4211
+    },
+    "flopBoards": {
+      "path": "flop-boards.json",
+      "bytes": 655648,
+      "sha256": "6fea7a8c91d8d872689aea403418640858c4abecea5d029955e0f01a799562c6",
+      "rows": 1831
+    }
+  }
+}

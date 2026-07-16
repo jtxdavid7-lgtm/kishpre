@@ -9,6 +9,7 @@ import { useAuth } from './auth/AuthProvider.jsx';
 import { ArchiveConsentDialog } from './components/cloud/ArchiveConsentDialog.jsx';
 import { CloudSaveDialog } from './components/cloud/CloudSaveDialog.jsx';
 import { DatasetFilterPanel } from './components/DatasetFilterPanel.jsx';
+import { PoolLeakExplorer } from './components/PoolLeakExplorer.jsx';
 import {
   deleteCloudSession,
   ensureDefaultCloudLibrary,
@@ -167,6 +168,7 @@ Archive.init({
 
 const FEATURE_BLUEPRINT = [
   { key: 'reports', action: 'history' },
+  { key: 'poolLeaks', action: 'poolLeaks' },
   { key: 'equity', action: 'equity' },
   { key: 'variance', action: 'variance' },
   { key: 'rng', action: 'download' },
@@ -239,6 +241,11 @@ const HOMEPAGE_COPY = {
         label: 'K2note',
         title: 'GG 牌谱分析工作台',
         desc: '导入 GGPoker 手牌历史，从盈亏结果到打法结构完成一站式复盘。'
+      },
+      poolLeaks: {
+        label: '真实玩家池 · 新工具',
+        title: '玩家池漏洞查询器',
+        desc: '按底池、位置、行动路径、Flop 牌面和下注尺寸，查找样本可靠的防守不足与过度防守节点。'
       }
     },
     actions: {
@@ -246,6 +253,7 @@ const HOMEPAGE_COPY = {
       equity: '立即计算',
       variance: '开始模拟',
       history: '进入 K2note',
+      poolLeaks: '查询玩家池漏洞',
       download: '下载插件'
     }
   },
@@ -306,6 +314,11 @@ const HOMEPAGE_COPY = {
         label: 'K2note',
         title: 'GG hand-history analysis workspace',
         desc: 'Import GGPoker hands and move from results to a structured review of your game.'
+      },
+      poolLeaks: {
+        label: 'REAL PLAYER POOL · NEW',
+        title: 'Player-pool leak explorer',
+        desc: 'Explore reliable under-defense and over-defense nodes by pot type, role, line, Flop texture, and bet size.'
       }
     },
     actions: {
@@ -313,6 +326,7 @@ const HOMEPAGE_COPY = {
       equity: 'Calculate now',
       variance: 'Run simulation',
       history: 'Open K2note',
+      poolLeaks: 'Explore pool leaks',
       download: 'Download plugin'
     }
   }
@@ -4114,6 +4128,7 @@ function HomeView() {
   const openEquity = () => window.location.assign('?tool=equity');
   const openVariance = () => window.location.assign('?tool=variance');
   const openHistory = () => window.location.assign('?tool=history');
+  const openPoolLeaks = () => window.location.assign('?tool=pool-leaks');
   const openLibrary = () => {
     if (isAuthenticated) {
       window.location.assign('?tool=library');
@@ -4167,6 +4182,7 @@ function HomeView() {
       if (item.action === 'equity') return openEquity;
       if (item.action === 'variance') return openVariance;
       if (item.action === 'history') return openHistory;
+      if (item.action === 'poolLeaks') return openPoolLeaks;
       if (item.action === 'download') return downloadPlugin;
       return null;
     })();
@@ -4336,6 +4352,32 @@ function LegalView({ type }) {
   );
 }
 
+function PoolLeakView() {
+  useEffect(() => {
+    document.documentElement.lang = 'zh-CN';
+    document.title = '真实玩家池漏洞查询器 | KishPoker';
+    document.querySelector('meta[name="description"]')?.setAttribute(
+      'content',
+      '按底池、位置、行动路径、Flop 牌面和下注尺寸查询真实玩家池的防守不足与过度防守节点。'
+    );
+  }, []);
+
+  return (
+    <div className="site site--pool-leaks">
+      <nav className="top-nav">
+        <button type="button" className="brand brand--button" onClick={() => window.location.assign('/')}>
+          KISHPOKER · PLAYER POOL
+        </button>
+        <div className="top-nav-actions">
+          <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=history')}>K2note</button>
+        </div>
+      </nav>
+      <PoolLeakExplorer />
+    </div>
+  );
+}
+
 function App() {
   const search = typeof window !== 'undefined' ? window.location.search : '';
   const params = new URLSearchParams(search);
@@ -4349,6 +4391,7 @@ function App() {
   if (tool === 'variance') return <VarianceView />;
   if (tool === 'history') return <HandHistoryView />;
   if (tool === 'library') return <CloudLibraryView />;
+  if (tool === 'pool-leaks') return <PoolLeakView />;
   return <HomeView />;
 }
 
