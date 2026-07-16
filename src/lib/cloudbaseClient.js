@@ -99,17 +99,6 @@ function validateNewPassword(password) {
   }
 }
 
-function isUserNotFoundError(error) {
-  const category = String(error?.category ?? '').toUpperCase();
-  const code = String(error?.code ?? error?.status ?? '').toLowerCase();
-  const errorCode = Number(error?.errorCode ?? error?.error_code);
-  const message = String(error?.message ?? '').toLowerCase();
-  return category === 'USER_NOT_FOUND'
-    || errorCode === 5
-    || code === 'not_found'
-    || /user[^\n]*(not found|does not exist)|用户[^\n]*(不存在|未找到)/i.test(message);
-}
-
 function createChallengeId() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
   const bytes = new Uint8Array(16);
@@ -251,23 +240,13 @@ async function beginPhonePasswordSetup({ phone, password } = {}) {
     ? String(currentSession?.session?.access_token ?? '')
     : '';
 
-  let mode = 'reset';
-  let verify;
-  const resetResponse = await auth.resetPasswordForEmail(normalizedPhone);
-  if (!resetResponse?.error && typeof resetResponse?.data?.updateUser === 'function') {
-    verify = resetResponse.data.updateUser;
-  } else if (isUserNotFoundError(resetResponse?.error)) {
-    mode = 'signup';
-    const signupResponse = await auth.signUp({
-      phone: normalizedPhone,
-      password,
-      ...(anonymousToken ? { anonymous_token: anonymousToken } : {})
-    });
-    throwAuthError(signupResponse?.error, '发送注册验证码失败。');
-    verify = signupResponse?.data?.verifyOtp;
-  } else {
-    throwAuthError(resetResponse?.error, '发送验证码失败。');
-  }
+  const signupResponse = await auth.signUp({
+    phone: normalizedPhone,
+    password,
+    ...(anonymousToken ? { anonymous_token: anonymousToken } : {})
+  });
+  throwAuthError(signupResponse?.error, '发送注册验证码失败。');
+  const verify = signupResponse?.data?.verifyOtp;
 
   if (typeof verify !== 'function') {
     throw new AuthRequestError('验证码响应无效，请稍后重试。', 'auth/invalid-response');
@@ -275,7 +254,6 @@ async function beginPhonePasswordSetup({ phone, password } = {}) {
 
   const challengeId = createChallengeId();
   pendingPhonePassword.set(challengeId, {
-    mode,
     verify,
     expiresAt: Date.now() + CHALLENGE_TTL_MS
   });
@@ -295,10 +273,8 @@ async function completePhonePasswordSetup({ code, challengeId, password } = {}) 
   }
   validateNewPassword(password);
 
-  const response = challenge.mode === 'signup'
-    ? await challenge.verify({ token: code })
-    : await challenge.verify({ nonce: code, password });
-  throwAuthError(response?.error, challenge.mode === 'signup' ? '注册失败。' : '重置密码失败。');
+  const response = await challenge.verify({ token: code });
+  throwAuthError(response?.error, '注册或验证登录失败。');
   pendingPhonePassword.delete(challengeId);
   const data = response?.data;
   return { user: data?.user ?? data?.session?.user ?? null, session: data?.session ?? null };

@@ -9,6 +9,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:cloudbase": "vitest run tests/operatorArchive.live.test.js",
+    "export:operator-corpus": "node scripts/export-operator-hand-corpus.mjs",
+    "sync:operator-corpus": "node scripts/export-operator-hand-corpus.mjs --sync",
     "preview": "vite preview",
     "hands": "node scripts/build-hand-strength.js"
   },

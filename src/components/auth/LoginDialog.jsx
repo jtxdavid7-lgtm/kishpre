@@ -26,7 +26,7 @@ function errorMessage(error) {
     || category === 'USER_NOT_FOUND'
     || /invalid_(password|credentials|username_or_password)|password_not_set|user.*not found/i.test(`${code} ${message}`)
   ) {
-    return '手机号或密码错误。首次使用或忘记密码，请切换到“注册 / 重置密码”。';
+    return '手机号或密码错误。首次使用或暂时无法密码登录，请切换到“注册 / 验证码登录”。';
   }
   if (/login_type_disabled|login_method_disabled|username.*password.*disabled|账号密码.*未开启/i.test(`${code} ${message}`)) {
     return '手机号密码登录尚未开启，请稍后再试。';
@@ -374,7 +374,7 @@ export function LoginDialog({
             className={mode === 'setup' ? 'active' : ''}
             onClick={() => switchMode('setup')}
             disabled={!phoneAvailable || busy}
-          >注册 / 重置密码</button>
+          >注册 / 验证码登录</button>
         </div>
 
         {mode === 'password' ? (
@@ -407,7 +407,7 @@ export function LoginDialog({
         ) : (
           <form className="login-dialog-form" onSubmit={handlePasswordSetup}>
             <div className="login-dialog-setup-note">
-              新手机号会创建账户；已注册手机号会安全重置密码。两种情况都只需本次短信验证码。
+              新手机号会创建账户并设置密码；已注册手机号会通过本次短信验证码安全登录。
             </div>
             {phoneField}
             <label className="login-dialog-field">
@@ -472,7 +472,7 @@ export function LoginDialog({
               className="login-dialog-submit"
               disabled={!phoneAvailable || !phoneValid || !passwordValid || !passwordsMatch || !codeSent || !codeValid || !agreed || busy}
             >
-              {submitting ? '设置中…' : '完成注册 / 重置密码'}
+              {submitting ? '验证中…' : '完成注册 / 验证码登录'}
             </button>
           </form>
         )}
