@@ -1,4 +1,8 @@
-import { cloudbaseClient, getCloudbaseDatabase } from './cloudbaseClient';
+import {
+  cloudbaseClient,
+  getCloudbaseDatabase,
+  isAnonymousCloudbaseUser
+} from './cloudbaseClient';
 import { parseGgHand, summarizeHeroResults } from './handHistoryAnalyzer';
 
 const PLATFORM = 'ggpoker';
@@ -267,7 +271,7 @@ async function requireSignedIn() {
   } catch (error) {
     throw toCloudError(error, '读取登录状态');
   }
-  if (!authState?.user) {
+  if (!authState?.user || isAnonymousCloudbaseUser(authState.user)) {
     throw new CloudLibraryError('请先登录，再保存或读取云牌谱。', {
       code: 'cloud-library/login-required'
     });

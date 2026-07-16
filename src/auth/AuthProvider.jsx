@@ -1,7 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { GoogleLinkDialog } from '../components/auth/GoogleLinkDialog.jsx';
 import { LoginDialog } from '../components/auth/LoginDialog.jsx';
-import { cloudbaseClient, getCloudbaseAuthReadiness } from '../lib/cloudbaseClient.js';
+import {
+  cloudbaseClient,
+  getCloudbaseAuthReadiness,
+  isAnonymousCloudbaseUser
+} from '../lib/cloudbaseClient.js';
+import { withAuthMutationLock } from '../lib/authMutationLock.js';
 import { ensureDefaultCloudLibrary } from '../lib/cloudLibrary.js';
 
 const AuthContext = createContext(null);
@@ -9,10 +14,6 @@ const GOOGLE_OAUTH_INTENT_KEY = 'kish2note:google-oauth-intent';
 const GOOGLE_LINK_LOCK_KEY = 'kish2note:google-link-lock';
 const GOOGLE_AUTH_FLASH_KEY = 'kish2note:google-auth-flash';
 const GOOGLE_OAUTH_INTENT_TTL = 10 * 60 * 1000;
-const AUTH_MUTATION_LOCK_NAME = 'kish2note:auth-credential-mutation';
-const AUTH_MUTATION_TICKET_PREFIX = 'kish2note:auth-mutation-ticket:';
-const AUTH_MUTATION_TICKET_TTL = 2 * 60 * 1000;
-const AUTH_MUTATION_WAIT_TIMEOUT = 20 * 1000;
 const SDK_GOOGLE_PROVIDER = 'google';
 const SDK_OAUTH_SIGN_IN = 'sign_in';
 const SDK_OAUTH_BIND_IDENTITY = 'bind_identity';
@@ -106,168 +107,6 @@ function createOAuthState() {
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
   return [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
-}
-
-function waitForMutationStorage(milliseconds = 80) {
-  if (typeof window === 'undefined') return Promise.resolve();
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timer);
-      window.removeEventListener('storage', handleStorage);
-      resolve();
-    };
-    const handleStorage = (event) => {
-      if (String(event.key ?? '').startsWith(AUTH_MUTATION_TICKET_PREFIX)) finish();
-    };
-    const timer = window.setTimeout(finish, milliseconds);
-    window.addEventListener('storage', handleStorage);
-  });
-}
-
-function mutationTicketEntries(now = Date.now()) {
-  const entries = [];
-  const keys = [];
-  for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
-    if (key?.startsWith(AUTH_MUTATION_TICKET_PREFIX)) keys.push(key);
-  }
-  keys.forEach((key) => {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return;
-    try {
-      const value = JSON.parse(raw);
-      const expiresAt = Number(value?.expiresAt);
-      const owner = String(value?.owner ?? '');
-      const number = Number(value?.number);
-      if (!owner || !Number.isFinite(expiresAt) || expiresAt <= now || !Number.isFinite(number)) {
-        if (window.localStorage.getItem(key) === raw) window.localStorage.removeItem(key);
-        return;
-      }
-      entries.push({
-        key,
-        raw,
-        owner,
-        number,
-        choosing: Boolean(value.choosing),
-        expiresAt
-      });
-    } catch {
-      if (window.localStorage.getItem(key) === raw) window.localStorage.removeItem(key);
-    }
-  });
-  return entries;
-}
-
-function writeMutationTicket(key, ticket) {
-  window.localStorage.setItem(key, JSON.stringify(ticket));
-}
-
-function removeMutationTicket(key, owner) {
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return;
-    const value = JSON.parse(raw);
-    if (value?.owner === owner && window.localStorage.getItem(key) === raw) {
-      window.localStorage.removeItem(key);
-    }
-  } catch {
-    // 无法证明归属时不删除其他标签页的票据，等待租约自然过期。
-  }
-}
-
-async function withLocalStorageMutationLock(operation) {
-  if (typeof window === 'undefined') return operation();
-  const owner = createOAuthState();
-  const key = `${AUTH_MUTATION_TICKET_PREFIX}${owner}`;
-  const ticket = {
-    owner,
-    choosing: true,
-    number: 0,
-    expiresAt: Date.now() + AUTH_MUTATION_TICKET_TTL
-  };
-  const deadline = Date.now() + AUTH_MUTATION_WAIT_TIMEOUT;
-  let heartbeat = null;
-
-  try {
-    writeMutationTicket(key, ticket);
-    const maxNumber = mutationTicketEntries().reduce(
-      (maximum, entry) => Math.max(maximum, entry.number),
-      0
-    );
-    ticket.choosing = false;
-    ticket.number = maxNumber + 1;
-    ticket.expiresAt = Date.now() + AUTH_MUTATION_TICKET_TTL;
-    writeMutationTicket(key, ticket);
-
-    while (true) {
-      const now = Date.now();
-      if (now >= deadline) throw new Error('账户安全锁等待超时，请稍后重试。');
-      if (ticket.expiresAt - now < AUTH_MUTATION_TICKET_TTL / 2) {
-        ticket.expiresAt = now + AUTH_MUTATION_TICKET_TTL;
-        writeMutationTicket(key, ticket);
-      }
-      const blocked = mutationTicketEntries(now).some((entry) => {
-        if (entry.owner === owner) return false;
-        if (entry.choosing) return true;
-        return entry.number < ticket.number
-          || (entry.number === ticket.number && entry.owner < owner);
-      });
-      if (!blocked) break;
-      await waitForMutationStorage();
-    }
-
-    const ownRecord = mutationTicketEntries().find((entry) => entry.owner === owner);
-    if (!ownRecord || ownRecord.number !== ticket.number) {
-      throw new Error('无法确认账户安全锁，请稍后重试。');
-    }
-
-    heartbeat = window.setInterval(() => {
-      try {
-        const raw = window.localStorage.getItem(key);
-        const current = raw ? JSON.parse(raw) : null;
-        if (current?.owner !== owner || Number(current?.number) !== ticket.number) return;
-        ticket.expiresAt = Date.now() + AUTH_MUTATION_TICKET_TTL;
-        writeMutationTicket(key, ticket);
-      } catch {
-        // 下一次凭据操作会再次校验；当前持有者仍以票据 TTL 失败关闭。
-      }
-    }, Math.floor(AUTH_MUTATION_TICKET_TTL / 3));
-
-    return await operation();
-  } finally {
-    if (heartbeat !== null) window.clearInterval(heartbeat);
-    removeMutationTicket(key, owner);
-  }
-}
-
-async function withAuthMutationLock(operation) {
-  if (typeof window === 'undefined') return operation();
-  const lockManager = globalThis.navigator?.locks;
-  if (typeof lockManager?.request === 'function') {
-    const controller = new AbortController();
-    let entered = false;
-    const timeout = window.setTimeout(() => controller.abort(), AUTH_MUTATION_WAIT_TIMEOUT);
-    try {
-      return await lockManager.request(
-        AUTH_MUTATION_LOCK_NAME,
-        { mode: 'exclusive', signal: controller.signal },
-        async () => {
-          entered = true;
-          window.clearTimeout(timeout);
-          return operation();
-        }
-      );
-    } catch (error) {
-      window.clearTimeout(timeout);
-      if (entered) throw error;
-      if (error?.name === 'AbortError') throw new Error('账户安全锁等待超时，请稍后重试。');
-      return withLocalStorageMutationLock(operation);
-    }
-  }
-  return withLocalStorageMutationLock(operation);
 }
 
 function writeGoogleIntent(intent) {
@@ -506,15 +345,16 @@ export function AuthProvider({ children, onLoginSuccess }) {
   const readiness = getCloudbaseAuthReadiness();
 
   const adoptUser = useCallback((nextUser) => {
+    const visibleUser = isAnonymousCloudbaseUser(nextUser) ? null : nextUser;
     const previousId = userFingerprint(currentUserRef.current);
-    const nextId = userFingerprint(nextUser);
-    if (previousId !== nextId || Boolean(currentUserRef.current) !== Boolean(nextUser)) {
+    const nextId = userFingerprint(visibleUser);
+    if (previousId !== nextId || Boolean(currentUserRef.current) !== Boolean(visibleUser)) {
       authEpochRef.current += 1;
       identityRequestRef.current += 1;
     }
-    currentUserRef.current = nextUser;
-    setUser(nextUser);
-    setAuthStatus(nextUser ? 'authenticated' : 'guest');
+    currentUserRef.current = visibleUser;
+    setUser(visibleUser);
+    setAuthStatus(visibleUser ? 'authenticated' : 'guest');
   }, []);
 
   const refreshIdentities = useCallback(async () => {
@@ -544,7 +384,7 @@ export function AuthProvider({ children, onLoginSuccess }) {
       const nextUser = result?.user ?? null;
       setAuthError(null);
       adoptUser(nextUser);
-      if (nextUser) await refreshIdentities();
+      if (nextUser && !isAnonymousCloudbaseUser(nextUser)) await refreshIdentities();
       else {
         identityRequestRef.current += 1;
         setIdentities([]);
@@ -813,7 +653,7 @@ export function AuthProvider({ children, onLoginSuccess }) {
       const nextUser = result?.user ?? null;
       setAuthError(null);
       adoptUser(nextUser);
-      if (nextUser) await refreshIdentities();
+      if (nextUser && !isAnonymousCloudbaseUser(nextUser)) await refreshIdentities();
       else {
         setIdentities([]);
         setIdentityStatus('idle');
@@ -860,7 +700,11 @@ export function AuthProvider({ children, onLoginSuccess }) {
       if (event?.user) {
         setAuthError(null);
         adoptUser(event.user);
-        void refreshIdentities();
+        if (!isAnonymousCloudbaseUser(event.user)) void refreshIdentities();
+        else {
+          setIdentities([]);
+          setIdentityStatus('idle');
+        }
         return;
       }
       if (eventName === 'BIND_IDENTITY') void refreshSession();

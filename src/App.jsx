@@ -6,6 +6,7 @@ import { PROFILES } from './data/profiles';
 import { getRangePayload } from './lib/rangeEngine';
 import { simulateEquity } from './lib/equityEngine';
 import { useAuth } from './auth/AuthProvider.jsx';
+import { ArchiveConsentDialog } from './components/cloud/ArchiveConsentDialog.jsx';
 import { CloudSaveDialog } from './components/cloud/CloudSaveDialog.jsx';
 import { DatasetFilterPanel } from './components/DatasetFilterPanel.jsx';
 import {
@@ -18,6 +19,17 @@ import {
   saveHandsToCloud,
   updateCloudLibrarySettings
 } from './lib/cloudLibrary.js';
+import {
+  acceptOperatorArchivePreference,
+  archiveImportedHands,
+  deleteMyOperatorArchive,
+  disableOperatorArchivePreference,
+  getOperatorArchivePreference,
+  hasOperatorArchiveCopies,
+  resumeOperatorArchiveQueue,
+  resolveOperatorArchiveConsent,
+  setOperatorArchivePreference
+} from './lib/operatorArchive.js';
 import JSZip from 'jszip';
 import { Archive } from 'libarchive.js';
 import {
@@ -171,8 +183,8 @@ const HOMEPAGE_COPY = {
       eyebrow: 'KISHPOKER 旗舰工具',
       product: 'K2note',
       title: '把 GG 牌谱，变成可以行动的数据',
-      desc: '每个 session 打完后导入 GGPoker 手牌历史，立即在浏览器本地复盘；登录后可把牌谱持续积累到自己的云端牌谱库。',
-      privacy: '免登录纯本地 · 登录后首次确认即可自动积累牌谱',
+      desc: '每个 session 打完后导入 GGPoker 手牌历史，先在浏览器本地完成复盘；首次明确选择后，也可让之后的牌谱副本自动积累到云端。',
+      privacy: '先本地解析 · 首次明确同意后默认保存副本',
       primaryCta: '开始分析 GG 牌谱',
       previewLabel: '分析视图预览',
       previewTitle: '一份牌谱，重新看清你的打法',
@@ -191,7 +203,7 @@ const HOMEPAGE_COPY = {
       ]
     },
     modes: {
-      local: { label: '免登录', title: '分析这次 Session', desc: '导入刚打完的牌谱，只在当前浏览器本地解析和查看。', action: '开始本地分析' },
+      local: { label: '免登录', title: '分析这次 Session', desc: '导入刚打完的牌谱，先在浏览器本地解析；是否保存云端副本由你首次明确选择。', action: '开始本地分析' },
       cloud: { label: '登录后', title: '积累我的全部牌谱', desc: '首次确认后自动保存新牌谱，按时间、级别和游戏类型分析长期数据。', action: '进入我的牌谱库' }
     },
     section: {
@@ -238,8 +250,8 @@ const HOMEPAGE_COPY = {
       eyebrow: 'KISHPOKER FLAGSHIP TOOL',
       product: 'K2note',
       title: 'Turn GG hand histories into decisions you can act on',
-      desc: 'Review each GGPoker session locally in your browser, or sign in and continuously build a private cloud library for long-term analysis.',
-      privacy: 'Local while signed out · One clear opt-in enables signed-in auto-save',
+      desc: 'Review each GGPoker session locally first, then explicitly choose whether future imports should also contribute a cloud copy.',
+      privacy: 'Parsed locally first · One explicit opt-in enables copy auto-save',
       primaryCta: 'Analyze GG Hand Histories',
       previewLabel: 'ANALYSIS PREVIEW',
       previewTitle: 'One hand-history file. A clearer view of your game.',
@@ -258,7 +270,7 @@ const HOMEPAGE_COPY = {
       ]
     },
     modes: {
-      local: { label: 'NO SIGN-IN', title: 'Analyze this session', desc: 'Import your latest hands and keep parsing entirely in this browser.', action: 'Start local analysis' },
+      local: { label: 'NO SIGN-IN', title: 'Analyze this session', desc: 'Import your latest hands for local parsing, then choose whether to retain a cloud copy.', action: 'Start local analysis' },
       cloud: { label: 'SIGNED IN', title: 'Build my full library', desc: 'Confirm once, then auto-save new imports and filter them by date, stake, and game type.', action: 'Open my library' }
     },
     section: {
@@ -2730,7 +2742,7 @@ function AccountControl({ showLibrary = true, googleDisabledReason = '' }) {
 }
 
 function HandHistoryView() {
-  const { authStatus, isAuthenticated, openLogin } = useAuth();
+  const { authStatus, isAuthenticated, openLogin, user } = useAuth();
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const cloudSessionId = searchParams.get('session');
   const cloudLibraryId = searchParams.get('library');
@@ -2766,6 +2778,17 @@ function HandHistoryView() {
   const [savedSessionId, setSavedSessionId] = useState(null);
   const [cloudSaveIntent, setCloudSaveIntent] = useState('manual');
   const [cloudReloadNonce, setCloudReloadNonce] = useState(0);
+  const [archivePreference, setArchivePreference] = useState(() => getOperatorArchivePreference());
+  const [archiveConsentOpen, setArchiveConsentOpen] = useState(false);
+  const [pendingArchiveHands, setPendingArchiveHands] = useState([]);
+  const [lastImportedHands, setLastImportedHands] = useState([]);
+  const [archiveState, setArchiveState] = useState(() => (
+    getOperatorArchivePreference() === 'local-only' ? 'local-only' : 'idle'
+  ));
+  const [archiveMessage, setArchiveMessage] = useState('');
+  const [archiveCopiesPossible, setArchiveCopiesPossible] = useState(() => hasOperatorArchiveCopies());
+  const archiveResumeKeyRef = useRef('');
+  const archiveAuthSubjectId = String(user?.id ?? user?.uid ?? user?.sub ?? '');
   const isCloudLibrarySource = sourceMode === 'cloud' && Boolean(cloudLibraryId);
   const datasetFilterKey = filtersToSearch(datasetFilters).toString();
   const appliedCloudFilterKey = filtersToSearch(appliedCloudFilters).toString();
@@ -2773,6 +2796,87 @@ function HandHistoryView() {
   const cloudLoadKey = isCloudLibrarySource
     ? `${cloudSourceId}:${appliedCloudFilterKey}:${cloudReloadNonce}`
     : cloudSourceId ? `${cloudSourceId}:${cloudReloadNonce}` : '';
+
+  useEffect(() => {
+    let active = true;
+
+    const syncPreference = async () => {
+      const storedChoice = getOperatorArchivePreference();
+      if (storedChoice !== 'accepted') {
+        if (active) setArchivePreference(storedChoice);
+        return;
+      }
+      try {
+        const consent = await resolveOperatorArchiveConsent();
+        if (!active) return;
+        setArchivePreference(consent ? 'accepted' : null);
+        if (consent) {
+          const resumeKey = `${consent.subjectId}:${consent.consentToken}`;
+          if (archiveResumeKeyRef.current !== resumeKey) {
+            archiveResumeKeyRef.current = resumeKey;
+            void resumeOperatorArchiveQueue({
+              onProgress: ({ completed, total }) => {
+                if (!active || getOperatorArchivePreference() !== 'accepted') return;
+                setArchiveState('saving');
+                setArchiveMessage(`正在续传牌谱副本 ${completed.toLocaleString()} / ${total.toLocaleString()}`);
+              }
+            }).then((result) => {
+              if (
+                !active
+                || !result?.acquired
+                || getOperatorArchivePreference() !== 'accepted'
+              ) return;
+              const pendingHands = Number(result.summary?.storedHands ?? 0);
+              const pausedJobs = Number(result.summary?.byStatus?.paused ?? 0);
+              if (pendingHands > 0 && pausedJobs > 0) {
+                setArchiveState('error');
+                setArchiveMessage(`有 ${pendingHands.toLocaleString()} 手牌副本安全保留在本机，等待稍后重试`);
+              } else if (pendingHands > 0) {
+                setArchiveState('queued');
+                setArchiveMessage(`还有 ${pendingHands.toLocaleString()} 手牌副本已保存在本机，将在下次打开时继续`);
+              } else if (Number(result.uploadedHands ?? 0) > 0) {
+                setArchiveCopiesPossible(hasOperatorArchiveCopies());
+                setArchiveState('saved');
+                setArchiveMessage(`已续传 ${Number(result.uploadedHands).toLocaleString()} 手牌副本`);
+              }
+            }).catch((error) => {
+              if (!active || getOperatorArchivePreference() !== 'accepted') return;
+              setArchiveState('error');
+              setArchiveMessage(error instanceof Error ? error.message : '本地续传任务暂时无法恢复。');
+            });
+          }
+        } else {
+          archiveResumeKeyRef.current = '';
+        }
+      } catch {
+        // A session lookup failure must never turn a stored choice into consent.
+        if (active) setArchivePreference(null);
+      }
+    };
+
+    const handleStorage = (event) => {
+      if (event.storageArea !== window.localStorage) return;
+      setArchiveCopiesPossible(hasOperatorArchiveCopies());
+      void syncPreference();
+    };
+
+    void syncPreference();
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      active = false;
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [archiveAuthSubjectId, authStatus]);
+
+  useEffect(() => {
+    if (archiveState !== 'saving') return undefined;
+    const warnBeforeLeaving = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }, [archiveState]);
 
   const players = useMemo(() => rankedPlayers(hands), [hands]);
   const rawResults = useMemo(() => (
@@ -3041,7 +3145,142 @@ function HandHistoryView() {
     }
   };
 
+  const persistOperatorArchive = async (targetHands, consent) => {
+    if (!targetHands?.length) return null;
+    setArchiveState('saving');
+    setArchiveMessage(`正在保存 ${targetHands.length.toLocaleString()} 手牌副本…`);
+    try {
+      const result = await archiveImportedHands({
+        hands: targetHands,
+        consent,
+        onProgress: ({ completed, total }) => {
+          setArchiveMessage(`副本保存中 ${completed.toLocaleString()} / ${total.toLocaleString()}`);
+        }
+      });
+      setArchiveCopiesPossible(hasOperatorArchiveCopies());
+      if (result.status === 'completed') {
+        setArchiveState('saved');
+        setArchiveMessage(`已保存 ${result.totalCount.toLocaleString()} 手牌副本`);
+      } else if (result.status === 'cancelled') {
+        setArchivePreference(getOperatorArchivePreference());
+        setArchiveState('local-only');
+        setArchiveMessage('未完成的副本任务已删除，本次仅在浏览器本地分析');
+      } else if (result.status === 'paused') {
+        setArchiveState('error');
+        setArchiveMessage(`有 ${result.queuedCount.toLocaleString()} 手牌副本安全保留在本机，但需要重试`);
+      } else {
+        setArchiveState('queued');
+        setArchiveMessage(`已保存 ${result.completedCount.toLocaleString()} 手；另有 ${result.queuedCount.toLocaleString()} 手已在本机排队续传`);
+      }
+      return result;
+    } catch (error) {
+      setArchiveCopiesPossible(hasOperatorArchiveCopies());
+      if (getOperatorArchivePreference() === 'local-only') {
+        setArchivePreference('local-only');
+        setArchiveState('local-only');
+        setArchiveMessage('牌谱副本保存已停止，本次及之后的导入仅在浏览器本地分析');
+      } else {
+        setArchiveState('error');
+        setArchiveMessage(error instanceof Error ? error.message : '牌谱副本保存失败，不影响本地分析。');
+      }
+      return null;
+    }
+  };
+
+  const queueOperatorArchive = async (targetHands) => {
+    if (!targetHands?.length) return;
+    const storedChoice = getOperatorArchivePreference();
+    if (storedChoice === 'local-only') {
+      setArchivePreference('local-only');
+      setArchiveState('local-only');
+      setArchiveMessage('本次仅在浏览器本地分析');
+      return;
+    }
+    if (storedChoice === 'accepted') {
+      try {
+        const consent = await resolveOperatorArchiveConsent();
+        if (consent) {
+          setArchivePreference('accepted');
+          void persistOperatorArchive(targetHands, consent);
+          return;
+        }
+      } catch {
+        // Fall through to a fresh explicit choice when identity validation fails.
+      }
+    }
+    setArchivePreference(null);
+    setPendingArchiveHands(targetHands);
+    setArchiveConsentOpen(true);
+    setArchiveState('choice');
+    setArchiveMessage('请选择是否保存本次牌谱副本');
+  };
+
+  const acceptOperatorArchive = async () => {
+    if (archiveState === 'saving' || archiveState === 'deleting') return;
+    const targetHands = pendingArchiveHands.length ? pendingArchiveHands : lastImportedHands;
+    setArchiveState('saving');
+    setArchiveMessage('正在绑定当前身份与保存选择…');
+    try {
+      const consent = await acceptOperatorArchivePreference();
+      setArchivePreference('accepted');
+      setArchiveConsentOpen(false);
+      setPendingArchiveHands([]);
+      await persistOperatorArchive(targetHands, consent);
+    } catch (error) {
+      setArchiveState('error');
+      setArchiveMessage(error instanceof Error ? error.message : '无法保存当前选择，请稍后重试。');
+    }
+  };
+
+  const keepOperatorArchiveLocal = () => {
+    const revocation = disableOperatorArchivePreference();
+    setArchivePreference('local-only');
+    setArchiveConsentOpen(false);
+    setPendingArchiveHands([]);
+    setArchiveState('local-only');
+    setArchiveMessage('本次及之后的导入仅在浏览器本地分析；正在确认云端停止接收旧任务');
+    void revocation.then(() => {
+      setArchiveMessage('本次及之后的导入仅在浏览器本地分析，可随时重新开启副本保存');
+    }).catch((error) => {
+      setArchiveMessage(error instanceof Error
+        ? error.message
+        : '已切换为仅本地；云端撤回确认失败，请稍后在设置中重试。');
+    });
+  };
+
+  const closeOperatorArchiveSettings = () => {
+    setArchiveConsentOpen(false);
+    setPendingArchiveHands([]);
+    if (!archivePreference && lastImportedHands.length) {
+      setArchiveState('local-only');
+      setArchiveMessage('本次仅在浏览器本地分析；下次导入时仍会询问是否保存副本');
+    }
+  };
+
+  const removeOperatorArchiveCopies = async () => {
+    setArchiveState('deleting');
+    setArchivePreference('local-only');
+    setArchiveMessage('正在删除本设备保存的牌谱副本…');
+    try {
+      const result = await deleteMyOperatorArchive();
+      setOperatorArchivePreference('local-only');
+      setArchivePreference('local-only');
+      setArchiveConsentOpen(false);
+      setPendingArchiveHands([]);
+      setArchiveCopiesPossible(false);
+      setArchiveState('local-only');
+      setArchiveMessage(`已删除 ${Number(result.deleted_hand_links ?? 0).toLocaleString()} 手牌副本；之后仅本地分析`);
+    } catch (error) {
+      setArchiveState('error');
+      setArchiveMessage(error instanceof Error ? error.message : '删除牌谱副本失败，请稍后重试。');
+    }
+  };
+
   const handleFiles = async (files) => {
+    if (archiveState === 'saving') {
+      setMessage('上一份牌谱副本仍在保存，请等待完成后再导入。');
+      return;
+    }
     setStatus('loading');
     setMessage('正在解析牌谱...');
     try {
@@ -3055,6 +3294,7 @@ function HandHistoryView() {
       const nextPlayers = rankedPlayers(nextHands);
       const nextHero = nextPlayers[0]?.name ?? '';
       setHands(nextHands);
+      setLastImportedHands(allHands);
       setSourceMode('local');
       cloudLoadRef.current = '';
       setCloudSession(null);
@@ -3077,6 +3317,8 @@ function HandHistoryView() {
       setMessage(nextHands.length
         ? (unsupportedCount ? `已识别牌谱；其中 ${unsupportedCount.toLocaleString()} 手暂不支持当前德州分析，已安全跳过。` : '')
         : '没有识别到当前支持分析的 GGPoker 德州牌谱。');
+
+      void queueOperatorArchive(allHands);
 
       if (nextHands.length && nextHero && isAuthenticated) {
         try {
@@ -3160,7 +3402,7 @@ function HandHistoryView() {
         <header>
           <p className="eyebrow">GGPoker · Local analysis</p>
           <h2>K2note</h2>
-          <p className="subtext">免登录时，牌谱始终只在浏览器本地解析。登录后，导入的已支持牌谱默认保存到你的“我的牌谱”；首次同步会明确确认，之后可随时关闭自动保存。</p>
+          <p className="subtext">牌谱会先在浏览器本地解析。首次导入时，你可以明确选择是否另存一份云端副本；同意后，之后的新导入默认自动保存。登录用户还可把牌谱独立存入自己的“我的牌谱”。</p>
         </header>
 
         <input
@@ -3169,7 +3411,11 @@ function HandHistoryView() {
           multiple
           hidden
           onChange={(event) => {
-            if (event.target.files?.length) handleFiles(event.target.files);
+            if (
+              event.target.files?.length
+              && !archiveConsentOpen
+              && archiveState !== 'saving'
+            ) handleFiles(event.target.files);
             event.target.value = '';
           }}
         />
@@ -3180,7 +3426,11 @@ function HandHistoryView() {
           hidden
           webkitdirectory=""
           onChange={(event) => {
-            if (event.target.files?.length) handleFiles(event.target.files);
+            if (
+              event.target.files?.length
+              && !archiveConsentOpen
+              && archiveState !== 'saving'
+            ) handleFiles(event.target.files);
             event.target.value = '';
           }}
         />
@@ -3192,20 +3442,32 @@ function HandHistoryView() {
           }}
           onDrop={async (event) => {
             event.preventDefault();
+            if (archiveConsentOpen || archiveState === 'saving') return;
             const droppedFiles = await filesFromDataTransfer(event.dataTransfer);
             if (droppedFiles.length) handleFiles(droppedFiles);
           }}
         >
           <div>
             <strong>{status === 'loading' ? '正在解析...' : '拖入或选择牌谱文件'}</strong>
-            <span>支持文件夹、多个压缩包、.txt、.zip、.rar、.7z、.tar、.gz 等格式。大文件会在你的电脑本地处理。</span>
+            <span>支持文件夹、多个压缩包、.txt、.zip、.rar、.7z、.tar、.gz 等格式。文件先在电脑本地解析；云端副本会在你首次明确同意后保存。</span>
           </div>
           <div className="history-upload-actions">
-            <button type="button" className="primary" onClick={() => fileInputRef.current?.click()} disabled={status === 'loading'}>
+            <button type="button" className="primary" onClick={() => fileInputRef.current?.click()} disabled={status === 'loading' || archiveConsentOpen || archiveState === 'saving'}>
               选择文件
             </button>
-            <button type="button" className="secondary" onClick={() => folderInputRef.current?.click()} disabled={status === 'loading'}>
+            <button type="button" className="secondary" onClick={() => folderInputRef.current?.click()} disabled={status === 'loading' || archiveConsentOpen || archiveState === 'saving'}>
               选择文件夹
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={archiveState === 'deleting'}
+              onClick={() => {
+                setPendingArchiveHands(lastImportedHands);
+                setArchiveConsentOpen(true);
+              }}
+            >
+              {archivePreference === 'accepted' ? '副本保存：已开启' : archivePreference === 'local-only' ? '副本保存：仅本地' : '副本保存设置'}
             </button>
           </div>
         </section>
@@ -3282,6 +3544,28 @@ function HandHistoryView() {
               {!!fileMeta?.duplicates && <span>去重 {fileMeta.duplicates.toLocaleString()} 手牌</span>}
               {!!fileMeta?.unsupported && <span>暂不支持 {fileMeta.unsupported.toLocaleString()} 手牌</span>}
               <span>当前筛选 {filteredResults.length.toLocaleString()} 手牌</span>
+              {sourceMode === 'local' && <button
+                type="button"
+                className={`history-archive-status history-archive-status--${archiveState}`}
+                disabled={archiveState === 'deleting'}
+                title={archiveMessage || '牌谱副本保存设置'}
+                onClick={() => {
+                  setPendingArchiveHands(lastImportedHands);
+                  setArchiveConsentOpen(true);
+                }}
+              >
+                {archiveState === 'saving' || archiveState === 'deleting'
+                  ? archiveMessage
+                  : archiveState === 'queued'
+                    ? '副本已排队续传 · 查看'
+                  : archiveState === 'saved'
+                    ? '✓ 副本已保存'
+                    : archiveState === 'error'
+                      ? '副本保存失败 · 重试或设置'
+                      : archivePreference === 'local-only'
+                        ? '仅本地分析 · 更改'
+                        : '副本保存设置'}
+              </button>}
             </section>
 
             <DatasetFilterPanel
@@ -3469,6 +3753,20 @@ function HandHistoryView() {
             onConfirm={confirmCloudSave}
           />
         )}
+        <ArchiveConsentDialog
+          open={archiveConsentOpen}
+          handCount={pendingArchiveHands.length || lastImportedHands.length}
+          authenticated={isAuthenticated}
+          previouslyAccepted={archivePreference === 'accepted'}
+          hasSavedCopies={archiveCopiesPossible}
+          saving={archiveState === 'saving'}
+          busy={archiveState === 'deleting'}
+          error={archiveState === 'error' ? archiveMessage : ''}
+          onAccept={acceptOperatorArchive}
+          onLocalOnly={keepOperatorArchiveLocal}
+          onDeleteCopies={removeOperatorArchiveCopies}
+          onClose={closeOperatorArchiveSettings}
+        />
       </section>
     </div>
   );
@@ -3688,7 +3986,7 @@ function CloudLibraryView() {
         </section>
       )}
 
-      <footer className="library-privacy-note"><strong>你的选择始终优先</strong><span>免登录分析不会上传；登录后的自动保存需要首次明确确认，也可以随时关闭。每位用户只能访问自己的逻辑牌谱库。</span></footer>
+      <footer className="library-privacy-note"><strong>两种云端用途彼此分开</strong><span>“我的牌谱”只供登录用户本人读取；另行明确同意的运营分析副本不会进入其他用户的牌谱库，并可在分析页关闭或删除。</span></footer>
     </div>
   );
 }
@@ -3725,8 +4023,8 @@ function HomeView() {
     document.querySelector('meta[name="description"]')?.setAttribute(
       'content',
       language === 'en'
-        ? 'K2note is KishPoker’s local-first GG hand-history workspace with an optional private cloud library for long-term review.'
-        : 'K2note 是 KishPoker 的 GG 手牌分析工具，支持免登录本地复盘，也可登录后持续积累个人云端牌谱库。'
+        ? 'K2note parses GG hand histories locally first, with an explicitly opted-in analysis copy and an optional private cloud library.'
+        : 'K2note 是 KishPoker 的 GG 手牌分析工具，先在浏览器本地复盘，并可在明确同意后保存分析副本；登录用户还可持续积累个人云端牌谱库。'
     );
   }, [language]);
 
@@ -3895,23 +4193,23 @@ function LegalView({ type }) {
         <AccountControl />
       </nav>
       <main className="legal-document">
-        <p className="eyebrow">K2note · 2026-07-15 生效</p>
+        <p className="eyebrow">K2note · 2026-07-16 生效</p>
         <h1>{privacy ? '隐私政策' : '用户协议'}</h1>
         {privacy ? (
           <>
-            <section><h2>1. 两种使用方式</h2><p>免登录使用时，文件只在当前浏览器读取和解析，选择文件、拖入文件或查看报表不会触发上传。登录后首次导入牌谱时，我们会明确说明云端保存范围并请你确认；确认后，登录状态下新导入的受支持牌谱默认自动保存到你的“我的牌谱”。</p></section>
-            <section><h2>2. 我们处理的数据</h2><p>登录时，根据你选择的方式处理中国大陆手机号、在浏览器中临时输入并直接交由认证服务校验的密码与短信验证结果，或 Google 提供的账号标识、邮箱、昵称和头像（以授权返回内容为准），以及统一的 K2note 账户标识和必要安全日志。云端保存时处理你授权提交的 GGPoker 原始牌谱文本，以及由其解析出的时间、级别、游戏类型、玩家名、底牌、公共牌、行动、输赢和统计结果。我们不会上传本地文件名、未识别为受支持牌谱的内容或你关闭自动保存后新导入的牌谱。</p></section>
-            <section><h2>3. 用途与存储</h2><p>这些数据用于身份认证、保存和恢复牌谱、按时间/级别/游戏类型筛选、跨 session 统计、去重、播放器与漏洞分析。每个账户使用共享数据库中的独立逻辑牌谱库，并通过用户归属和行级权限隔离。当前云服务由腾讯云 CloudBase 上海地域提供，Google 作为可选的第三方身份提供方；手机号密码由 CloudBase 身份认证服务处理，我们不会把明文密码写入牌谱数据库、本地存储或业务日志。Google OAuth 客户端密钥仅配置在 CloudBase 服务端，前端只使用可公开的 Publishable Key，不包含服务端管理密钥。</p></section>
-            <section><h2>4. 保留、删除与安全</h2><p>云端牌谱会保留到你主动删除相应导入记录、提出账户数据删除请求或账户相关服务终止。数据库启用了逐用户行级权限，每个已登录用户只能读取和操作自己的记录。你可以在“我的牌谱库”中删除 session；账户删除与数据导出入口将在后续版本补充，在此之前可通过网站公布的反馈渠道提出请求。</p></section>
-            <section><h2>5. 你的选择</h2><p>你可以选择手机号或 Google 登录，也可以在“我的牌谱”或分析页随时关闭自动保存，或退出登录继续只做本地分析。关闭或拒绝云端保存不会影响本地分析；云端保存失败也不会阻断本地结果。再次开启时，系统仍按本政策处理新导入数据。短信可能产生服务商侧发送记录；请勿使用他人的手机号或 Google 账号登录，也不要保存你无权处理的牌谱。已有手机号账户应先用手机号登录，再主动关联 Google，以继续使用同一个牌谱库。</p></section>
+            <section><h2>1. 本地分析与两种云端保存</h2><p>选择的文件会先在当前浏览器读取、识别和解析。首次识别到 GGPoker 牌谱时，无论是否登录，我们都会在上传任何副本前单独说明保存范围并请你选择；同意后，本次及之后新导入的已识别牌谱副本默认保存到运营分析档案，选择“仅在本地分析”则不会保存。登录用户的“我的牌谱”是另一项独立用途，仍按其单独设置保存。</p></section>
+            <section><h2>2. 我们处理的数据</h2><p>登录时，根据你选择的方式处理中国大陆手机号、在浏览器中临时输入并直接交由认证服务校验的密码与短信验证结果，或 Google 提供的账号标识、邮箱、昵称和头像（以授权返回内容为准），以及统一的 K2note 账户标识和必要安全日志。你同意保存牌谱副本时，我们处理已识别的 GGPoker 原始牌谱文本，其中可能包含牌局时间、级别、游戏类型、玩家名、底牌、公共牌、行动和输赢。我们不会上传本地文件名或未识别为 GGPoker 牌谱的内容。</p></section>
+            <section><h2>3. 用途与存储</h2><p>个人牌谱库用于本人恢复牌谱、筛选、统计、播放器与漏洞分析；运营分析副本单独用于长期数据分析、格式兼容、统计口径校验、去重和改进产品，不会显示到其他用户的牌谱库。游客同意时，CloudBase 会建立匿名设备身份；浏览器还会生成随机删除密钥，数据库只保存其不可逆摘要，以便登录状态变化后仍可删除本设备贡献的副本。当前云服务由腾讯云 CloudBase 上海地域提供，Google 仅作为可选身份提供方；前端不包含服务端管理密钥。</p></section>
+            <section><h2>4. 保留、删除与安全</h2><p>个人牌谱保留到你删除相应 session、提出账户数据删除请求或相关服务终止。运营分析副本保留到你在分析页删除本设备副本、按账户提出删除请求、处理目的完成或服务终止；删除后，共享去重原文仅会在仍有其他有效贡献时保留。上传未完成时，待传牌谱会暂存在当前浏览器的 IndexedDB 中以便下次打开继续；每个成功确认的批次会立即从本地待传队列删除，未完成的临时准备任务会在后续打开时清理。为防止滥用，按日期汇总的匿名化身份摘要、请求字节数和手数配额记录仅用于最近 90 天的配额判断，并在后续上传或维护清理时删除超期记录，其中不含牌谱原文。运营归档表不向浏览器提供读取权限，仅允许受限的写入和本人删除操作。</p></section>
+            <section><h2>5. 你的选择</h2><p>拒绝或关闭运营副本保存不会影响本地分析，云端失败也不会阻断本地结果。分析页可在“副本保存设置”中切换为仅本地、重新开启，或删除本设备此前保存的运营副本；“我的牌谱”自动保存则在个人牌谱库设置中独立控制。短信可能产生服务商侧发送记录；请勿使用他人的手机号或 Google 账号登录，也不要提交你无权处理的牌谱。</p></section>
             <section><h2>6. 未成年人</h2><p>本工具面向具备完全民事行为能力的成年人。未成年人不应创建账户或保存牌谱。</p></section>
           </>
         ) : (
           <>
-            <section><h2>1. 服务内容</h2><p>K2note 提供 GGPoker 牌谱的本地分析、数据报表、牌局复盘，以及由用户明确选择的云端牌谱保存功能。分析结果用于学习和复盘，不构成收益承诺、博彩建议或对第三方平台规则的保证。</p></section>
+            <section><h2>1. 服务内容</h2><p>K2note 提供 GGPoker 牌谱的本地分析、数据报表、牌局复盘，以及由用户明确选择的个人牌谱库和运营分析副本保存功能。分析结果用于学习和复盘，不构成收益承诺、博彩建议或对第三方平台规则的保证。</p></section>
             <section><h2>2. 账户与资格</h2><p>你应为具备完全民事行为能力的成年人，并使用本人可控制的中国大陆手机号或 Google 账号登录。请妥善保护登录密码、短信验证码、Google 账号和登录设备；发现异常使用时应及时重置密码并退出登录。若你已有手机号账户，应先登录该账户，并再次验证当前绑定手机号后再关联 Google；不同账户不会仅凭邮箱自动合并。</p></section>
             <section><h2>3. 内容责任</h2><p>你应确保对上传或保存的牌谱拥有合法处理权限。不得利用本服务侵犯他人权益、传播违法内容、攻击服务、绕过安全限制，或把工具用于第三方平台禁止的实时作弊行为。</p></section>
-            <section><h2>4. 数据与隐私</h2><p>本地分析与云端保存的边界、数据类型和删除方式以《隐私政策》为准。免登录导入不会上传；登录用户在首次明确授权后可启用自动保存，并能随时关闭。</p></section>
+            <section><h2>4. 数据与隐私</h2><p>本地分析、个人牌谱库和运营分析副本的边界、用途、数据类型与删除方式以《隐私政策》为准。牌谱始终先在本地解析；运营副本仅在首次明确同意后默认保存，拒绝不影响本地分析。</p></section>
             <section><h2>5. 服务变更与责任限制</h2><p>测试阶段的统计口径、功能和可用性可能调整。我们会尽力保持数据完整和服务安全，但建议你保留原始牌谱备份。因网络、云服务、第三方平台格式变化或不可抗力造成的中断，将在法律允许范围内处理。</p></section>
           </>
         )}

@@ -35,6 +35,7 @@ let app = null;
 let auth = null;
 let database = null;
 let initializePromise = null;
+let archiveSessionPromise = null;
 
 async function ensureInitialized() {
   if (!configured) return null;
@@ -166,6 +167,35 @@ async function getSession() {
   };
 }
 
+export function isAnonymousCloudbaseUser(user) {
+  return user?.is_anonymous === true
+    || user?.isAnonymous === true
+    || String(user?.app_metadata?.provider ?? '').toLowerCase() === 'anonymous';
+}
+
+async function ensureArchiveSession() {
+  if (archiveSessionPromise) return archiveSessionPromise;
+  archiveSessionPromise = (async () => {
+    await ensureInitialized();
+    throwIfAuthUnavailable();
+
+    const existing = await getSession();
+    if (existing?.user) return existing;
+
+    const { data, error } = await auth.signInAnonymously();
+    throwAuthError(error, '无法建立游客牌谱保存身份。');
+    const user = data?.user ?? data?.session?.user ?? null;
+    const session = data?.session ?? null;
+    if (!user || !session) {
+      throw new AuthRequestError('游客牌谱保存身份响应无效，请稍后重试。', 'auth/invalid-anonymous-session');
+    }
+    return { user, session };
+  })().finally(() => {
+    archiveSessionPromise = null;
+  });
+  return archiveSessionPromise;
+}
+
 async function sendPhoneCode({ phone } = {}) {
   await ensureInitialized();
   throwIfAuthUnavailable();
@@ -216,6 +246,10 @@ async function beginPhonePasswordSetup({ phone, password } = {}) {
   validateNewPassword(password);
   clearExpiredChallenges();
   pendingPhonePassword.clear();
+  const currentSession = await getSession();
+  const anonymousToken = isAnonymousCloudbaseUser(currentSession?.user)
+    ? String(currentSession?.session?.access_token ?? '')
+    : '';
 
   let mode = 'reset';
   let verify;
@@ -224,7 +258,11 @@ async function beginPhonePasswordSetup({ phone, password } = {}) {
     verify = resetResponse.data.updateUser;
   } else if (isUserNotFoundError(resetResponse?.error)) {
     mode = 'signup';
-    const signupResponse = await auth.signUp({ phone: normalizedPhone, password });
+    const signupResponse = await auth.signUp({
+      phone: normalizedPhone,
+      password,
+      ...(anonymousToken ? { anonymous_token: anonymousToken } : {})
+    });
     throwAuthError(signupResponse?.error, '发送注册验证码失败。');
     verify = signupResponse?.data?.verifyOtp;
   } else {
@@ -396,6 +434,7 @@ export function getCloudbaseApp() {
 
 export const cloudbaseClient = Object.freeze({
   getSession,
+  ensureArchiveSession,
   sendPhoneCode,
   verifyPhoneCode,
   signInWithPhonePassword,
