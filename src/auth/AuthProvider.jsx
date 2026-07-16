@@ -327,6 +327,7 @@ export function AuthProvider({ children, onLoginSuccess }) {
   const [authError, setAuthError] = useState(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [googleLoginDisabledReason, setGoogleLoginDisabledReason] = useState('');
+  const [googleLoginPreparationNote, setGoogleLoginPreparationNote] = useState('');
   const [googleLinkOpen, setGoogleLinkOpen] = useState(false);
   const [googleLinkPhoneLabel, setGoogleLinkPhoneLabel] = useState('');
   const [identities, setIdentities] = useState([]);
@@ -334,6 +335,7 @@ export function AuthProvider({ children, onLoginSuccess }) {
   const [identityError, setIdentityError] = useState(initialFlash?.scope === 'identity' ? initialFlash.message : '');
   const [authNotice, setAuthNotice] = useState(initialFlash?.scope === 'auth' ? initialFlash.message : '');
   const successCallbackRef = useRef(null);
+  const googleLoginPreparationRef = useRef(null);
   const loginReturnToRef = useRef('');
   const googleLinkContextRef = useRef(null);
   const currentUserRef = useRef(null);
@@ -738,8 +740,10 @@ export function AuthProvider({ children, onLoginSuccess }) {
     }
     const normalized = typeof options === 'function' ? { onSuccess: options } : options;
     successCallbackRef.current = normalized.onSuccess ?? null;
+    googleLoginPreparationRef.current = normalized.onBeforeGoogleLogin ?? null;
     loginReturnToRef.current = normalizeReturnTo(normalized.returnTo);
     setGoogleLoginDisabledReason(String(normalized.googleDisabledReason ?? ''));
+    setGoogleLoginPreparationNote(String(normalized.googlePreparationNote ?? ''));
     setAuthNotice('');
     setLoginOpen(true);
   }, []);
@@ -747,8 +751,10 @@ export function AuthProvider({ children, onLoginSuccess }) {
   const closeLogin = useCallback(() => {
     cloudbaseClient.clearPendingOtp();
     successCallbackRef.current = null;
+    googleLoginPreparationRef.current = null;
     loginReturnToRef.current = '';
     setGoogleLoginDisabledReason('');
+    setGoogleLoginPreparationNote('');
     setLoginOpen(false);
   }, []);
 
@@ -838,6 +844,7 @@ export function AuthProvider({ children, onLoginSuccess }) {
   const signInWithGoogle = useCallback(async () => {
     if (googleLoginDisabledReason) throw new Error(googleLoginDisabledReason);
     if (readGoogleLinkLock()) throw new Error('Google 关联正在进行，请先完成当前关联。');
+    await googleLoginPreparationRef.current?.();
     const returnTo = loginReturnToRef.current || currentReturnTo();
     const oauthState = createOAuthState();
     const intent = { type: 'sign-in-google', returnTo, oauthState };
@@ -1065,6 +1072,7 @@ export function AuthProvider({ children, onLoginSuccess }) {
         phoneAvailable={readiness.phoneAvailable}
         googleAvailable={readiness.googleAvailable}
         googleDisabledReason={googleLoginDisabledReason}
+        googlePreparationNote={googleLoginPreparationNote}
         unavailableReason={readiness.reason}
         onClose={closeLogin}
         onGoogleLogin={signInWithGoogle}

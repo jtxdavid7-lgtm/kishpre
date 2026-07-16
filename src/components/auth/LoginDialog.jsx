@@ -48,6 +48,7 @@ export function LoginDialog({
   phoneAvailable = false,
   googleAvailable = false,
   googleDisabledReason = '',
+  googlePreparationNote = '',
   unavailableReason = '',
   onClose,
   onGoogleLogin,
@@ -339,6 +340,13 @@ export function LoginDialog({
           <div className="login-dialog-google-warning" role="note">
             <strong>请先保留当前分析结果</strong>
             <span>{googleDisabledReason}</span>
+          </div>
+        )}
+
+        {!googleDisabledReason && googlePreparationNote && (
+          <div className="login-dialog-google-warning" role="note">
+            <strong>当前分析会自动保留</strong>
+            <span>{googlePreparationNote}</span>
           </div>
         )}
 

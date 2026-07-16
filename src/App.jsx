@@ -30,6 +30,10 @@ import {
   resolveOperatorArchiveConsent,
   setOperatorArchivePreference
 } from './lib/operatorArchive.js';
+import {
+  saveGoogleLoginAnalysisDraft,
+  takeGoogleLoginAnalysisDraft
+} from './lib/oauthAnalysisDraft.js';
 import JSZip from 'jszip';
 import { Archive } from 'libarchive.js';
 import {
@@ -2645,9 +2649,28 @@ function maskedAccountLabel(user) {
   return '我的账户';
 }
 
-const GOOGLE_LOGIN_RELOAD_WARNING = 'Google 授权会刷新页面，当前尚未保存的导入会丢失。若要使用 Google，请先确认仍保留原始牌谱文件，刷新页面后登录，再重新导入；也可以继续使用手机号登录，当前结果会保留。';
+const GOOGLE_LOGIN_PRESERVATION_NOTE = 'Google 授权会刷新页面；继续前会先把当前牌谱临时保存在这台设备，授权完成或取消后自动恢复。';
+const GOOGLE_LINK_RELOAD_WARNING = '关联 Google 会刷新页面，请先把当前牌谱保存到“我的牌谱”或完成分析后再操作。';
 
-function AccountControl({ showLibrary = true, googleDisabledReason = '' }) {
+function parseGoogleLoginDraftHands(rawHands) {
+  const unique = new Map();
+  for (const raw of Array.isArray(rawHands) ? rawHands : []) {
+    try {
+      const hand = parseGgHand(raw);
+      if (hand?.id) unique.set(hand.id, hand);
+    } catch {
+      // A single corrupt temporary entry must not block the rest of the draft.
+    }
+  }
+  return sortHandsByTime([...unique.values()]);
+}
+
+function AccountControl({
+  showLibrary = true,
+  googleDisabledReason = '',
+  googlePreparationNote = '',
+  onBeforeGoogleLogin = null
+}) {
   const {
     authStatus,
     authNotice,
@@ -2697,7 +2720,10 @@ function AccountControl({ showLibrary = true, googleDisabledReason = '' }) {
         <button
           type="button"
           className="account-login"
-          onClick={() => openLogin({ googleDisabledReason })}
+          onClick={() => openLogin({
+            googlePreparationNote,
+            onBeforeGoogleLogin
+          })}
         >登录 / 注册</button>
         {visibleNotice && (
           <span className={`account-notice${identityError ? ' account-notice--error' : ''}`} role={identityError ? 'alert' : 'status'}>
@@ -2787,7 +2813,9 @@ function HandHistoryView() {
   ));
   const [archiveMessage, setArchiveMessage] = useState('');
   const [archiveCopiesPossible, setArchiveCopiesPossible] = useState(() => hasOperatorArchiveCopies());
+  const [restoredLoginAction, setRestoredLoginAction] = useState('');
   const archiveResumeKeyRef = useRef('');
+  const oauthDraftRestorePromiseRef = useRef(null);
   const archiveAuthSubjectId = String(user?.id ?? user?.uid ?? user?.sub ?? '');
   const isCloudLibrarySource = sourceMode === 'cloud' && Boolean(cloudLibraryId);
   const datasetFilterKey = filtersToSearch(datasetFilters).toString();
@@ -2796,6 +2824,71 @@ function HandHistoryView() {
   const cloudLoadKey = isCloudLibrarySource
     ? `${cloudSourceId}:${appliedCloudFilterKey}:${cloudReloadNonce}`
     : cloudSourceId ? `${cloudSourceId}:${cloudReloadNonce}` : '';
+
+  useEffect(() => {
+    if (cloudSourceId) return undefined;
+    if (!oauthDraftRestorePromiseRef.current) {
+      oauthDraftRestorePromiseRef.current = takeGoogleLoginAnalysisDraft();
+    }
+    let active = true;
+    oauthDraftRestorePromiseRef.current.then((draft) => {
+      if (!active || !draft) return;
+      const allHands = parseGoogleLoginDraftHands(draft.rawHands);
+      const nextHands = allHands.filter((hand) => hand.analysisSupported !== false);
+      if (!nextHands.length) return;
+      const nextPlayers = rankedPlayers(nextHands);
+      const restoredHero = nextPlayers.some((player) => player.name === draft.hero)
+        ? draft.hero
+        : nextPlayers[0]?.name ?? '';
+      setHands(nextHands);
+      setLastImportedHands(allHands);
+      setHero(restoredHero);
+      setFileMeta({
+        ...(draft.fileMeta && typeof draft.fileMeta === 'object' ? draft.fileMeta : {}),
+        hands: nextHands.length,
+        restoredAfterGoogle: true
+      });
+      setStartTp(draft.startTp || '0');
+      setEndTp(draft.endTp || '0');
+      setSourceMode('local');
+      setCloudSession(null);
+      setSavedSessionId(null);
+      const restoredFilters = draft.datasetFilters && typeof draft.datasetFilters === 'object'
+        ? {
+            ...emptyDatasetFilters(),
+            ...draft.datasetFilters,
+            stakes: Array.isArray(draft.datasetFilters.stakes) ? draft.datasetFilters.stakes : [],
+            gameTypes: Array.isArray(draft.datasetFilters.gameTypes) ? draft.datasetFilters.gameTypes : []
+          }
+        : emptyDatasetFilters();
+      setDatasetFilters(restoredFilters);
+      setAppliedCloudFilters(restoredFilters);
+      setPositionFilter(draft.positionFilter || 'all');
+      setHoleCardFilter(draft.holeCardFilter && typeof draft.holeCardFilter === 'object'
+        ? draft.holeCardFilter
+        : { ranks: [null, null], suitedOnly: false });
+      setHoleCardFilterOpen(false);
+      setHistoryTab(draft.historyTab || 'overview');
+      setStatus('ready');
+      setMessage(`已自动恢复 Google 授权前的 ${nextHands.length.toLocaleString()} 手牌分析。`);
+      setRestoredLoginAction(draft.postLoginAction || '');
+    }).catch((error) => {
+      if (!active) return;
+      setMessage(error instanceof Error ? error.message : '无法恢复 Google 授权前的本地分析。');
+    });
+    return () => {
+      active = false;
+    };
+  }, [cloudSourceId]);
+
+  useEffect(() => {
+    if (restoredLoginAction !== 'open-cloud-save' || !isAuthenticated || !hands.length) return;
+    setCloudSaveError('');
+    setCloudSaveProgress(null);
+    setCloudSaveIntent('manual');
+    setCloudSaveOpen(true);
+    setRestoredLoginAction('');
+  }, [hands.length, isAuthenticated, restoredLoginAction]);
 
   useEffect(() => {
     let active = true;
@@ -3349,6 +3442,25 @@ function HandHistoryView() {
     downloadText(`K2note-${hero || 'hero'}-hands.csv`, exportSummaryCsv(filteredResults));
   };
 
+  const preserveAnalysisForGoogleLogin = async (postLoginAction = '') => {
+    const targetHands = lastImportedHands.length ? lastImportedHands : hands;
+    if (!targetHands.length || sourceMode !== 'local') return;
+    setMessage(`正在本机临时保留 ${targetHands.length.toLocaleString()} 手牌，准备前往 Google…`);
+    const result = await saveGoogleLoginAnalysisDraft({
+      hands: targetHands,
+      hero,
+      fileMeta,
+      startTp,
+      endTp,
+      datasetFilters,
+      positionFilter,
+      holeCardFilter,
+      historyTab,
+      postLoginAction
+    });
+    setMessage(`已在本机临时保留 ${result.handCount.toLocaleString()} 手牌，Google 授权返回后会自动恢复。`);
+  };
+
   const openCloudSave = () => {
     setCloudSaveError('');
     setCloudSaveProgress(null);
@@ -3359,7 +3471,8 @@ function HandHistoryView() {
     }
     openLogin({
       onSuccess: () => setCloudSaveOpen(true),
-      googleDisabledReason: GOOGLE_LOGIN_RELOAD_WARNING
+      googlePreparationNote: GOOGLE_LOGIN_PRESERVATION_NOTE,
+      onBeforeGoogleLogin: () => preserveAnalysisForGoogleLogin('open-cloud-save')
     });
   };
 
@@ -3391,7 +3504,11 @@ function HandHistoryView() {
         <div className="cta-row">
           <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
           <AccountControl
-            googleDisabledReason={sourceMode === 'local' && hands.length > 0 ? GOOGLE_LOGIN_RELOAD_WARNING : ''}
+            googleDisabledReason={sourceMode === 'local' && hands.length > 0 ? GOOGLE_LINK_RELOAD_WARNING : ''}
+            googlePreparationNote={sourceMode === 'local' && hands.length > 0 ? GOOGLE_LOGIN_PRESERVATION_NOTE : ''}
+            onBeforeGoogleLogin={sourceMode === 'local' && hands.length > 0
+              ? () => preserveAnalysisForGoogleLogin()
+              : null}
           />
           <button type="button" className="secondary" onClick={() => window.location.assign('?tool=range')}>Range Lab</button>
           <button type="button" className="secondary" onClick={() => window.location.assign('?tool=variance')}>波动计算</button>
