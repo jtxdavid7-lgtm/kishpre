@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:cloudbase": "vitest run tests/operatorArchive.live.test.js",
     "preview": "vite preview",
     "hands": "node scripts/build-hand-strength.js"
   },
@@ -26,8 +28,11 @@
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
+    "fake-indexeddb": "^6.2.4",
     "globals": "^17.4.0",
+    "happy-dom": "^20.0.11",
     "sharp": "^0.34.5",
-    "vite": "^8.1.4"
+    "vite": "^8.1.4",
+    "vitest": "^4.0.16"
   }
 }
