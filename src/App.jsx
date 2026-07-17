@@ -10,6 +10,7 @@ import { ArchiveConsentDialog } from './components/cloud/ArchiveConsentDialog.js
 import { CloudSaveDialog } from './components/cloud/CloudSaveDialog.jsx';
 import { DatasetFilterPanel } from './components/DatasetFilterPanel.jsx';
 import { PoolLeakExplorer } from './components/PoolLeakExplorer.jsx';
+import { PersonalAnalysisWorkspace } from './components/PersonalAnalysisWorkspace.jsx';
 import {
   deleteCloudSession,
   ensureDefaultCloudLibrary,
@@ -210,7 +211,7 @@ const HOMEPAGE_COPY = {
     },
     modes: {
       local: { label: '免登录', title: '分析这次 Session', desc: '导入刚打完的牌谱，先在浏览器本地解析；是否保存云端副本由你首次明确选择。', action: '开始本地分析' },
-      cloud: { label: '登录后', title: '积累我的全部牌谱', desc: '首次确认后自动保存新牌谱，按时间、级别和游戏类型分析长期数据。', action: '进入我的牌谱库' }
+      cloud: { label: '登录后', title: '积累我的全部牌谱', desc: '首次确认后自动保存新牌谱，按时间、级别和游戏类型分析长期数据。', action: '进入我的牌谱库', analysisAction: '高级数据分析' }
     },
     section: {
       title: '更多扑克工具',
@@ -283,7 +284,7 @@ const HOMEPAGE_COPY = {
     },
     modes: {
       local: { label: 'NO SIGN-IN', title: 'Analyze this session', desc: 'Import your latest hands for local parsing, then choose whether to retain a cloud copy.', action: 'Start local analysis' },
-      cloud: { label: 'SIGNED IN', title: 'Build my full library', desc: 'Confirm once, then auto-save new imports and filter them by date, stake, and game type.', action: 'Open my library' }
+      cloud: { label: 'SIGNED IN', title: 'Build my full library', desc: 'Confirm once, then auto-save new imports and filter them by date, stake, and game type.', action: 'Open my library', analysisAction: 'Advanced analytics' }
     },
     section: {
       title: 'More poker tools',
@@ -4012,6 +4013,7 @@ function CloudLibraryView() {
       <nav className="top-nav">
         <button type="button" className="brand brand--button" onClick={() => window.location.assign('/')}>KISHPOKER · K2note</button>
         <div className="cta-row">
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=insights')}>高级数据分析</button>
           <button type="button" className="secondary" onClick={() => window.location.assign('?tool=history')}>分析新 Session</button>
           <AccountControl showLibrary={false} />
         </div>
@@ -4073,7 +4075,10 @@ function CloudLibraryView() {
               />
               <div className="library-analyze-bar">
                 <p><strong>筛选会作用于整座牌谱库</strong><span>进入分析后显示精确手数，并同步驱动资金曲线、数据、历史记录和底牌报告。</span></p>
-                <button type="button" className="primary" onClick={analyzeLibrary}>分析筛选结果 <span aria-hidden="true">→</span></button>
+                <div className="library-analyze-actions">
+                  <button type="button" className="secondary" onClick={() => window.location.assign('?tool=insights')}>高级数据分析</button>
+                  <button type="button" className="primary" onClick={analyzeLibrary}>基础报表 <span aria-hidden="true">→</span></button>
+                </div>
               </div>
             </>
           )}
@@ -4129,6 +4134,13 @@ function HomeView() {
   const openVariance = () => window.location.assign('?tool=variance');
   const openHistory = () => window.location.assign('?tool=history');
   const openPoolLeaks = () => window.location.assign('?tool=pool-leaks');
+  const openInsights = () => {
+    if (isAuthenticated) {
+      window.location.assign('?tool=insights');
+      return;
+    }
+    openLogin({ returnTo: '/?tool=insights' });
+  };
   const openLibrary = () => {
     if (isAuthenticated) {
       window.location.assign('?tool=library');
@@ -4271,6 +4283,7 @@ function HomeView() {
             <h3>{copy.modes.cloud.title}</h3>
             <p>{copy.modes.cloud.desc}</p>
             <button type="button" onClick={openLibrary}>{copy.modes.cloud.action}<i aria-hidden="true">→</i></button>
+            <button type="button" className="kish2note-mode-analysis" onClick={openInsights}>{copy.modes.cloud.analysisAction}<i aria-hidden="true">→</i></button>
           </article>
         </div>
         <div className="kish2note-capabilities">
@@ -4332,9 +4345,9 @@ function LegalView({ type }) {
           <>
             <section><h2>1. 本地分析与两种云端保存</h2><p>选择的文件会先在当前浏览器读取、识别和解析。首次识别到 GGPoker 牌谱时，无论是否登录，我们都会在上传任何副本前单独说明保存范围并请你选择；同意后，本次及之后新导入的已识别牌谱副本默认保存到运营分析档案，选择“仅在本地分析”则不会保存。登录用户的“我的牌谱”是另一项独立用途，仍按其单独设置保存。</p></section>
             <section><h2>2. 我们处理的数据</h2><p>登录时，根据你选择的方式处理中国大陆手机号、在浏览器中临时输入并直接交由认证服务校验的密码与短信验证结果，或 Google 提供的账号标识、邮箱、昵称和头像（以授权返回内容为准），以及统一的 K2note 账户标识和必要安全日志。你同意保存牌谱副本时，我们处理已识别的 GGPoker 原始牌谱文本，其中可能包含牌局时间、级别、游戏类型、玩家名、底牌、公共牌、行动和输赢。我们不会上传本地文件名或未识别为 GGPoker 牌谱的内容。</p></section>
-            <section><h2>3. 用途与存储</h2><p>个人牌谱库用于本人恢复牌谱、筛选、统计、播放器与漏洞分析；运营分析副本单独用于长期数据分析、格式兼容、统计口径校验、去重和改进产品，不会显示到其他用户的牌谱库。游客同意时，CloudBase 会建立匿名设备身份；浏览器还会生成随机删除密钥，数据库只保存其不可逆摘要，以便登录状态变化后仍可删除本设备贡献的副本。当前云服务由腾讯云 CloudBase 上海地域提供，Google 仅作为可选身份提供方；前端不包含服务端管理密钥。</p></section>
+            <section><h2>3. 用途与存储</h2><p>个人牌谱库用于本人恢复牌谱、筛选、基础统计和播放器；登录后的高级数据分析、漏洞分析与个性化建议属于免费增值功能，使用条件是同意把该次高级分析所使用的已识别牌谱建立运营分析副本。运营分析副本单独用于玩家池研究、长期数据分析、格式兼容、统计口径校验、去重和改进产品，不会显示到其他用户的个人牌谱库。游客在基础 Session 分析中另行同意时，CloudBase 会建立匿名设备身份；浏览器还会生成随机删除密钥，数据库只保存其不可逆摘要，以便登录状态变化后仍可删除本设备贡献的副本。当前云服务由腾讯云 CloudBase 上海地域提供，Google 仅作为可选身份提供方；前端不包含服务端管理密钥。</p></section>
             <section><h2>4. 保留、删除与安全</h2><p>个人牌谱保留到你删除相应 session、提出账户数据删除请求或相关服务终止。运营分析副本保留到你在分析页删除本设备副本、按账户提出删除请求、处理目的完成或服务终止；删除后，共享去重原文仅会在仍有其他有效贡献时保留。上传未完成时，待传牌谱会暂存在当前浏览器的 IndexedDB 中以便下次打开继续；每个成功确认的批次会立即从本地待传队列删除，未完成的临时准备任务会在后续打开时清理。为防止滥用，按日期汇总的匿名化身份摘要、请求字节数和手数配额记录仅用于最近 90 天的配额判断，并在后续上传或维护清理时删除超期记录，其中不含牌谱原文。运营归档表不向浏览器提供读取权限，仅允许受限的写入和本人删除操作。</p></section>
-            <section><h2>5. 你的选择</h2><p>拒绝或关闭运营副本保存不会影响本地分析，云端失败也不会阻断本地结果。分析页可在“副本保存设置”中切换为仅本地、重新开启，或删除本设备此前保存的运营副本；“我的牌谱”自动保存则在个人牌谱库设置中独立控制。短信可能产生服务商侧发送记录；请勿使用他人的手机号或 Google 账号登录，也不要提交你无权处理的牌谱。</p></section>
+            <section><h2>5. 你的选择</h2><p>拒绝或关闭运营副本保存不会影响免登录 Session 基础分析，云端失败也不会阻断本地结果；但高级数据分析、漏洞分析和个性化建议会被锁定，直到你重新同意贡献其使用的牌谱。分析页可在“副本保存设置”中切换为仅本地、重新开启，或删除本设备此前保存的运营副本；“我的牌谱”自动保存则在个人牌谱库设置中独立控制。短信可能产生服务商侧发送记录；请勿使用他人的手机号或 Google 账号登录，也不要提交你无权处理的牌谱。</p></section>
             <section><h2>6. 未成年人</h2><p>本工具面向具备完全民事行为能力的成年人。未成年人不应创建账户或保存牌谱。</p></section>
           </>
         ) : (
@@ -4342,7 +4355,7 @@ function LegalView({ type }) {
             <section><h2>1. 服务内容</h2><p>K2note 提供 GGPoker 牌谱的本地分析、数据报表、牌局复盘，以及由用户明确选择的个人牌谱库和运营分析副本保存功能。分析结果用于学习和复盘，不构成收益承诺、博彩建议或对第三方平台规则的保证。</p></section>
             <section><h2>2. 账户与资格</h2><p>你应为具备完全民事行为能力的成年人，并使用本人可控制的中国大陆手机号或 Google 账号登录。请妥善保护登录密码、短信验证码、Google 账号和登录设备；发现异常使用时应及时重置密码并退出登录。若你已有手机号账户，应先登录该账户，并再次验证当前绑定手机号后再关联 Google；不同账户不会仅凭邮箱自动合并。</p></section>
             <section><h2>3. 内容责任</h2><p>你应确保对上传或保存的牌谱拥有合法处理权限。不得利用本服务侵犯他人权益、传播违法内容、攻击服务、绕过安全限制，或把工具用于第三方平台禁止的实时作弊行为。</p></section>
-            <section><h2>4. 数据与隐私</h2><p>本地分析、个人牌谱库和运营分析副本的边界、用途、数据类型与删除方式以《隐私政策》为准。牌谱始终先在本地解析；运营副本仅在首次明确同意后默认保存，拒绝不影响本地分析。</p></section>
+            <section><h2>4. 数据与隐私</h2><p>本地分析、个人牌谱库和运营分析副本的边界、用途、数据类型与删除方式以《隐私政策》为准。牌谱始终先在本地解析；运营副本仅在明确同意后保存。拒绝不影响免登录 Session 基础分析，但高级数据分析、漏洞分析和个性化建议以贡献其使用的牌谱为免费使用条件。</p></section>
             <section><h2>5. 服务变更与责任限制</h2><p>测试阶段的统计口径、功能和可用性可能调整。我们会尽力保持数据完整和服务安全，但建议你保留原始牌谱备份。因网络、云服务、第三方平台格式变化或不可抗力造成的中断，将在法律允许范围内处理。</p></section>
           </>
         )}
@@ -4378,6 +4391,33 @@ function PoolLeakView() {
   );
 }
 
+function PersonalAnalysisView() {
+  useEffect(() => {
+    document.documentElement.lang = 'zh-CN';
+    document.title = '个人数据分析 | K2note';
+    document.querySelector('meta[name="description"]')?.setAttribute(
+      'content',
+      '登录 K2note，选择个人牌谱库样本并贡献去重副本，使用长期数据分析与漏洞分析工作台。'
+    );
+  }, []);
+
+  return (
+    <div className="site site--personal-analysis">
+      <nav className="top-nav">
+        <button type="button" className="brand brand--button" onClick={() => window.location.assign('/')}>
+          KISHPOKER · K2note ANALYTICS
+        </button>
+        <div className="top-nav-actions">
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=library')}>我的牌谱库</button>
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=history')}>Session 分析</button>
+          <AccountControl />
+        </div>
+      </nav>
+      <PersonalAnalysisWorkspace />
+    </div>
+  );
+}
+
 function App() {
   const search = typeof window !== 'undefined' ? window.location.search : '';
   const params = new URLSearchParams(search);
@@ -4391,6 +4431,7 @@ function App() {
   if (tool === 'variance') return <VarianceView />;
   if (tool === 'history') return <HandHistoryView />;
   if (tool === 'library') return <CloudLibraryView />;
+  if (tool === 'insights') return <PersonalAnalysisView />;
   if (tool === 'pool-leaks') return <PoolLeakView />;
   return <HomeView />;
 }

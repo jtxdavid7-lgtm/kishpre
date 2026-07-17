@@ -42,6 +42,7 @@ Implemented:
 - Explicitly consented operator hand archive, including anonymous-device identities, revocation/deletion support, durable browser queue, batching and retry.
 - Operator corpus export/sync script with SHA-256 validation, deduplication and snapshot manifests.
 - Player-pool leak explorer and its versioned static dataset.
+- Personal advanced-analysis workspace with a hard access gate: login, private library and operator-copy consent are all required. The selected library sample is queued through the deduplicated operator archive before real summary data is revealed; diagnostic/leak rules are currently UI shells marked as in development.
 
 ## Repository Map
 
@@ -226,6 +227,7 @@ Some differences may come from the reference site's implementation. Prefer corre
 ## Near-Term Follow-ups
 
 - Re-test phone registration, password login, SMS login and Google login end-to-end against production after any CloudBase auth-console change.
+- Implement the diagnostic rule engine behind the advanced-analysis data and leak tabs (sample thresholds, target ranges, confidence, estimated loss and review priority).
 - Finish the scheduled operator-corpus sync design and decide whether it should run on Windows or a persistent server.
 - Continue poker-stat calibration listed above using more GG formats and stakes.
 - Continue player-pool leak explorer iterations and document the provenance/version of every aggregate dataset.

@@ -1,0 +1,414 @@
+.personal-analysis-workspace {
+  display: grid;
+  gap: 22px;
+}
+
+.personal-analysis-hero,
+.personal-analysis-selector,
+.personal-analysis-report,
+.personal-analysis-gate,
+.personal-analysis-state {
+  border: 1px solid #1d2b44;
+  border-radius: 24px;
+  background: #07101f;
+  box-shadow: 0 22px 70px rgb(0 0 0 / 20%);
+}
+
+.personal-analysis-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 34px 38px;
+  background:
+    radial-gradient(circle at 88% 20%, rgb(40 226 157 / 12%), transparent 34%),
+    linear-gradient(135deg, #0b1830, #07101f 62%);
+}
+
+.personal-analysis-hero h1,
+.personal-analysis-gate h1,
+.personal-analysis-gate h2,
+.personal-analysis-selector h2,
+.personal-analysis-report h2,
+.personal-analysis-state h2 {
+  margin: 6px 0 0;
+  color: #f8fbff;
+}
+
+.personal-analysis-hero h1 { font-size: clamp(30px, 4vw, 50px); }
+
+.personal-analysis-hero > div:first-child > p:last-child,
+.personal-analysis-gate > p,
+.personal-analysis-gate > div:first-child > p:last-child,
+.personal-analysis-state p {
+  max-width: 760px;
+  margin: 12px 0 0;
+  color: #9fb2d2;
+  line-height: 1.75;
+}
+
+.personal-analysis-access-strip {
+  display: grid;
+  min-width: 230px;
+  gap: 9px;
+}
+
+.personal-analysis-access-strip span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  border: 1px solid #263750;
+  border-radius: 12px;
+  color: #8194b4;
+  background: rgb(5 12 25 / 72%);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.personal-analysis-access-strip span i {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: #17243a;
+  color: #8ba0bf;
+  font-style: normal;
+}
+
+.personal-analysis-access-strip span.complete {
+  border-color: rgb(43 227 157 / 25%);
+  color: #d9fff0;
+}
+
+.personal-analysis-access-strip span.complete i {
+  background: #23d890;
+  color: #032116;
+}
+
+.personal-analysis-gate {
+  max-width: 1040px;
+  margin: 24px auto;
+  padding: 44px;
+}
+
+.personal-analysis-gate--guest {
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0, rgb(43 227 157 / 13%), transparent 35%),
+    #07101f;
+}
+
+.personal-analysis-lock {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 22px;
+  place-items: center;
+  border: 1px solid #2be39d;
+  border-radius: 24px;
+  color: #2be39d;
+  font-size: 24px;
+  font-weight: 950;
+  box-shadow: 0 0 42px rgb(43 227 157 / 16%);
+}
+
+.personal-analysis-gate--guest > p { margin-right: auto; margin-left: auto; }
+
+.personal-analysis-requirements {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 30px 0;
+  text-align: left;
+}
+
+.personal-analysis-requirements span {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  padding: 18px;
+  border: 1px solid #20304a;
+  border-radius: 16px;
+  background: #0b1629;
+}
+
+.personal-analysis-requirements i {
+  grid-row: span 2;
+  align-self: center;
+  color: #2be39d;
+  font-size: 22px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.personal-analysis-requirements strong { color: #f2f7ff; }
+.personal-analysis-requirements small { margin-top: 5px; color: #8295b6; }
+
+.personal-analysis-gate-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.personal-analysis-gate--consent {
+  display: grid;
+  max-width: none;
+  grid-template-columns: 1.1fr .9fr;
+  gap: 24px 34px;
+  margin: 0;
+  background:
+    linear-gradient(120deg, rgb(34 78 171 / 11%), transparent 50%),
+    #07101f;
+}
+
+.personal-analysis-consent-scope {
+  padding: 20px 22px;
+  border: 1px solid #253650;
+  border-radius: 16px;
+  background: #091427;
+}
+
+.personal-analysis-consent-scope strong { color: #f2f7ff; }
+.personal-analysis-consent-scope ul { margin: 13px 0 0; padding-left: 20px; color: #9fb2d2; line-height: 1.7; }
+
+.personal-analysis-consent-check {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid #2a3d5c;
+  border-radius: 14px;
+  color: #c5d2e7;
+  background: #0a172b;
+  line-height: 1.6;
+}
+
+.personal-analysis-consent-check input { margin-top: 5px; accent-color: #2be39d; }
+.personal-analysis-consent-check a { color: #55a1ff; }
+.personal-analysis-gate--consent .personal-analysis-gate-actions { grid-column: 1 / -1; justify-content: flex-end; margin-top: 0; }
+
+.personal-analysis-selector,
+.personal-analysis-report { padding: 26px; }
+
+.personal-analysis-selector > header,
+.personal-analysis-report-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.personal-analysis-selector > header span,
+.personal-analysis-report-heading > div:first-child > span,
+.personal-analysis-data-groups article header span {
+  color: #2be39d;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .16em;
+}
+
+.personal-analysis-revoke {
+  border: 0;
+  color: #8194b4;
+  background: transparent;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.personal-analysis-revoke:hover:not(:disabled) { color: #ff858e; }
+
+.personal-analysis-runbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 16px;
+  padding: 18px 20px;
+  border: 1px solid #22334f;
+  border-radius: 16px;
+  background: #0a1629;
+}
+
+.personal-analysis-runbar p { display: grid; gap: 4px; margin: 0; }
+.personal-analysis-runbar strong { color: #f4f8ff; }
+.personal-analysis-runbar span { color: #8397b7; font-size: 12px; }
+
+.personal-analysis-progress,
+.personal-analysis-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 13px 16px;
+  border: 1px solid rgb(43 227 157 / 24%);
+  border-radius: 12px;
+  color: #aeeed2;
+  background: rgb(43 227 157 / 7%);
+  font-size: 13px;
+}
+
+.personal-analysis-progress i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2be39d;
+  box-shadow: 0 0 12px #2be39d;
+}
+
+.personal-analysis-progress--loading i { animation: personal-analysis-pulse 1s ease-in-out infinite; }
+
+.personal-analysis-error {
+  margin: 0;
+  border-color: rgb(255 83 98 / 38%);
+  color: #ffb4bb;
+  background: rgb(255 83 98 / 8%);
+}
+
+@keyframes personal-analysis-pulse { 50% { opacity: .35; transform: scale(.72); } }
+
+.personal-analysis-tabs {
+  display: flex;
+  padding: 4px;
+  border: 1px solid #22334e;
+  border-radius: 13px;
+  background: #07101f;
+}
+
+.personal-analysis-tabs button {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 9px;
+  color: #8fa2c0;
+  background: transparent;
+  font-weight: 800;
+}
+
+.personal-analysis-tabs button.active { color: #06101d; background: #ffca15; }
+
+.personal-analysis-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+.personal-analysis-kpis article {
+  display: grid;
+  min-height: 126px;
+  align-content: space-between;
+  padding: 17px;
+  border: 1px solid #1d2d47;
+  border-radius: 15px;
+  background: #0a1528;
+}
+
+.personal-analysis-kpis span,
+.personal-analysis-kpis small { color: #8296b6; font-size: 11px; }
+.personal-analysis-kpis strong { color: #f5f8ff; font-size: clamp(19px, 2vw, 27px); }
+.personal-analysis-kpis strong.positive { color: #43eea5; }
+.personal-analysis-kpis strong.negative { color: #ff737e; }
+.personal-analysis-kpis strong i { color: #526985; font-style: normal; font-weight: 400; }
+
+.personal-analysis-roadmap,
+.personal-analysis-leak-shells {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.personal-analysis-roadmap article,
+.personal-analysis-leak-shells article,
+.personal-analysis-data-groups article {
+  padding: 22px;
+  border: 1px solid #1e2f49;
+  border-radius: 16px;
+  background: #091427;
+}
+
+.personal-analysis-roadmap span,
+.personal-analysis-leak-shells > article > span {
+  color: #ffca15;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.personal-analysis-roadmap h3,
+.personal-analysis-leak-shells h3,
+.personal-analysis-data-groups h3 { margin: 9px 0; color: #f3f7ff; }
+.personal-analysis-roadmap p,
+.personal-analysis-leak-shells p,
+.personal-analysis-data-groups > article > p { margin: 0; color: #8fa2bf; line-height: 1.65; }
+
+.personal-analysis-data-groups { display: grid; gap: 12px; }
+.personal-analysis-data-groups article header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.personal-analysis-data-groups article header h3 { margin: 5px 0 0; }
+.personal-analysis-data-groups article header > small { color: #7287a7; }
+.personal-analysis-data-groups article > div:last-child { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 18px; }
+.personal-analysis-data-groups article > div:last-child > span { display: grid; gap: 7px; padding: 13px; border-radius: 11px; background: #0d1a30; }
+.personal-analysis-data-groups article > div:last-child small { color: #7f94b4; }
+.personal-analysis-data-groups article > div:last-child strong { color: #f4f8ff; font-size: 19px; }
+
+.personal-analysis-leak-shells { grid-template-columns: repeat(2, 1fr); margin-top: 0; }
+.personal-analysis-leak-shells article { position: relative; min-height: 210px; overflow: hidden; }
+.personal-analysis-leak-shells article > i { position: absolute; right: 18px; top: 12px; color: rgb(85 161 255 / 12%); font-size: 62px; font-style: normal; font-weight: 950; }
+.personal-analysis-leak-shells article > strong { display: inline-block; margin-top: 20px; color: #7590b4; font-size: 11px; }
+
+.personal-analysis-state {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+  align-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.personal-analysis-state > i {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #21334e;
+  border-top-color: #2be39d;
+  border-radius: 50%;
+  animation: personal-analysis-spin .8s linear infinite;
+}
+
+.personal-analysis-state > span { color: #2be39d; font-size: 48px; }
+.personal-analysis-state .primary { margin-top: 22px; }
+@keyframes personal-analysis-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 1100px) {
+  .personal-analysis-kpis { grid-template-columns: repeat(3, 1fr); }
+  .personal-analysis-data-groups article > div:last-child { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .personal-analysis-hero,
+  .personal-analysis-selector > header,
+  .personal-analysis-report-heading,
+  .personal-analysis-runbar { align-items: stretch; flex-direction: column; }
+  .personal-analysis-hero,
+  .personal-analysis-selector,
+  .personal-analysis-report,
+  .personal-analysis-gate { padding: 22px; border-radius: 18px; }
+  .personal-analysis-access-strip { min-width: 0; width: 100%; }
+  .personal-analysis-requirements,
+  .personal-analysis-gate--consent,
+  .personal-analysis-kpis,
+  .personal-analysis-roadmap,
+  .personal-analysis-leak-shells { grid-template-columns: 1fr; }
+  .personal-analysis-consent-check,
+  .personal-analysis-gate--consent .personal-analysis-gate-actions { grid-column: auto; }
+  .personal-analysis-gate-actions,
+  .personal-analysis-gate--consent .personal-analysis-gate-actions { flex-direction: column; }
+  .personal-analysis-gate-actions button,
+  .personal-analysis-runbar button { width: 100%; }
+  .personal-analysis-tabs { width: 100%; }
+  .personal-analysis-tabs button { flex: 1; padding: 0 9px; }
+  .personal-analysis-data-groups article > div:last-child { grid-template-columns: repeat(2, 1fr); }
+}

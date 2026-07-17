@@ -552,6 +552,11 @@ body {
   font-style: normal;
 }
 
+.kish2note-modes .kish2note-mode-analysis {
+  margin-left: 24px;
+  color: #5ee7a6;
+}
+
 .kish2note-capabilities {
   position: relative;
   z-index: 1;
@@ -5361,5 +5366,23 @@ input:focus {
 
   .history-auto-save-toggle {
     justify-content: center;
+  }
+}
+
+.site--personal-analysis {
+  width: min(1500px, calc(100% - 36px));
+}
+
+.library-analyze-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 9px;
+}
+
+@media (max-width: 760px) {
+  .library-analyze-actions {
+    display: grid;
+    width: 100%;
+    gap: 8px;
   }
 }
