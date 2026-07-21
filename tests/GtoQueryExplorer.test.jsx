@@ -49,7 +49,7 @@ describe('GTO demo query framework', () => {
     expect(container.textContent).toContain('DEMO · 非求解结果');
     expect(container.textContent).toContain('起手牌矩阵');
 
-    const flopTab = [...container.querySelectorAll('[role="tab"]')].find((button) => button.textContent === '翻牌');
+    const flopTab = [...container.querySelectorAll('[role="tab"]')].find((button) => button.textContent.startsWith('翻牌'));
     await click(flopTab);
     expect(container.textContent).toContain('A♥ 7♦ 2♣');
 
@@ -61,5 +61,22 @@ describe('GTO demo query framework', () => {
     expect(container.textContent).toContain('当前节点未覆盖');
     expect(container.textContent).toContain('不会为缺失节点推测或生成频率');
   });
-});
 
+  it('separates solution selection from action-tree navigation', async () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root.render(<GtoQueryExplorer />));
+
+    const solutionButton = [...container.querySelectorAll('button')].find((button) => button.textContent.includes('更换方案'));
+    await click(solutionButton);
+
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(container.textContent).toContain('解决方案库');
+    expect(container.textContent).toContain('等待授权数据');
+
+    await click(container.querySelector('.gto-solution-row.active'));
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain('翻前');
+  });
+});
