@@ -189,19 +189,21 @@ const HOMEPAGE_COPY = {
     hero: {
       eyebrow: 'KISHPOKER 旗舰工具',
       product: 'K2note',
-      title: '把 GG 牌谱，变成可以行动的数据',
-      desc: '每个 session 打完后导入 GGPoker 手牌历史，先在浏览器本地完成复盘；首次明确选择后，也可让之后的牌谱副本自动积累到云端。',
-      privacy: '先本地解析 · 首次明确同意后默认保存副本',
-      primaryCta: '开始分析 GG 牌谱',
+      title: '打完一场，先把这次 Session 看清楚',
+      desc: '上传本次 GGPoker 手牌历史，免登录即可在浏览器本地查看盈亏、资金曲线、打法数据和具体牌局。',
+      privacy: '本地解析 · 可免登录完成本次复盘',
+      primaryCta: '分析本次 Session',
+      secondaryCta: '查看长期数据分析',
       previewLabel: '分析视图预览',
-      previewTitle: '一份牌谱，重新看清你的打法',
-      previewFooter: '从结果出发，回到每一个决策'
+      previewTitle: '本次 Session，从结果一路复盘到每手牌',
+      previewItems: ['资金曲线', '核心数据', '逐手复盘'],
+      previewFooter: '无需登录，导入后立即开始'
     },
     flagship: {
-      eyebrow: 'K2note · GG 牌谱分析',
-      title: '你的 GG 牌谱分析工作台',
-      desc: '既能免登录分析单次 session，也能登录积累长期牌谱；从长期结果到单手复盘，用一套清晰的报告重新认识自己的打法。',
-      action: '进入 K2note',
+      eyebrow: 'K2note 会员工作台 · 登录后',
+      title: '把每次 Session，积累成长期牌谱资产',
+      desc: '登录后持续保存个人牌谱库；高级数据与漏洞分析仅向已建立牌谱库并同意贡献去重牌谱副本的用户开放。',
+      action: '进入高级分析',
       capabilities: [
         { title: '资金盈亏', desc: '查看总输赢、BB/100、资金与 EV 曲线，以及不同阶段的表现变化。' },
         { title: '数据分析', desc: '拆解 VPIP、PFR、3Bet 等核心数据，并按级别、位置和底牌深入筛选。' },
@@ -210,8 +212,8 @@ const HOMEPAGE_COPY = {
       ]
     },
     modes: {
-      local: { label: '免登录', title: '分析这次 Session', desc: '导入刚打完的牌谱，先在浏览器本地解析；是否保存云端副本由你首次明确选择。', action: '开始本地分析' },
-      cloud: { label: '登录后', title: '积累我的全部牌谱', desc: '首次确认后自动保存新牌谱，按时间、级别和游戏类型分析长期数据。', action: '进入我的牌谱库', analysisAction: '高级数据分析' }
+      library: { label: '个人牌谱库', title: '先把长期数据存下来', desc: '登录后积累每次导入，按时间、级别和游戏类型筛选自己的长期牌谱。', action: '进入我的牌谱库' },
+      analytics: { label: '高级数据分析', title: '用长期样本找到真实漏洞', desc: '基于个人牌谱库查看长期表现与诊断入口；使用前需同意贡献去重牌谱副本。', action: '查看高级分析' }
     },
     section: {
       title: '更多扑克工具',
@@ -262,19 +264,21 @@ const HOMEPAGE_COPY = {
     hero: {
       eyebrow: 'KISHPOKER FLAGSHIP TOOL',
       product: 'K2note',
-      title: 'Turn GG hand histories into decisions you can act on',
-      desc: 'Review each GGPoker session locally first, then explicitly choose whether future imports should also contribute a cloud copy.',
-      privacy: 'Parsed locally first · One explicit opt-in enables copy auto-save',
-      primaryCta: 'Analyze GG Hand Histories',
+      title: 'Finish a session. See exactly what happened.',
+      desc: 'Import this GGPoker session and review results, graphs, core stats, and individual hands locally in your browser without signing in.',
+      privacy: 'Parsed locally · No sign-in required for session review',
+      primaryCta: 'Analyze this session',
+      secondaryCta: 'Explore long-term analytics',
       previewLabel: 'ANALYSIS PREVIEW',
-      previewTitle: 'One hand-history file. A clearer view of your game.',
-      previewFooter: 'Start with results, then return to every decision'
+      previewTitle: 'One session, from the result back to every hand.',
+      previewItems: ['Bankroll graph', 'Core stats', 'Hand review'],
+      previewFooter: 'Import and start immediately — no sign-in required'
     },
     flagship: {
-      eyebrow: 'K2note · GG HAND ANALYSIS',
-      title: 'Your GG hand-history analysis workspace',
-      desc: 'Analyze a session without signing in, or build a private long-term library with clearly controlled auto-save after signing in.',
-      action: 'Open K2note',
+      eyebrow: 'K2note MEMBER WORKSPACE · SIGNED IN',
+      title: 'Turn every session into a long-term poker database',
+      desc: 'Build your private library after signing in. Advanced data and leak analysis require a library plus consent to contribute a deduplicated hand copy.',
+      action: 'Open advanced analytics',
       capabilities: [
         { title: 'Profit & loss', desc: 'Review net results, BB/100, bankroll and EV curves, and how performance changes over time.' },
         { title: 'Data analysis', desc: 'Break down VPIP, PFR, 3Bet, and more by stake, position, and starting hand.' },
@@ -283,8 +287,8 @@ const HOMEPAGE_COPY = {
       ]
     },
     modes: {
-      local: { label: 'NO SIGN-IN', title: 'Analyze this session', desc: 'Import your latest hands for local parsing, then choose whether to retain a cloud copy.', action: 'Start local analysis' },
-      cloud: { label: 'SIGNED IN', title: 'Build my full library', desc: 'Confirm once, then auto-save new imports and filter them by date, stake, and game type.', action: 'Open my library', analysisAction: 'Advanced analytics' }
+      library: { label: 'PRIVATE LIBRARY', title: 'Build a reliable long-term sample', desc: 'Accumulate imports after signing in, then filter your own hands by date, stake, and game type.', action: 'Open my library' },
+      analytics: { label: 'ADVANCED ANALYTICS', title: 'Find leaks in the full sample', desc: 'Review long-term results and diagnostics after consenting to contribute a deduplicated hand copy.', action: 'View advanced analytics' }
     },
     section: {
       title: 'More poker tools',
@@ -625,7 +629,7 @@ function RangeLabView() {
       <section className="range-panel" style={{ marginTop: 0 }}>
         <header>
           <p className="eyebrow">GG Zoom · 100bb</p>
-          <h2>Preflop Range Lab</h2>
+          <h2 className="range-lab-title">Preflop Range Lab <span>施工中</span></h2>
           <p className="subtext">快速查看 GTO 基准并根据对手画像自动调整</p>
         </header>
 
@@ -4236,7 +4240,7 @@ function HomeView() {
           <p className="hero-privacy"><i aria-hidden="true" />{copy.hero.privacy}</p>
           <div className="cta-row">
             <button type="button" className="primary hero-primary" onClick={openHistory}>{copy.hero.primaryCta}<span aria-hidden="true">→</span></button>
-            <button type="button" className="secondary hero-library" onClick={openLibrary}>{copy.modes.cloud.action}</button>
+            <button type="button" className="secondary hero-library" onClick={openInsights}>{copy.hero.secondaryCta}</button>
           </div>
         </div>
         <aside className="hero-analysis-preview" aria-label={copy.hero.previewLabel}>
@@ -4250,10 +4254,10 @@ function HomeView() {
             </svg>
           </div>
           <div className="hero-preview-list">
-            {copy.flagship.capabilities.slice(0, 3).map((capability, index) => (
-              <div key={capability.title}>
+            {copy.hero.previewItems.map((item, index) => (
+              <div key={item}>
                 <span>{String(index + 1).padStart(2, '0')}</span>
-                <strong>{capability.title}</strong>
+                <strong>{item}</strong>
                 <i aria-hidden="true">↗</i>
               </div>
             ))}
@@ -4269,21 +4273,20 @@ function HomeView() {
             <h2>{copy.flagship.title}</h2>
             <p>{copy.flagship.desc}</p>
           </div>
-          <button type="button" className="primary" onClick={openHistory}>{copy.flagship.action}<span aria-hidden="true">→</span></button>
+          <button type="button" className="primary" onClick={openInsights}>{copy.flagship.action}<span aria-hidden="true">→</span></button>
         </header>
         <div className="kish2note-modes">
           <article>
-            <span>{copy.modes.local.label}</span>
-            <h3>{copy.modes.local.title}</h3>
-            <p>{copy.modes.local.desc}</p>
-            <button type="button" onClick={openHistory}>{copy.modes.local.action}<i aria-hidden="true">→</i></button>
+            <span>{copy.modes.library.label}</span>
+            <h3>{copy.modes.library.title}</h3>
+            <p>{copy.modes.library.desc}</p>
+            <button type="button" onClick={openLibrary}>{copy.modes.library.action}<i aria-hidden="true">→</i></button>
           </article>
           <article className="kish2note-mode-cloud">
-            <span>{copy.modes.cloud.label}</span>
-            <h3>{copy.modes.cloud.title}</h3>
-            <p>{copy.modes.cloud.desc}</p>
-            <button type="button" onClick={openLibrary}>{copy.modes.cloud.action}<i aria-hidden="true">→</i></button>
-            <button type="button" className="kish2note-mode-analysis" onClick={openInsights}>{copy.modes.cloud.analysisAction}<i aria-hidden="true">→</i></button>
+            <span>{copy.modes.analytics.label}</span>
+            <h3>{copy.modes.analytics.title}</h3>
+            <p>{copy.modes.analytics.desc}</p>
+            <button type="button" onClick={openInsights}>{copy.modes.analytics.action}<i aria-hidden="true">→</i></button>
           </article>
         </div>
         <div className="kish2note-capabilities">
