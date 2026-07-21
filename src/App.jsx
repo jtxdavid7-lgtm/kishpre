@@ -11,6 +11,7 @@ import { CloudSaveDialog } from './components/cloud/CloudSaveDialog.jsx';
 import { DatasetFilterPanel } from './components/DatasetFilterPanel.jsx';
 import { PoolLeakExplorer } from './components/PoolLeakExplorer.jsx';
 import { PersonalAnalysisWorkspace } from './components/PersonalAnalysisWorkspace.jsx';
+import { GtoQueryExplorer } from './components/GtoQueryExplorer.jsx';
 import {
   deleteCloudSession,
   ensureDefaultCloudLibrary,
@@ -170,6 +171,7 @@ Archive.init({
 const FEATURE_BLUEPRINT = [
   { key: 'reports', action: 'history' },
   { key: 'poolLeaks', action: 'poolLeaks' },
+  { key: 'gto', action: 'gto' },
   { key: 'equity', action: 'equity' },
   { key: 'variance', action: 'variance' },
   { key: 'rng', action: 'download' },
@@ -249,6 +251,11 @@ const HOMEPAGE_COPY = {
         label: '真实玩家池 · 新工具',
         title: '玩家池漏洞查询器',
         desc: '按底池、位置、行动路径、Flop 牌面和下注尺寸，查找样本可靠的防守不足与过度防守节点。'
+      },
+      gto: {
+        label: 'GTO QUERY · MVP 演示',
+        title: 'GTO 策略节点查询器',
+        desc: '按牌局、位置、筹码、行动路径和公共牌逐层查询策略快照；当前频率为明确标注的演示数据。'
       }
     },
     actions: {
@@ -257,6 +264,7 @@ const HOMEPAGE_COPY = {
       variance: '开始模拟',
       history: '进入 K2note',
       poolLeaks: '查询玩家池漏洞',
+      gto: '打开 GTO 查询器',
       download: '下载插件'
     }
   },
@@ -324,6 +332,11 @@ const HOMEPAGE_COPY = {
         label: 'REAL PLAYER POOL · NEW',
         title: 'Player-pool leak explorer',
         desc: 'Explore reliable under-defense and over-defense nodes by pot type, role, line, Flop texture, and bet size.'
+      },
+      gto: {
+        label: 'GTO QUERY · MVP DEMO',
+        title: 'GTO strategy node explorer',
+        desc: 'Move through game, position, stack, action line, and board filters. Current frequencies are clearly labeled demo data.'
       }
     },
     actions: {
@@ -332,6 +345,7 @@ const HOMEPAGE_COPY = {
       variance: 'Run simulation',
       history: 'Open K2note',
       poolLeaks: 'Explore pool leaks',
+      gto: 'Open GTO explorer',
       download: 'Download plugin'
     }
   }
@@ -4138,6 +4152,7 @@ function HomeView() {
   const openVariance = () => window.location.assign('?tool=variance');
   const openHistory = () => window.location.assign('?tool=history');
   const openPoolLeaks = () => window.location.assign('?tool=pool-leaks');
+  const openGto = () => window.location.assign('?tool=gto');
   const openInsights = () => {
     if (isAuthenticated) {
       window.location.assign('?tool=insights');
@@ -4199,6 +4214,7 @@ function HomeView() {
       if (item.action === 'variance') return openVariance;
       if (item.action === 'history') return openHistory;
       if (item.action === 'poolLeaks') return openPoolLeaks;
+      if (item.action === 'gto') return openGto;
       if (item.action === 'download') return downloadPlugin;
       return null;
     })();
@@ -4394,6 +4410,33 @@ function PoolLeakView() {
   );
 }
 
+function GtoQueryView() {
+  useEffect(() => {
+    document.documentElement.lang = 'zh-CN';
+    document.title = 'GTO 策略节点查询器 | KishPoker';
+    document.querySelector('meta[name="description"]')?.setAttribute(
+      'content',
+      '按牌局、位置、筹码、行动路径和公共牌查询版本化策略快照。当前 MVP 使用明确标注的演示数据，不是实时 solver。'
+    );
+  }, []);
+
+  return (
+    <div className="site site--gto-query">
+      <nav className="top-nav">
+        <button type="button" className="brand brand--button" onClick={() => window.location.assign('/')}>
+          KISHPOKER · GTO QUERY
+        </button>
+        <div className="top-nav-actions">
+          <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=range')}>Range Lab</button>
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=equity')}>胜率计算</button>
+        </div>
+      </nav>
+      <GtoQueryExplorer />
+    </div>
+  );
+}
+
 function PersonalAnalysisView() {
   useEffect(() => {
     document.documentElement.lang = 'zh-CN';
@@ -4436,6 +4479,7 @@ function App() {
   if (tool === 'library') return <CloudLibraryView />;
   if (tool === 'insights') return <PersonalAnalysisView />;
   if (tool === 'pool-leaks') return <PoolLeakView />;
+  if (tool === 'gto') return <GtoQueryView />;
   return <HomeView />;
 }
 
