@@ -41,6 +41,14 @@ body {
   padding-inline: clamp(16px, 2.4vw, 38px);
 }
 
+.site--gto-query {
+  width: calc(100% - 24px);
+  max-width: none;
+  box-sizing: border-box;
+  gap: 24px;
+  padding-inline: clamp(12px, 1.6vw, 30px);
+}
+
 .site--history .history-analysis-layout {
   grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
   gap: 24px;

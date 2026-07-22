@@ -253,9 +253,9 @@ const HOMEPAGE_COPY = {
         desc: '按底池、位置、行动路径、Flop 牌面和下注尺寸，查找样本可靠的防守不足与过度防守节点。'
       },
       gto: {
-        label: 'GTO QUERY · MVP 演示',
+        label: 'GTO QUERY · 正式数据',
         title: 'GTO 策略节点查询器',
-        desc: '按牌局、位置、筹码、行动路径和公共牌逐层查询策略快照；当前频率为明确标注的演示数据。'
+        desc: '沿翻前行动树查询正式 RocketSolver 静态快照，查看每类起手牌的行动频率、策略 EV 与行动 EV。'
       }
     },
     actions: {
@@ -334,9 +334,9 @@ const HOMEPAGE_COPY = {
         desc: 'Explore reliable under-defense and over-defense nodes by pot type, role, line, Flop texture, and bet size.'
       },
       gto: {
-        label: 'GTO QUERY · MVP DEMO',
+        label: 'GTO QUERY · SOLVED DATA',
         title: 'GTO strategy node explorer',
-        desc: 'Move through game, position, stack, action line, and board filters. Current frequencies are clearly labeled demo data.'
+        desc: 'Navigate the solved preflop action tree and inspect static RocketSolver frequencies, strategy EV, and action EV by starting hand.'
       }
     },
     actions: {
@@ -4416,7 +4416,7 @@ function GtoQueryView() {
     document.title = 'GTO 策略节点查询器 | KishPoker';
     document.querySelector('meta[name="description"]')?.setAttribute(
       'content',
-      '按牌局、位置、筹码、行动路径和公共牌查询版本化策略快照。当前 MVP 使用明确标注的演示数据，不是实时 solver。'
+      '沿翻前行动树查询版本化 RocketSolver 静态策略快照，查看起手牌行动频率、策略 EV 与行动 EV；不是实时 solver。'
     );
   }, []);
 

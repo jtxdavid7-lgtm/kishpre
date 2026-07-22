@@ -98,6 +98,25 @@
   line-height: 1.6;
 }
 
+.gto-demo-notice.is-formal {
+  background: rgba(5, 30, 28, 0.78);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.gto-demo-notice.is-formal > span {
+  color: #86efac;
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.gto-demo-notice.is-formal strong {
+  color: #dcfce7;
+}
+
+.gto-demo-notice.is-formal p {
+  color: #94bfb2;
+}
+
 .gto-tree-shell {
   min-width: 0;
   display: grid;
@@ -1014,6 +1033,174 @@ button.gto-solution-row {
   }
 }
 
+/* Complete preflop tree: fill wide screens while keeping a local scroller on mobile. */
+.gto-tree-workspace {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.gto-tree-toolbar {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px;
+}
+
+.gto-tree-toolbar > span {
+  color: #6f85a2;
+  font-size: 9px;
+}
+
+.gto-tree-toolbar > div {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.gto-tree-toolbar button,
+.gto-action-history button {
+  min-height: 27px;
+  padding: 0 9px;
+  color: #9bb0c9;
+  font-size: 8px;
+  background: #0d1623;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.gto-tree-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.gto-action-tree {
+  width: 100%;
+  min-width: 940px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(116px, 1fr)) minmax(116px, 0.72fr);
+  gap: 5px;
+}
+
+.gto-tree-node,
+.gto-tree-node--seat.hero {
+  position: relative;
+  width: auto;
+  min-width: 0;
+  min-height: 132px;
+  padding: 8px;
+  flex: none;
+}
+
+.gto-tree-node.folded {
+  opacity: 0.72;
+}
+
+.gto-seat-selector {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: auto;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  cursor: pointer;
+}
+
+.gto-seat-heading {
+  position: relative;
+  z-index: 2;
+  padding: 2px 2px 7px;
+  pointer-events: none;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.gto-seat-heading strong {
+  font-size: 11px;
+}
+
+.gto-seat-heading span {
+  color: #71849e;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.gto-tree-node--seat:hover {
+  border-color: rgba(96, 165, 250, 0.52);
+}
+
+.gto-tree-node--seat:has(.gto-seat-selector:focus-visible) {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.gto-tree-actions button.available {
+  color: #ddecff;
+  background: rgba(37, 99, 235, 0.13);
+  border-color: rgba(96, 165, 250, 0.3);
+}
+
+.gto-tree-actions button.selected {
+  color: #08111e;
+  font-weight: 900;
+  background: #8ab9ff;
+  border-color: #b7d4ff;
+}
+
+.gto-action-history {
+  max-width: 100%;
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding: 0 3px 2px;
+  scrollbar-color: #263a56 #07101c;
+}
+
+.gto-action-history button {
+  flex: 0 0 auto;
+  color: #768ba6;
+}
+
+.gto-action-history button.current {
+  color: #ddecff;
+  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(37, 99, 235, 0.16);
+}
+
+.gto-matrix-cell.unreachable {
+  background: #202b3b !important;
+  opacity: 0.58;
+}
+
+.gto-study-grid[aria-busy='true'] {
+  opacity: 0.72;
+}
+
+@media (max-width: 880px) {
+  .gto-tree-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 720px) {
+  .gto-action-tree {
+    min-width: 890px;
+    grid-template-columns: repeat(6, minmax(116px, 1fr)) 116px;
+  }
+
+  .gto-tree-node,
+  .gto-tree-node--seat.hero {
+    width: auto;
+    min-height: 124px;
+  }
+}
+
 @media (max-width: 440px) {
   .gto-tree-node {
     width: 96px;
@@ -1039,5 +1226,256 @@ button.gto-solution-row {
   .gto-tree-node,
   .gto-library-dialog {
     transition: none;
+  }
+}
+
+.gto-snapshot-notice {
+  position: relative;
+  z-index: 1;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(5, 30, 28, 0.78);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: 18px;
+}
+
+.gto-snapshot-notice > span,
+.gto-node-badge {
+  width: max-content;
+  padding: 5px 9px;
+  color: #86efac;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: 999px;
+}
+
+.gto-snapshot-notice strong {
+  margin-top: 12px;
+  color: #dcfce7;
+  font-size: 15px;
+}
+
+.gto-snapshot-notice p {
+  margin-top: 7px;
+  color: #94bfb2;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.gto-tree-shell {
+  align-items: stretch;
+}
+
+.gto-action-tree {
+  min-height: 112px;
+}
+
+.gto-tree-node {
+  width: 132px;
+  min-height: 112px;
+  flex-basis: 132px;
+}
+
+.gto-tree-node--seat.hero {
+  width: 174px;
+  flex-basis: 174px;
+  border-color: #5c98f4;
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.15);
+}
+
+.gto-tree-actions {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  pointer-events: none;
+}
+
+.gto-tree-actions button {
+  min-height: 24px;
+  padding: 3px 6px;
+  color: #b8c8dc;
+  text-align: left;
+  font-size: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 5px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.gto-tree-actions button.covered {
+  color: #ddecff;
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(96, 165, 250, 0.38);
+}
+
+.gto-tree-actions button.locked {
+  color: #6d8099;
+}
+
+.gto-tree-chosen-action {
+  color: #a9c9f8 !important;
+  font-weight: 800;
+}
+
+.gto-tree-node--flop {
+  background: repeating-linear-gradient(135deg, #0a111d, #0a111d 8px, #0d1623 8px, #0d1623 16px);
+}
+
+.gto-tree-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  padding-top: 2px;
+}
+
+.gto-tree-controls button {
+  min-height: 30px;
+  padding: 0 10px;
+  color: #9bb0c9;
+  font-size: 9px;
+  background: #0d1623;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.gto-tree-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.gto-branch-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  color: #d6e1ef;
+  background: #161408;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 12px;
+}
+
+.gto-branch-notice span {
+  color: #fbbf24;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.gto-branch-notice p {
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.gto-branch-notice button {
+  padding: 5px 9px;
+  color: #91a5bf;
+  font-size: 9px;
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.gto-hand-total-ev {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+}
+
+.gto-hand-total-ev b {
+  color: #86efac;
+  font-size: 18px;
+}
+
+.gto-hand-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  color: #667b96;
+  font-size: 9px;
+}
+
+.gto-frequency-list > div > span {
+  align-items: baseline;
+}
+
+.gto-frequency-list span b {
+  margin-right: auto;
+  color: #cbd8e8;
+}
+
+.gto-frequency-list span em {
+  color: #eef5ff;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.gto-frequency-list span strong {
+  min-width: 78px;
+  color: #86efac;
+  text-align: right;
+  font-size: 9px;
+}
+
+@media (max-width: 720px) {
+  .gto-tree-node {
+    width: 118px;
+    flex-basis: 118px;
+  }
+
+  .gto-tree-node--seat.hero {
+    width: 164px;
+    flex-basis: 164px;
+  }
+
+  .gto-branch-notice {
+    grid-template-columns: 1fr auto;
+  }
+
+  .gto-branch-notice span {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Keep the active seat inside its grid track; older fixed-width rules must not create overlap. */
+.gto-action-tree {
+  width: 100%;
+  min-width: 940px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(116px, 1fr)) minmax(116px, 0.72fr);
+}
+
+.gto-tree-node,
+.gto-tree-node--seat.hero {
+  width: auto;
+  min-width: 0;
+  min-height: 132px;
+  flex-basis: auto;
+}
+
+@media (max-width: 720px) {
+  .gto-action-tree {
+    min-width: 890px;
+    grid-template-columns: repeat(6, minmax(116px, 1fr)) 116px;
+  }
+
+  .gto-tree-node,
+  .gto-tree-node--seat.hero {
+    width: auto;
+    min-height: 124px;
+    flex-basis: auto;
   }
 }
