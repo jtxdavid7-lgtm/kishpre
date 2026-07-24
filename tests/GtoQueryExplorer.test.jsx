@@ -126,7 +126,9 @@ describe('GTO complete preflop explorer', () => {
 
     await click(seatTarget);
     await waitForText('MP 的可选行动');
-    const mpAction = mpCard.querySelector('.gto-tree-actions button');
+    const activeMpCard = [...container.querySelectorAll('.gto-tree-node--seat')]
+      .find((card) => card.querySelector('strong')?.textContent === 'MP');
+    const mpAction = activeMpCard.querySelector('.gto-tree-actions button');
     expect(mpAction).not.toBeNull();
   });
 
@@ -145,6 +147,53 @@ describe('GTO complete preflop explorer', () => {
     expect(back.disabled).toBe(false);
     await click(back);
     await waitForText('MP 的可选行动');
+  });
+
+  it('appends a new seat card when the action returns to an earlier player', async () => {
+    await renderExplorer();
+    const clickActiveAction = async (label) => {
+      const action = [...container.querySelectorAll('.gto-tree-node--seat.hero .gto-tree-actions button')]
+        .find((button) => button.textContent === label);
+      expect(action).not.toBeNull();
+      await click(action);
+    };
+
+    await clickActiveAction('开池 2.5bb');
+    await waitForText('MP 的可选行动');
+    await clickActiveAction('加注 8bb');
+    await waitForText('CO 的可选行动');
+    await clickActiveAction('弃牌');
+    await waitForText('BTN 的可选行动');
+    await clickActiveAction('弃牌');
+    await waitForText('SB 的可选行动');
+    await clickActiveAction('弃牌');
+    await waitForText('BB 的可选行动');
+    await clickActiveAction('弃牌');
+    await waitForText('EP 的可选行动');
+
+    const epCards = [...container.querySelectorAll('.gto-tree-node--seat')]
+      .filter((card) => card.querySelector('.gto-seat-heading strong')?.textContent.startsWith('EP'));
+    expect(epCards).toHaveLength(2);
+    expect(epCards[0].textContent).toContain('开池 2.5bb');
+    expect(epCards[0].querySelector('.selected').textContent).toBe('开池 2.5bb');
+    expect(epCards[1].classList.contains('repeated')).toBe(true);
+    expect(epCards[1].classList.contains('hero')).toBe(true);
+    expect(epCards[1].textContent).toContain('再次行动');
+  });
+
+  it('keeps flop selection and the aggregate report directly accessible from preflop', async () => {
+    await renderExplorer();
+    const toolbarButtons = [...container.querySelectorAll('.gto-tree-toolbar button')];
+    const selectFlop = toolbarButtons.find((button) => button.textContent === '选择翻牌');
+    const openReport = toolbarButtons.find((button) => button.textContent === '翻牌聚合报告');
+    expect(selectFlop.disabled).toBe(false);
+    expect(openReport.disabled).toBe(false);
+
+    await click(openReport);
+    await waitForText('当前翻后场景');
+    await waitForText('22,100 个实体翻牌');
+    expect(container.querySelector('.gto-pack-select').textContent).toContain('选择翻牌（1,755 类）');
+    expect(container.querySelector('.gto-study-tabs button.active').textContent).toBe('翻牌聚合报告');
   });
 
   it('shows the selected hand strategy frequency, total EV and every action EV', async () => {

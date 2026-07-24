@@ -1229,11 +1229,17 @@ button.gto-tree-node--flop:disabled {
   opacity: 0.35;
 }
 
+.gto-tree-toolbar button.gto-tree-toolbar-primary {
+  color: #dff7ea;
+  background: rgba(16, 185, 129, 0.13);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
 .gto-action-tree {
   width: 100%;
   min-width: 940px;
   display: grid;
-  grid-template-columns: repeat(6, minmax(116px, 1fr)) minmax(116px, 0.72fr);
+  grid-template-columns: repeat(var(--gto-tree-columns, 7), minmax(116px, 1fr));
   gap: 5px;
 }
 
@@ -1272,13 +1278,32 @@ button.gto-tree-node--flop:disabled {
 }
 
 .gto-seat-heading strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
+}
+
+.gto-seat-heading strong em {
+  padding: 2px 5px;
+  color: #86efac;
+  font-size: 7px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.24);
+  border-radius: 999px;
 }
 
 .gto-seat-heading span {
   color: #71849e;
   font-size: 10px;
   font-weight: 800;
+}
+
+.gto-tree-node--seat.repeated {
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.06), rgba(8, 15, 27, 0.96));
+  border-color: rgba(52, 211, 153, 0.2);
 }
 
 .gto-tree-node--seat:hover {
@@ -1342,7 +1367,7 @@ button.gto-tree-node--flop:disabled {
 @media (max-width: 720px) {
   .gto-action-tree {
     min-width: 890px;
-    grid-template-columns: repeat(6, minmax(116px, 1fr)) 116px;
+    grid-template-columns: repeat(var(--gto-tree-columns, 7), minmax(116px, 1fr));
   }
 
   .gto-tree-node,
@@ -1936,7 +1961,7 @@ button.gto-tree-node--flop:disabled {
   width: 100%;
   min-width: 940px;
   display: grid;
-  grid-template-columns: repeat(6, minmax(116px, 1fr)) minmax(116px, 0.72fr);
+  grid-template-columns: repeat(var(--gto-tree-columns, 7), minmax(116px, 1fr));
 }
 
 .gto-tree-node,
@@ -1950,7 +1975,7 @@ button.gto-tree-node--flop:disabled {
 @media (max-width: 720px) {
   .gto-action-tree {
     min-width: 890px;
-    grid-template-columns: repeat(6, minmax(116px, 1fr)) 116px;
+    grid-template-columns: repeat(var(--gto-tree-columns, 7), minmax(116px, 1fr));
   }
 
   .gto-tree-node,

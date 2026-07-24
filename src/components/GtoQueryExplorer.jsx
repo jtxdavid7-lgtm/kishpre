@@ -372,7 +372,7 @@ function PostflopActionTree({
             })}
           </div>
           <label className="gto-pack-select">
-            <span>可用牌面</span>
+            <span>选择翻牌（1,755 类）</span>
             <select value={pack.id} onChange={(event) => onPackChange(event.target.value)}>
               {manifest.packs.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.label}</option>)}
             </select>
@@ -422,15 +422,45 @@ function PostflopActionTree({
   );
 }
 
-function ActionTree({ index, nodeId, terminalSelection, postflopAvailable, onNodeChange, onAction, onOpenLibrary, onEnterPostflop }) {
+function ActionTree({
+  index,
+  nodeId,
+  terminalSelection,
+  currentLineHasPostflop,
+  postflopLibraryReady,
+  onNodeChange,
+  onAction,
+  onOpenLibrary,
+  onEnterPostflop
+}) {
   const node = index.nodes[nodeId];
   const trail = getGtoDecisionTrail(index, nodeId);
   const playerState = new Map(node.players.map((player) => [player.position, player]));
+  const firstDecisionFor = (actor) => trail.find((entry) => entry.node.actor === actor);
+  const seenActors = new Set();
+  const repeatedDecisions = trail.filter((entry) => {
+    if (seenActors.has(entry.node.actor)) return true;
+    seenActors.add(entry.node.actor);
+    return false;
+  });
+  const decisionCards = [
+    ...GTO_POSITION_ORDER.map((position) => ({
+      position,
+      actor: GTO_POSITION_CODE[position],
+      entry: firstDecisionFor(GTO_POSITION_CODE[position]),
+      repeated: false
+    })),
+    ...repeatedDecisions.map((entry) => ({
+      position: index.positions[entry.node.actor],
+      actor: entry.node.actor,
+      entry,
+      repeated: true
+    }))
+  ];
+  const treeColumnCount = decisionCards.length + 1;
 
-  const latestDecisionFor = (actor) => [...trail].reverse().find((entry) => entry.node.actor === actor);
-
-  const selectSeat = (position) => {
-    const target = findSeatDecisionNode(index, nodeId, GTO_POSITION_CODE[position]);
+  const selectSeat = (position, entry) => {
+    const target = entry?.node.id ?? findSeatDecisionNode(index, nodeId, GTO_POSITION_CODE[position]);
     if (target !== null) onNodeChange(target);
   };
 
@@ -441,33 +471,55 @@ function ActionTree({ index, nodeId, terminalSelection, postflopAvailable, onNod
       </button>
       <div className="gto-tree-workspace">
         <div className="gto-tree-toolbar">
-          <span>可直接点任意位置；此前未行动的位置自动补为弃牌</span>
+          <span>行动按时间顺序排列；同一位置再次决策时会在右侧新增行动框</span>
           <div>
+            <button
+              type="button"
+              className="gto-tree-toolbar-primary"
+              disabled={!postflopLibraryReady}
+              onClick={() => onEnterPostflop('strategy')}
+            >选择翻牌</button>
+            <button
+              type="button"
+              className="gto-tree-toolbar-primary"
+              disabled={!postflopLibraryReady}
+              onClick={() => onEnterPostflop('flop-report')}
+            >翻牌聚合报告</button>
             <button type="button" onClick={() => onNodeChange(node.parentId)} disabled={node.parentId === null}>← 返回一步</button>
             <button type="button" onClick={() => onNodeChange(index.rootId)}>重置行动</button>
           </div>
         </div>
         <div className="gto-tree-scroll">
-          <div className="gto-action-tree" aria-label="完整翻前行动树">
-            {GTO_POSITION_ORDER.map((position) => {
-              const actor = GTO_POSITION_CODE[position];
-              const entry = latestDecisionFor(actor);
-              const active = node.actor === actor;
+          <div
+            className="gto-action-tree"
+            aria-label="完整翻前行动树"
+            style={{
+              '--gto-tree-columns': treeColumnCount,
+              minWidth: `${Math.max(940, treeColumnCount * 121)}px`
+            }}
+          >
+            {decisionCards.map(({ position, actor, entry, repeated }, cardIndex) => {
+              const active = entry?.node.id === nodeId;
               const player = playerState.get(actor);
+              const decisionPlayer = entry?.node.players.find((candidate) => candidate.position === actor);
               const terminalAction = terminalSelection && entry && terminalSelection.nodeId === entry.node.id
                 ? terminalSelection.action
                 : null;
               const selectedAction = terminalAction ?? entry?.selectedAction ?? null;
               return (
-                <article className={`gto-tree-node gto-tree-node--seat${active ? ' hero' : ''}${player?.withCards === false ? ' folded' : ''}`} key={position}>
+                <article
+                  className={`gto-tree-node gto-tree-node--seat${active ? ' hero' : ''}${player?.withCards === false ? ' folded' : ''}${repeated ? ' repeated' : ''}`}
+                  key={`${position}-${entry?.node.id ?? 'pending'}-${cardIndex}`}
+                >
                   <button
                     type="button"
                     className="gto-seat-selector"
-                    aria-label={`查看 ${position} 的决策节点`}
-                    onClick={() => selectSeat(position)}
+                    aria-label={`查看 ${position}${repeated ? ' 再次行动' : ''} 的决策节点`}
+                    onClick={() => selectSeat(position, entry)}
                   />
                   <header className="gto-seat-heading" aria-hidden="true">
-                    <strong>{position}</strong><span>{Number(player?.stack ?? 100).toFixed((player?.stack ?? 100) % 1 ? 1 : 0)}</span>
+                    <strong>{position}{repeated ? <em>再次行动</em> : null}</strong>
+                    <span>{Number(decisionPlayer?.stack ?? player?.stack ?? 100).toFixed((decisionPlayer?.stack ?? player?.stack ?? 100) % 1 ? 1 : 0)}</span>
                   </header>
                   {entry ? (
                     <div className="gto-tree-actions">
@@ -489,12 +541,12 @@ function ActionTree({ index, nodeId, terminalSelection, postflopAvailable, onNod
             })}
             <button
               type="button"
-              className={`gto-tree-node gto-tree-node--flop gto-tree-node--street${postflopAvailable ? ' active' : ''}`}
-              disabled={!postflopAvailable}
-              onClick={onEnterPostflop}
+              className={`gto-tree-node gto-tree-node--flop gto-tree-node--street${postflopLibraryReady ? ' active' : ''}`}
+              disabled={!postflopLibraryReady}
+              onClick={() => onEnterPostflop('strategy')}
             >
               <header><strong>FLOP</strong><span>—</span></header>
-              <small>{postflopAvailable ? '进入已求解翻后牌面' : terminalSelection ? '此翻前分支暂无翻后数据' : '完成翻前行动后进入'}</small>
+              <small>{currentLineHasPostflop ? '进入当前线路的已求解翻牌' : '打开 BTN vs BB 单加注翻牌库'}</small>
             </button>
           </div>
         </div>
@@ -708,9 +760,10 @@ export function GtoQueryExplorer() {
     setStudyView('strategy');
   };
 
-  const postflopAvailable = Boolean(
+  const currentLineHasPostflop = Boolean(
     postflopManifest?.packs.length && hasPostflopPackForSelection(index, nodeId, terminalSelection)
   );
+  const postflopLibraryReady = Boolean(postflopManifest?.packs.length);
   const activeNode = mode === 'postflop' ? postflopNode : node;
   const activeLoading = mode === 'postflop' ? postflopLoading : loading;
   const activeError = mode === 'postflop' ? postflopError : error;
@@ -759,14 +812,18 @@ export function GtoQueryExplorer() {
           index={index}
           nodeId={nodeId}
           terminalSelection={terminalSelection}
-          postflopAvailable={postflopAvailable}
+          currentLineHasPostflop={currentLineHasPostflop}
+          postflopLibraryReady={postflopLibraryReady}
           onNodeChange={changeNode}
           onAction={chooseAction}
           onOpenLibrary={() => setLibraryOpen(true)}
-          onEnterPostflop={() => {
+          onEnterPostflop={(nextView = 'strategy') => {
             setSelectedLabel('AKs');
             setPostflopLoading(true);
             setPostflopError('');
+            setPostflopNodeId(postflopIndex?.rootId ?? 0);
+            setPostflopTerminalSelection(null);
+            setStudyView(nextView);
             setMode('postflop');
           }}
         />
