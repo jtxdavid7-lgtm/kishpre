@@ -54,6 +54,25 @@ function hasPostflopPackForSelection(index, nodeId, terminalSelection) {
   ));
 }
 
+function resolveSupportedPreflopLine(index) {
+  if (!index) return null;
+  let currentNodeId = index.rootId;
+  for (const expected of POSTFLOP_PREFLOP_LINE) {
+    const currentNode = index.nodes[currentNodeId];
+    if (!currentNode || currentNode.actor !== expected.actor) return null;
+    const transition = findActionTransition(index, currentNodeId, expected.action);
+    if (!transition) return null;
+    if (transition.nextId === null) {
+      return {
+        nodeId: currentNodeId,
+        terminalSelection: { nodeId: currentNodeId, action: expected.action }
+      };
+    }
+    currentNodeId = transition.nextId;
+  }
+  return { nodeId: currentNodeId, terminalSelection: null };
+}
+
 function formatFrequency(value) {
   if (value > 0 && value < 0.001) return '<0.1%';
   return `${(value * 100).toFixed(1)}%`;
@@ -330,7 +349,7 @@ function FlopAggregateReport({ node, onOpenBoard }) {
   );
 }
 
-function PostflopActionTree({
+function PostflopContinuation({
   manifest,
   pack,
   index,
@@ -338,87 +357,80 @@ function PostflopActionTree({
   terminalSelection,
   onPackChange,
   onNodeChange,
-  onAction,
-  onBackToPreflop
+  onAction
 }) {
   const node = index.nodes[nodeId];
   const trail = getGtoDecisionTrail(index, nodeId);
   const visibleCardCount = 3;
 
   return (
-    <section className="gto-tree-shell gto-tree-shell--postflop">
-      <button type="button" className="gto-solution-summary" onClick={onBackToPreflop}>
-        <span>当前翻后场景</span><strong>BTN vs BB · 单加注底池</strong>
-        <small>BTN 2.5bb · BB 跟注 · 底池 5.5bb</small><b>← 返回完整翻前树</b>
-      </button>
-      <div className="gto-tree-workspace">
-        <div className="gto-tree-toolbar">
-          <span>沿真实翻牌行动树逐步查看；1,755 类同构翻牌均为已经求解并冻结的静态数据。</span>
-          <div>
-            <button type="button" onClick={() => onNodeChange(node.parentId)} disabled={node.parentId === null}>← 返回一步</button>
-            <button type="button" onClick={() => onNodeChange(index.rootId)}>重置翻后</button>
-          </div>
+    <div className="gto-postflop-continuation">
+      <div className="gto-tree-toolbar gto-tree-toolbar--postflop">
+        <span>翻牌与翻后行动继续显示在同一工作区；下方标签只切换策略或聚合报告。</span>
+        <div>
+          <button type="button" onClick={() => onNodeChange(node.parentId)} disabled={node.parentId === null}>← 翻后返回一步</button>
+          <button type="button" onClick={() => onNodeChange(index.rootId)}>重置翻后</button>
         </div>
-        <div className="gto-board-toolbar">
-          <div><span>完整翻牌静态包</span><strong>{pack.label}</strong></div>
-          <div className="gto-board-slots" aria-label="当前公共牌">
-            {pack.board.map((cardCode, cardIndex) => {
-              const card = describeCard(cardCode);
-              return (
-                <span className={`gto-board-card${cardIndex < visibleCardCount ? '' : ' future'}`} key={`${cardCode}-${cardIndex}`}>
-                  <strong>{card.rank}</strong><i className={`gto-suit gto-suit--${card.key}`}>{card.symbol}</i>
-                </span>
-              );
-            })}
-          </div>
-          <label className="gto-pack-select">
-            <span>选择翻牌（1,755 类）</span>
-            <select value={pack.id} onChange={(event) => onPackChange(event.target.value)}>
-              {manifest.packs.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.label}</option>)}
-            </select>
-          </label>
-        </div>
-        <div className="gto-postflop-path" aria-label="翻后行动历史">
-          {trail.map((entry) => {
-            const selectedAction = entry.node.id === terminalSelection?.nodeId
-              ? terminalSelection.action
-              : entry.selectedAction;
+      </div>
+      <div className="gto-board-toolbar">
+        <div><span>BTN vs BB · 单加注底池</span><strong>{pack.label}</strong></div>
+        <div className="gto-board-slots" aria-label="当前公共牌">
+          {pack.board.map((cardCode, cardIndex) => {
+            const card = describeCard(cardCode);
             return (
-              <button
-                type="button"
-                key={entry.node.id}
-                className={entry.node.id === nodeId ? 'current' : ''}
-                onClick={() => onNodeChange(entry.node.id)}
-              >
-                <span>{STREET_LABELS[entry.node.street]} · {index.positions[entry.node.actor]}</span>
-                <strong>{selectedAction ? describeGtoAction(selectedAction, entry.node).shortLabel : '当前决策'}</strong>
-                <small>底池 {Number(entry.node.pot.toFixed(2))}bb</small>
-              </button>
+              <span className={`gto-board-card${cardIndex < visibleCardCount ? '' : ' future'}`} key={`${cardCode}-${cardIndex}`}>
+                <strong>{card.rank}</strong><i className={`gto-suit gto-suit--${card.key}`}>{card.symbol}</i>
+              </span>
             );
           })}
         </div>
-        <div className="gto-postflop-actions">
-          <div><span>当前节点</span><strong>{STREET_LABELS[node.street]} · {index.positions[node.actor]}</strong><small>SPR {Number(node.spr.toFixed(1))}</small></div>
-          <div>
-            {node.actions.map((label) => {
-              const action = describeGtoAction(label, node);
-              return (
-                <button
-                  type="button"
-                  key={label}
-                  className={terminalSelection?.nodeId === node.id && terminalSelection.action === label ? 'selected' : ''}
-                  style={{ '--action-color': action.color }}
-                  onClick={() => onAction(node.id, label)}
-                >{action.shortLabel}</button>
-              );
-            })}
-          </div>
-        </div>
-        {terminalSelection && (
-          <div className="gto-branch-notice"><span>分支结束</span><p>当前行动已经到达摊牌或弃牌终点；可返回任一历史节点改选行动。</p><button type="button" onClick={() => onNodeChange(terminalSelection.nodeId)}>返回终点前</button></div>
-        )}
+        <label className="gto-pack-select">
+          <span>选择翻牌（1,755 类）</span>
+          <select value={pack.id} onChange={(event) => onPackChange(event.target.value)}>
+            {manifest.packs.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.label}</option>)}
+          </select>
+        </label>
       </div>
-    </section>
+      <div className="gto-postflop-path" aria-label="翻后行动历史">
+        {trail.map((entry) => {
+          const selectedAction = entry.node.id === terminalSelection?.nodeId
+            ? terminalSelection.action
+            : entry.selectedAction;
+          return (
+            <button
+              type="button"
+              key={entry.node.id}
+              className={entry.node.id === nodeId ? 'current' : ''}
+              onClick={() => onNodeChange(entry.node.id)}
+            >
+              <span>{STREET_LABELS[entry.node.street]} · {index.positions[entry.node.actor]}</span>
+              <strong>{selectedAction ? describeGtoAction(selectedAction, entry.node).shortLabel : '当前决策'}</strong>
+              <small>底池 {Number(entry.node.pot.toFixed(2))}bb</small>
+            </button>
+          );
+        })}
+      </div>
+      <div className="gto-postflop-actions">
+        <div><span>当前节点</span><strong>{STREET_LABELS[node.street]} · {index.positions[node.actor]}</strong><small>SPR {Number(node.spr.toFixed(1))}</small></div>
+        <div>
+          {node.actions.map((label) => {
+            const action = describeGtoAction(label, node);
+            return (
+              <button
+                type="button"
+                key={label}
+                className={terminalSelection?.nodeId === node.id && terminalSelection.action === label ? 'selected' : ''}
+                style={{ '--action-color': action.color }}
+                onClick={() => onAction(node.id, label)}
+              >{action.shortLabel}</button>
+            );
+          })}
+        </div>
+      </div>
+      {terminalSelection && (
+        <div className="gto-branch-notice"><span>分支结束</span><p>当前行动已经到达摊牌或弃牌终点；可返回任一历史节点改选行动。</p><button type="button" onClick={() => onNodeChange(terminalSelection.nodeId)}>返回终点前</button></div>
+      )}
+    </div>
   );
 }
 
@@ -428,6 +440,9 @@ function ActionTree({
   terminalSelection,
   currentLineHasPostflop,
   postflopLibraryReady,
+  postflopActive,
+  activeFlopLabel,
+  postflopContent,
   onNodeChange,
   onAction,
   onOpenLibrary,
@@ -499,7 +514,7 @@ function ActionTree({
             }}
           >
             {decisionCards.map(({ position, actor, entry, repeated }, cardIndex) => {
-              const active = entry?.node.id === nodeId;
+              const active = !postflopActive && entry?.node.id === nodeId;
               const player = playerState.get(actor);
               const decisionPlayer = entry?.node.players.find((candidate) => candidate.position === actor);
               const terminalAction = terminalSelection && entry && terminalSelection.nodeId === entry.node.id
@@ -541,12 +556,12 @@ function ActionTree({
             })}
             <button
               type="button"
-              className={`gto-tree-node gto-tree-node--flop gto-tree-node--street${postflopLibraryReady ? ' active' : ''}`}
+              className={`gto-tree-node gto-tree-node--flop gto-tree-node--street${postflopLibraryReady ? ' active' : ''}${postflopActive ? ' current' : ''}`}
               disabled={!postflopLibraryReady}
               onClick={() => onEnterPostflop('strategy')}
             >
-              <header><strong>FLOP</strong><span>—</span></header>
-              <small>{currentLineHasPostflop ? '进入当前线路的已求解翻牌' : '打开 BTN vs BB 单加注翻牌库'}</small>
+              <header><strong>FLOP</strong><span>{postflopActive ? activeFlopLabel : '—'}</span></header>
+              <small>{postflopActive ? '当前牌面 · 点击返回策略' : currentLineHasPostflop ? '进入当前线路的已求解翻牌' : '打开 BTN vs BB 单加注翻牌库'}</small>
             </button>
           </div>
         </div>
@@ -560,6 +575,7 @@ function ActionTree({
             );
           })}
         </div>
+        {postflopContent}
       </div>
     </section>
   );
@@ -710,6 +726,8 @@ export function GtoQueryExplorer() {
 
   const changeNode = (nextNodeId) => {
     if (!index || nextNodeId === null || !index.nodes[nextNodeId]) return;
+    setMode('preflop');
+    setStudyView('strategy');
     if (nextNodeId !== nodeId) setLoading(true);
     setNodeId(nextNodeId);
     setSelectedLabel('AKs');
@@ -718,6 +736,8 @@ export function GtoQueryExplorer() {
 
   const chooseAction = (decisionNodeId, actionLabel) => {
     if (!index) return;
+    setMode('preflop');
+    setStudyView('strategy');
     const transition = findActionTransition(index, decisionNodeId, actionLabel);
     if (!transition) return;
     if (transition.nextId !== null) {
@@ -760,6 +780,21 @@ export function GtoQueryExplorer() {
     setStudyView('strategy');
   };
 
+  const openPostflopWorkspace = (nextView = 'strategy') => {
+    const supportedLine = resolveSupportedPreflopLine(index);
+    if (supportedLine) {
+      setNodeId(supportedLine.nodeId);
+      setTerminalSelection(supportedLine.terminalSelection);
+    }
+    setSelectedLabel('AKs');
+    setPostflopLoading(true);
+    setPostflopError('');
+    setPostflopNodeId(postflopIndex?.rootId ?? 0);
+    setPostflopTerminalSelection(null);
+    setStudyView(nextView);
+    setMode('postflop');
+  };
+
   const currentLineHasPostflop = Boolean(
     postflopManifest?.packs.length && hasPostflopPackForSelection(index, nodeId, terminalSelection)
   );
@@ -794,51 +829,40 @@ export function GtoQueryExplorer() {
       <section className="gto-query-hero">
         <div>
           <p className="eyebrow">GTO QUERY · STATIC SOLUTION EXPLORER</p>
-          <h1>{mode === 'postflop' ? '沿翻牌行动树，查看每个节点频率与 EV' : '自由选择位置，从翻前进入已求解翻后牌面'}</h1>
-          <p>{mode === 'postflop'
-            ? '当前正式翻牌库覆盖 1,755 类同构翻牌及每个牌面的完整翻牌行动树；网页只按需读取压缩静态快照，不在浏览器或服务器实时求解。'
-            : '点击任意位置或行动进入对应决策节点；此前未行动的位置会自动补为弃牌。完成受支持的翻前线路后，可直接进入对应翻后静态解。'}</p>
+          <h1>沿同一行动树，查看翻前与翻后策略</h1>
+          <p>顶部始终保留完整牌局上下文；选择翻牌或翻后行动只更新当前节点，下方通过策略与聚合报告标签切换内容。</p>
         </div>
         <div className="gto-snapshot-notice" role="note">
-          <span>{mode === 'postflop' ? '完整翻牌 · 1,755 类牌面' : '已求解 · 2,588 个翻前节点'}</span><strong>GG R&C 6-max · 100bb</strong>
-          <p>{mode === 'postflop'
-            ? 'BTN vs BB 单加注底池；33% 下注、50% 加注，覆盖每个翻牌上的全部翻牌行动分支。转牌与河牌正式库仍在生成。'
-            : '覆盖开池、跟注、3-bet、4-bet+ 与全下。5% cap 3bb；底池达到 30bb 时扣 1.5bb Flat Drop。'}</p>
+          <span>单一 Study 工作区</span><strong>GG R&C 6-max · 100bb</strong>
+          <p>翻前 2,588 个节点；BTN vs BB 单加注底池覆盖 1,755 类翻牌及完整翻牌行动分支。转牌正式数据正在接入。</p>
         </div>
       </section>
 
-      {mode === 'preflop' && index && nodeId !== null && (
+      {index && nodeId !== null && (
         <ActionTree
           index={index}
           nodeId={nodeId}
           terminalSelection={terminalSelection}
           currentLineHasPostflop={currentLineHasPostflop}
           postflopLibraryReady={postflopLibraryReady}
+          postflopActive={mode === 'postflop'}
+          activeFlopLabel={activePack?.label ?? '选择牌面'}
+          postflopContent={mode === 'postflop' && postflopManifest && activePack && postflopIndex && postflopNodeId !== null ? (
+            <PostflopContinuation
+              manifest={postflopManifest}
+              pack={activePack}
+              index={postflopIndex}
+              nodeId={postflopNodeId}
+              terminalSelection={postflopTerminalSelection}
+              onPackChange={changePostflopPack}
+              onNodeChange={changePostflopNode}
+              onAction={choosePostflopAction}
+            />
+          ) : null}
           onNodeChange={changeNode}
           onAction={chooseAction}
           onOpenLibrary={() => setLibraryOpen(true)}
-          onEnterPostflop={(nextView = 'strategy') => {
-            setSelectedLabel('AKs');
-            setPostflopLoading(true);
-            setPostflopError('');
-            setPostflopNodeId(postflopIndex?.rootId ?? 0);
-            setPostflopTerminalSelection(null);
-            setStudyView(nextView);
-            setMode('postflop');
-          }}
-        />
-      )}
-      {mode === 'postflop' && postflopManifest && activePack && postflopIndex && postflopNodeId !== null && (
-        <PostflopActionTree
-          manifest={postflopManifest}
-          pack={activePack}
-          index={postflopIndex}
-          nodeId={postflopNodeId}
-          terminalSelection={postflopTerminalSelection}
-          onPackChange={changePostflopPack}
-          onNodeChange={changePostflopNode}
-          onAction={choosePostflopAction}
-          onBackToPreflop={() => setMode('preflop')}
+          onEnterPostflop={openPostflopWorkspace}
         />
       )}
 

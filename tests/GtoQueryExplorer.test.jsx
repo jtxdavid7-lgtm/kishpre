@@ -190,8 +190,11 @@ describe('GTO complete preflop explorer', () => {
     expect(openReport.disabled).toBe(false);
 
     await click(openReport);
-    await waitForText('当前翻后场景');
+    await waitForText('BTN vs BB · 单加注底池');
     await waitForText('22,100 个实体翻牌');
+    expect(container.querySelectorAll('.gto-tree-shell')).toHaveLength(1);
+    expect(container.querySelector('.gto-action-tree')).not.toBeNull();
+    expect(container.textContent).not.toContain('返回完整翻前树');
     expect(container.querySelector('.gto-pack-select').textContent).toContain('选择翻牌（1,755 类）');
     expect(container.querySelector('.gto-study-tabs button.active').textContent).toBe('翻牌聚合报告');
   });
@@ -206,7 +209,7 @@ describe('GTO complete preflop explorer', () => {
     await click(aceKing);
     expect(container.textContent).toContain('策略总 EV');
     expect(container.textContent).toContain('EV 1.407bb');
-    expect(container.textContent).toContain('2,588 个翻前节点');
+    expect(container.textContent).toContain('翻前决策节点2,588');
     expect(container.textContent).not.toContain('演示数据');
   });
 });
