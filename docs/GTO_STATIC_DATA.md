@@ -59,3 +59,67 @@ npm.cmd run dev
 浏览器打开终端显示的本地地址，再进入 `?tool=gto`。本地开发不需要上传手牌，也不会新增手牌上传路径。
 
 正式发布前还需要确认：求解结果用于公开商业网站展示的授权边界，以及 Flat Drop 1.5bb 的可复核规则来源。未经确认不部署该数据包。
+
+## 翻后全量管线
+
+翻后使用与首个翻前方案相同的 BTN 对 BB 单加注底池起始范围、抽水和 Flat Drop，
+但关闭 Flop / Turn / River 手牌抽象。目标 exploitability 为 `0.02`，网页只读离线快照，
+不会把静态结果描述成浏览器实时 solver。
+
+分层边界：
+
+1. 翻牌：1,755 类花色同构翻牌，权重合计 22,100 个实体翻牌；保存 12 个翻牌决策节点的
+   1,326 个具体手牌组合、到达权重、总 EV、行动频率和各行动 EV。
+2. 翻牌聚合：按牌面同构权重与节点范围到达权重聚合，支持配对、花色、连接性筛选。
+3. 转牌：每个翻牌重新载入精确双方范围并求解；转牌只在该翻牌的花色稳定群内去重，
+   共有 63,193 个有序同构翻牌—转牌历史。每个历史保存 72 个转牌决策节点的 169 类
+   手牌频率与 EV。
+4. 转牌聚合：在指定翻牌和行动节点下比较所有合法转牌；转牌同构权重合计必须为 49。
+5. 河牌：不预生成约 255 万个牌面历史下的全部行动矩阵。计划在用户选定河牌与行动历史后，
+   对双方完整 1,326 组合范围做局部精确求解，并把结果永久缓存。该服务没有上线前，
+   网站不得伪造或估算未求解河牌策略。
+
+批量原始数据与报告都写在 `F:\kish-gto`，不写入 C 盘、Git 或部署产物。当前主要目录：
+
+```text
+F:\kish-gto\flop-batch-v1
+F:\kish-gto\turn-batch-smoke
+F:\kish-gto\turn-batch-v1
+F:\kish-gto\turn-aggregate-v1
+```
+
+翻牌与转牌聚合命令：
+
+```powershell
+npm.cmd run build:gto-flop-report
+npm.cmd run build:gto-turn-report
+```
+
+`scripts/gto/continue-postflop-pipeline.ps1` 负责等待翻牌全量完成、校验文件、生成翻牌聚合，
+再运行一个翻牌的全部转牌烟雾测试。只有 72 个转牌节点、49 张实体转牌权重、频率闭合和文件
+数量全部通过，才启动全量转牌；全量完成后自动生成转牌聚合报告。Windows 计划任务
+`KishPoker GTO Postflop Pipeline Recovery` 在登录后恢复这条管线。
+
+### 已接入网站的翻牌正式包
+
+完整翻牌原始文件仍留在 `F:\kish-gto\flop-batch-v1`。网站发布包将每个节点的 1,326 个
+具体组合按 169 类起手牌做达到权重聚合，并保留组合数、达到权重、策略总 EV、每个行动的
+频率与 EV。1,755 个牌面分别 gzip 压缩并按需加载，避免一次下载全部翻牌策略：
+
+- 路径：`public/data/gto/gg-rnc-6max-100bb-drop-1p5bb-flop-v1/`
+- 牌面：1,755 类同构翻牌，实体权重 22,100
+- 行动树：每个牌面 12 个完整翻牌决策节点
+- 发布体积：约 29MB；单牌面通常约 15–25KB
+- 聚合报告：`public/data/gto/gg-rnc-6max-100bb-drop-1p5bb-flop-aggregate-v1/`
+
+重新生成正式包：
+
+```powershell
+node scripts/gto/export-rocketsolver-hand-masks.mjs
+npm.cmd run build:gto-flop-strategy
+npm.cmd run build:gto-flop-report
+```
+
+第一条命令只从已激活的本机 RocketSolver 读取 169 类手牌的组合索引，不求解也不修改
+当前工程。后两条命令只读取已经完成的本地翻牌批次。查询器与聚合报告之间可以直接切换；
+查询器不会上传手牌，也不会在客户端或服务器实时调用 solver。

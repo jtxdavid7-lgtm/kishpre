@@ -11,6 +11,11 @@ import {
   findActionTransition,
   findSeatDecisionNode,
   getGtoDecisionTrail,
+  loadGtoFlopManifest,
+  loadGtoFlopNode,
+  loadGtoPostflopIndex,
+  loadGtoPostflopManifest,
+  loadGtoPostflopNode,
   loadGtoPreflopIndex,
   loadGtoPreflopNode,
   resetGtoDataCacheForTests,
@@ -154,5 +159,61 @@ describe('GTO complete preflop explorer', () => {
     expect(container.textContent).toContain('EV 1.407bb');
     expect(container.textContent).toContain('2,588 个翻前节点');
     expect(container.textContent).not.toContain('演示数据');
+  });
+});
+
+describe('GTO postflop validation snapshot', () => {
+  it('loads the frozen flop, turn and river action tree with frequency and EV', async () => {
+    const manifest = await loadGtoPostflopManifest();
+    expect(manifest.scope).toBe('validation');
+    expect(manifest.realtimeSolver).toBe(false);
+
+    const pack = manifest.packs[0];
+    const index = await loadGtoPostflopIndex(pack);
+    expect(index.postflopDecisionNodes).toBe(408);
+    expect(index.decisionsByStreet).toEqual({ 1: 12, 2: 72, 3: 324 });
+
+    const flop = await loadGtoPostflopNode(index, pack.id, index.rootId);
+    expect(flop.street).toBe(1);
+    expect(flop.board).toHaveLength(3);
+    expect(flop.actions).toEqual(['Bet 33%', 'Check']);
+    const aceJack = flop.matrix.find((hand) => hand.label === 'AJs');
+    expect(aceJack.combinations).toBe(3);
+    expect(aceJack.reach).toBeCloseTo(1, 5);
+    expect(aceJack.actions['Bet 33%']).toBeCloseTo(1, 3);
+    expect(aceJack.totalEv).toBeCloseTo(5.898, 3);
+
+    const checkedFlop = findActionTransition(index, flop.id, 'Check');
+    const button = await loadGtoPostflopNode(index, pack.id, checkedFlop.nextId);
+    const checkedBack = findActionTransition(index, button.id, 'Check');
+    const turn = await loadGtoPostflopNode(index, pack.id, checkedBack.nextId);
+    expect(turn.street).toBe(2);
+    expect(turn.board).toHaveLength(4);
+  });
+});
+
+describe('GTO complete flop strategy library', () => {
+  it('loads all canonical flops and decodes every flop decision branch on demand', async () => {
+    const manifest = await loadGtoFlopManifest();
+    expect(manifest.scope).toBe('complete-flop');
+    expect(manifest.packs).toHaveLength(1755);
+    expect(manifest.concreteFlopWeight).toBe(22100);
+    expect(manifest.nodes).toHaveLength(12);
+
+    const pack = manifest.packs.find((candidate) => (
+      candidate.texture.highRank === 14 &&
+      candidate.texture.pairedness === 'unpaired' &&
+      candidate.texture.suitedness === 'rainbow'
+    ));
+    const flop = await loadGtoFlopNode(manifest, pack.id, manifest.rootId);
+    expect(flop.board).toEqual(pack.board);
+    expect(flop.matrix).toHaveLength(169);
+    expect(flop.actions).toEqual(['Bet 33%', 'Check']);
+    expect(flop.matrix.every((hand) => Number.isFinite(hand.totalEv))).toBe(true);
+
+    const check = findActionTransition(manifest, manifest.rootId, 'Check');
+    const buttonNode = await loadGtoFlopNode(manifest, pack.id, check.nextId);
+    expect(buttonNode.actorLabel).toBe('BTN');
+    expect(buttonNode.matrix).toHaveLength(169);
   });
 });

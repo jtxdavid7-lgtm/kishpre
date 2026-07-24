@@ -47,12 +47,16 @@ export function describeGtoAction(label, node = null) {
   if (label === 'Call') return { key: label, label: '跟注', shortLabel: '跟注', color: '#56b96b' };
   if (label === 'Check') return { key: label, label: '过牌', shortLabel: '过牌', color: '#60a5fa' };
   if (label === 'All-in') return { key: label, label: '全下', shortLabel: '全下', color: '#a77bd8' };
+  if (label.startsWith('Bet ')) {
+    const size = label.slice(4).replace(' bb', 'bb');
+    return { key: label, label: `下注 ${size}`, shortLabel: `下注 ${size}`, color: '#ef5b5b' };
+  }
   if (label.startsWith('Raise ')) {
     const size = label.slice(6).replace(' bb', 'bb');
     const isOpeningRaise = node?.pot === 1.5 && label === 'Raise 2.5 bb';
     return {
       key: label,
-      label: `加注至 ${size}`,
+      label: size.endsWith('%') ? `加注 ${size}` : `加注至 ${size}`,
       shortLabel: isOpeningRaise ? `开池 ${size}` : `加注 ${size}`,
       color: isOpeningRaise ? '#ef5b5b' : '#e5bd4f'
     };
