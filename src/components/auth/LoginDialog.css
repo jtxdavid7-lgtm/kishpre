@@ -226,6 +226,21 @@
   color: #8db8ff;
 }
 
+.login-dialog-consent-inline {
+  padding: 11px 13px;
+  background: rgb(40 105 235 / 8%);
+  border: 1px solid rgb(59 122 246 / 24%);
+  border-radius: 11px;
+}
+
+.login-dialog-code-hint {
+  color: #ffbd82;
+}
+
+.login-dialog-code-hint.ready {
+  color: #82dcb0;
+}
+
 .login-dialog-google {
   width: 100%;
   min-height: 52px;

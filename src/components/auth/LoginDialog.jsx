@@ -123,6 +123,32 @@ export function LoginDialog({
   const passwordsMatch = password === confirmPassword;
   const codeValid = CODE_PATTERN.test(code);
   const busy = sending || submitting || googleLoading;
+  const canSendCode = (
+    phoneAvailable
+    && phoneValid
+    && passwordValid
+    && passwordsMatch
+    && agreed
+  );
+  const sendCodeHint = !phoneAvailable
+    ? '手机号验证码登录暂不可用。'
+    : !phone
+      ? '请先输入中国大陆手机号。'
+      : !phoneValid
+        ? '请输入正确的 11 位中国大陆手机号。'
+        : !password
+          ? '请先设置登录密码。'
+          : !passwordValid
+            ? '密码需为 8–64 位，并包含大小写字母、数字和特殊字符。'
+            : !confirmPassword
+              ? '请再次输入密码。'
+              : !passwordsMatch
+                ? '两次输入的密码不一致。'
+                : !agreed
+                  ? '请勾选同意《用户协议》和《隐私政策》。'
+                  : countdown > 0
+                    ? `验证码已发送，${countdown} 秒后可重新发送。`
+                    : '信息已完整，可以获取短信验证码。';
 
   const resetChallenge = () => {
     setCode('');
@@ -167,11 +193,7 @@ export function LoginDialog({
 
   const handleSendCode = async () => {
     if (
-      !phoneAvailable
-      || !phoneValid
-      || !passwordValid
-      || !passwordsMatch
-      || !agreed
+      !canSendCode
       || busy
       || countdown > 0
     ) return;
@@ -440,6 +462,18 @@ export function LoginDialog({
               />
               {confirmPassword && !passwordsMatch && <small className="login-dialog-field-error">两次输入的密码不一致。</small>}
             </label>
+            <label className="login-dialog-consent login-dialog-consent-inline">
+              <input
+                type="checkbox"
+                checked={agreed}
+                disabled={!available || busy}
+                onChange={(event) => setAgreed(event.target.checked)}
+              />
+              <span>
+                我已阅读并同意 <a href={termsHref} target="_blank" rel="noreferrer">《用户协议》</a> 和{' '}
+                <a href={privacyHref} target="_blank" rel="noreferrer">《隐私政策》</a>
+              </span>
+            </label>
             <label className="login-dialog-field">
               <span>短信验证码</span>
               <div className="login-dialog-code">
@@ -456,11 +490,18 @@ export function LoginDialog({
                 <button
                   type="button"
                   onClick={handleSendCode}
-                  disabled={!phoneAvailable || !phoneValid || !passwordValid || !passwordsMatch || !agreed || busy || countdown > 0}
+                  disabled={!canSendCode || busy || countdown > 0}
                 >
                   {sending ? '发送中…' : countdown > 0 ? `${countdown}s` : codeSent ? '重新发送' : '获取验证码'}
                 </button>
               </div>
+              <small
+                className={`login-dialog-code-hint ${canSendCode && countdown <= 0 ? 'ready' : ''}`}
+                role="status"
+                aria-live="polite"
+              >
+                {sendCodeHint}
+              </small>
             </label>
             {codeSent && !error && (
               <div className="login-dialog-sent" role="status" aria-live="polite">
