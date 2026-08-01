@@ -3,6 +3,11 @@ import {
   getCloudbaseDatabase,
   isAnonymousCloudbaseUser
 } from './cloudbaseClient';
+import {
+  chunkRowsByPayload,
+  extractCloudErrorDetails,
+  insertRowsAdaptively
+} from './cloudUploadBatches';
 import { parseGgHand, summarizeHeroResults } from './handHistoryAnalyzer';
 
 const PLATFORM = 'ggpoker';
@@ -16,11 +21,10 @@ const READ_PAGE_SIZE = 500;
 const READ_PAGE_CONCURRENCY = 4;
 const HASH_BATCH_SIZE = 32;
 const HASH_PROGRESS_INTERVAL = 256;
-const HAND_WRITE_BATCH_SIZE = 200;
-const RELATION_WRITE_BATCH_SIZE = 500;
-const WRITE_CONCURRENCY = 3;
-const WRITE_BATCH_BYTES = 750_000;
+const RELATION_WRITE_BATCH_SIZE = 250;
+const WRITE_CONCURRENCY = 2;
 const MAX_RAW_TEXT_BYTES = 262_144;
+const HAND_ROW_WINDOW_SIZE = 160;
 
 const PREFLOP_FACT_KEYS = [
   'heroFacingRaise',
@@ -55,26 +59,35 @@ export class CloudLibraryError extends Error {
 }
 
 function localizedDatabaseMessage(error, operation) {
-  const code = String(error?.code ?? error?.name ?? '');
-  const message = String(error?.message ?? '');
+  const { code, status, message } = extractCloudErrorDetails(error);
 
-  if (code === '42501' || /permission|policy|row-level security|jwt/i.test(message)) {
+  if (status === 401 || status === 403 || code === '42501' || /permission|policy|row-level security|jwt/i.test(message)) {
     return '当前登录没有云牌谱权限，请重新登录后再试。';
   }
-  if (code === '23505') return '云端已有相同记录，请刷新牌谱库后再试。';
+  if (status === 409 || code === '23505') return '云端已有相同记录，请刷新牌谱库后再试。';
   if (code === '23503') return '云端关联数据不完整，请刷新后重新保存。';
-  if (code === '23514' || code === '22P02') return '牌谱数据未通过云端校验，请重新导入原始牌谱。';
+  if (['22001', '22003', '22007', '22008', '22P02', '23502', '23514'].includes(code)) {
+    return `牌谱数据未通过云端校验，请重新导入原始牌谱（错误码 ${code}）。`;
+  }
   if (code === 'PGRST116') return '没有找到对应的云端记录。';
+  if (status === 413 || Number(code) === 413 || /payload|request body|entity too large|request size|请求体?过大/i.test(message)) {
+    return '本批牌谱超过云端单次写入限制，请刷新页面后重试。';
+  }
+  if (status === 429 || Number(code) === 429 || /too many requests|rate limit|请求过于频繁/i.test(message)) {
+    return '云端请求过于频繁，请稍候一分钟再试。';
+  }
   if (/failed to fetch|network|timeout|load failed/i.test(message)) {
     return '网络连接失败，请检查网络后重试。';
   }
-  return `${operation}失败，请稍后重试。`;
+  const diagnosticCode = code && code !== 'Error' ? `（错误码 ${code}）` : '';
+  return `${operation}失败${diagnosticCode}，请稍后重试。`;
 }
 
 function toCloudError(error, operation) {
   if (error instanceof CloudLibraryError) return error;
+  const details = extractCloudErrorDetails(error);
   return new CloudLibraryError(localizedDatabaseMessage(error, operation), {
-    code: String(error?.code ?? error?.name ?? 'cloud-library/request-failed'),
+    code: details.code || 'cloud-library/request-failed',
     operation,
     cause: error
   });
@@ -162,25 +175,6 @@ async function runWithConcurrency(values, concurrency, operation) {
   return results;
 }
 
-function chunkRowsByPayload(rows) {
-  const result = [];
-  let current = [];
-  let currentBytes = 2;
-
-  for (const row of rows) {
-    const rowBytes = new TextEncoder().encode(JSON.stringify(row)).byteLength + 1;
-    if (current.length && (current.length >= HAND_WRITE_BATCH_SIZE || currentBytes + rowBytes > WRITE_BATCH_BYTES)) {
-      result.push(current);
-      current = [];
-      currentBytes = 2;
-    }
-    current.push(row);
-    currentBytes += rowBytes;
-  }
-  if (current.length) result.push(current);
-  return result;
-}
-
 function parseNumber(value) {
   if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
@@ -229,7 +223,7 @@ function serializeDetail(hand) {
 }
 
 function compactSummary(results) {
-  const { curve: _curve, ...summary } = summarizeHeroResults(results);
+  const { curve: _curve, ...summary } = summarizeHeroResults(results, { includeCurve: false });
   return summary;
 }
 
@@ -806,7 +800,7 @@ export async function saveHandsToCloud({
     );
     state.sessionCreated = true;
 
-    const handRows = newItems.map((item) => {
+    const buildHandRow = (item) => {
       const { hand, heroResult } = item;
       const stakes = parseStakes(hand.stakes, hand.bb);
       return {
@@ -854,68 +848,80 @@ export async function saveHandsToCloud({
         parser_version: PARSER_VERSION,
         metric_version: METRIC_VERSION
       };
-    });
+    };
 
-    const handBatches = chunkRowsByPayload(handRows);
+    const insertRelationRows = async (rows) => {
+      const batches = chunk(rows, RELATION_WRITE_BATCH_SIZE);
+      await runWithConcurrency(batches, WRITE_CONCURRENCY, (batchRows) => (
+        runQuery(
+          database.from('import_batch_hands').insert(batchRows, { defaultToNull: false }),
+          '记录导入去重结果'
+        )
+      ));
+    };
+
     let inserted = 0;
-    await runWithConcurrency(handBatches, WRITE_CONCURRENCY, async (rows) => {
-      const savedRows = await runQuery(
-        database.from('hands')
-          .insert(rows, { defaultToNull: false })
-          .select('id,poker_account_id,external_hand_id'),
-        '上传云端牌谱'
-      );
-      const returnedRows = Array.isArray(savedRows) ? savedRows : [];
-      if (returnedRows.length !== rows.length) {
-        throw new CloudLibraryError('云端返回的牌谱数量不完整，已停止本次保存。', {
-          code: 'cloud-library/incomplete-insert',
-          operation: '上传云端牌谱'
+    for (let start = 0; start < newItems.length; start += HAND_ROW_WINDOW_SIZE) {
+      const windowRows = newItems
+        .slice(start, Math.min(newItems.length, start + HAND_ROW_WINDOW_SIZE))
+        .map(buildHandRow);
+      const handBatches = chunkRowsByPayload(windowRows);
+      const windowRelations = [];
+
+      await runWithConcurrency(handBatches, WRITE_CONCURRENCY, async (rows) => {
+        const returnedRows = await insertRowsAdaptively(rows, async (batchRows) => {
+          const savedRows = await runQuery(
+            database.from('hands')
+              .insert(batchRows, { defaultToNull: false })
+              .select('id,poker_account_id,external_hand_id'),
+            '上传云端牌谱'
+          );
+          const normalizedRows = Array.isArray(savedRows) ? savedRows : [];
+          if (normalizedRows.length !== batchRows.length) {
+            throw new CloudLibraryError('云端返回的牌谱数量不完整，已停止本次保存。', {
+              code: 'cloud-library/incomplete-insert',
+              operation: '上传云端牌谱'
+            });
+          }
+          return normalizedRows;
         });
-      }
-      const returnedByExternalId = new Map(returnedRows.map((row) => [row.external_hand_id, row]));
-      for (const row of rows) {
-        const saved = returnedByExternalId.get(row.external_hand_id);
-        if (!saved?.id) {
-          throw new CloudLibraryError(`云端没有返回牌局 ${row.external_hand_id} 的保存结果。`, {
-            code: 'cloud-library/incomplete-insert',
-            operation: '上传云端牌谱'
+        const returnedByExternalId = new Map(returnedRows.map((row) => [row.external_hand_id, row]));
+        for (const row of rows) {
+          const saved = returnedByExternalId.get(row.external_hand_id);
+          if (!saved?.id) {
+            throw new CloudLibraryError(`云端没有返回牌局 ${row.external_hand_id} 的保存结果。`, {
+              code: 'cloud-library/incomplete-insert',
+              operation: '上传云端牌谱'
+            });
+          }
+          windowRelations.push({
+            library_id: state.libraryId,
+            poker_account_id: state.accountId,
+            import_batch_id: state.batchId,
+            hand_id: saved.id,
+            outcome: 'inserted'
           });
         }
-        row.savedId = saved.id;
-      }
-      inserted += rows.length;
-      notify(onProgress, 'uploading', inserted, handRows.length, `正在保存牌谱 ${inserted}/${handRows.length}…`);
-    });
+        inserted += rows.length;
+        notify(onProgress, 'uploading', inserted, newItems.length, `正在保存牌谱 ${inserted}/${newItems.length}…`);
+      });
 
-    const relationRows = [
-      ...handRows.map((row) => ({
-        library_id: state.libraryId,
-        poker_account_id: state.accountId,
-        import_batch_id: state.batchId,
-        hand_id: row.savedId,
-        outcome: 'inserted'
-      })),
-      ...acceptedDuplicateRows.map(({ existing, outcome }) => ({
+      await insertRelationRows(windowRelations);
+    }
+
+    await insertRelationRows(acceptedDuplicateRows.map(({ existing, outcome }) => ({
         library_id: state.libraryId,
         poker_account_id: state.accountId,
         import_batch_id: state.batchId,
         hand_id: existing.id,
         outcome
-      }))
-    ];
-    const relationBatches = chunk(relationRows, RELATION_WRITE_BATCH_SIZE);
-    await runWithConcurrency(relationBatches, WRITE_CONCURRENCY, (rows) => (
-      runQuery(
-        database.from('import_batch_hands').insert(rows, { defaultToNull: false }),
-        '记录导入去重结果'
-      )
-    ));
+      })));
 
-    notify(onProgress, 'complete', handRows.length, handRows.length, '云牌谱保存完成。');
+    notify(onProgress, 'complete', inserted, newItems.length, '云牌谱保存完成。');
     return {
       sessionId: state.sessionId,
       importBatchId: state.batchId,
-      insertedCount: handRows.length,
+      insertedCount: inserted,
       duplicateCount,
       conflictCount,
       totalCount: inputHands.length,

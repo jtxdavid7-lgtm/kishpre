@@ -747,7 +747,7 @@ function summarizePostflopStats(results) {
   return summary;
 }
 
-export function summarizeHeroResults(results) {
+export function summarizeHeroResults(results, { includeCurve = true } = {}) {
   const totalHands = results.length;
   const rawProfit = results.reduce((sum, hand) => sum + hand.profit, 0);
   const gameRake = results.reduce((sum, hand) => sum + hand.rake, 0);
@@ -789,7 +789,7 @@ export function summarizeHeroResults(results) {
   let runningEv = 0;
   let runningNonShowdown = 0;
   let runningShowdown = 0;
-  const curve = results.map((hand, index) => {
+  const curve = includeCurve ? results.map((hand, index) => {
     const displayProfitBB = hand.profit / hand.bb;
     running += displayProfitBB;
     const rakeBB = (hand.rake + hand.jackpot) / hand.bb;
@@ -808,7 +808,7 @@ export function summarizeHeroResults(results) {
       nonShowdownBB: runningNonShowdown,
       showdownBB: runningShowdown
     };
-  });
+  }) : [];
 
   for (const hand of results) {
     const pos = hand.position || 'Unknown';
