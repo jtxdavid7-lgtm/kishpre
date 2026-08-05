@@ -1485,7 +1485,7 @@ function buildRangeTicks(minValue, maxValue, step) {
 
 const HISTORY_CURVE_LINES = [
   { key: 'beforeRakeBB', label: '水前实际盈利', color: '#22c55e' },
-  { key: 'evBB', label: '水前 EV', color: '#facc15' },
+  { key: 'evBB', label: '水前 All-in EV', color: '#facc15' },
   { key: 'profitBB', label: '水后盈利', color: '#a78bfa' },
   { key: 'nonShowdownBB', label: '非摊牌', color: '#ef4444' },
   { key: 'showdownBB', label: '摊牌', color: '#38bdf8' }
@@ -3932,7 +3932,14 @@ function HandHistoryView() {
 
                     <section className="history-chart-card">
                       <div className="history-chart-head">
-                        <h3>资金曲线</h3>
+                        <div>
+                          <h3>资金曲线</h3>
+                          <small className="history-ev-coverage">
+                            {summary.allInEvOpportunityCount
+                              ? `All-in EV 覆盖 ${summary.allInEvCoveredCount}/${summary.allInEvOpportunityCount} 手${summary.allInEvEstimatedCount ? ` · ${summary.allInEvEstimatedCount} 手翻前估算` : ''}${summary.allInEvCoveredCount < summary.allInEvOpportunityCount ? ` · ${summary.allInEvOpportunityCount - summary.allInEvCoveredCount} 手信息不足未调整` : ''}`
+                              : '当前筛选内没有需要调整的 All-in 手牌'}
+                          </small>
+                        </div>
                         <span>单位：bb</span>
                       </div>
                       <HistoryCurve data={summary.curve} />
