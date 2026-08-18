@@ -427,6 +427,7 @@ export function PersonalAnalysisWorkspace() {
   const [consentBusy, setConsentBusy] = useState(false);
   const [analysisState, setAnalysisState] = useState('idle');
   const [analysisResults, setAnalysisResults] = useState([]);
+  const [analysisSessionIds, setAnalysisSessionIds] = useState([]);
   const [skippedAnalysisHands, setSkippedAnalysisHands] = useState(0);
   const [analysisMessage, setAnalysisMessage] = useState('');
   const [error, setError] = useState('');
@@ -438,6 +439,7 @@ export function PersonalAnalysisWorkspace() {
       setSessions([]);
       setConsent(null);
       setAnalysisResults([]);
+      setAnalysisSessionIds([]);
       setSkippedAnalysisHands(0);
       setAnalysisState('idle');
       setLoadState('idle');
@@ -487,8 +489,33 @@ export function PersonalAnalysisWorkspace() {
     }));
     return [...values.values()];
   }, [sessions]);
-  const summary = useMemo(() => summarizeHeroResults(analysisResults), [analysisResults]);
+  const filteredAnalysisResults = useMemo(
+    () => analysisResults.filter((result) => resultMatchesFilters(result, filters)),
+    [analysisResults, filters]
+  );
+  const summary = useMemo(
+    () => summarizeHeroResults(filteredAnalysisResults),
+    [filteredAnalysisResults]
+  );
   const accessGranted = Boolean(isAuthenticated && consent && consentChoice === 'accepted');
+
+  const updateAnalysisFilters = (nextFilters) => {
+    setFilters(nextFilters);
+    if (analysisState === 'loading' || !analysisSessionIds.length) return;
+    const loadedIds = new Set(analysisSessionIds);
+    const requiredSessions = sessions.filter((session) => sessionCouldMatchFilters(session, nextFilters));
+    const cacheCoversFilter = requiredSessions.every((session) => loadedIds.has(String(session.id)));
+    if (!cacheCoversFilter) {
+      setAnalysisState('idle');
+      setAnalysisMessage('该筛选包含尚未缓存的 Session，请点击“分析所选牌谱”完成增量同步。');
+      return;
+    }
+    const resultCount = analysisResults.filter((result) => resultMatchesFilters(result, nextFilters)).length;
+    setAnalysisState(resultCount ? 'ready' : 'empty');
+    setAnalysisMessage(resultCount
+      ? `已使用本机缓存即时筛选出 ${resultCount.toLocaleString()} 手牌。`
+      : '当前筛选没有牌谱，请调整时间、级别或游戏类型。');
+  };
 
   const acceptAccess = async () => {
     if (!consentChecked || consentBusy) return;
@@ -519,6 +546,7 @@ export function PersonalAnalysisWorkspace() {
       setConsent(null);
       setConsentChoice('local-only');
       setAnalysisResults([]);
+      setAnalysisSessionIds([]);
       setSkippedAnalysisHands(0);
       setAnalysisState('idle');
       setAnalysisMessage('已停止贡献，高级分析已锁定。');
@@ -536,6 +564,7 @@ export function PersonalAnalysisWorkspace() {
     if (!library || !accessGranted || analysisState === 'loading') return;
     setAnalysisState('loading');
     setAnalysisResults([]);
+    setAnalysisSessionIds([]);
     setSkippedAnalysisHands(0);
     setError('');
     setAnalysisMessage('正在检查本机缓存与云端 Session 索引…');
@@ -642,15 +671,16 @@ export function PersonalAnalysisWorkspace() {
       }
 
       const allResults = [...cached.results, ...freshResults]
-        .filter((result) => resultMatchesFilters(result, filters))
         .sort((first, second) => resultSortValue(first) - resultSortValue(second));
-      if (!allResults.length) {
+      const selectedResults = allResults.filter((result) => resultMatchesFilters(result, filters));
+      setAnalysisResults(allResults);
+      setAnalysisSessionIds(targetSessions.map((session) => String(session.id)));
+      if (!selectedResults.length) {
         setAnalysisState('empty');
         setAnalysisMessage('当前筛选没有牌谱，请调整时间、级别或游戏类型。');
         return;
       }
 
-      setAnalysisResults(allResults);
       setSkippedAnalysisHands(Math.max(
         0,
         Number(cached.cachedSourceHandCount || 0) + freshSourceHandCount
@@ -759,11 +789,11 @@ export function PersonalAnalysisWorkspace() {
             </header>
             <DatasetFilterPanel
               filters={filters}
-              onChange={setFilters}
-              onClear={() => setFilters(emptyFilters())}
+              onChange={updateAnalysisFilters}
+              onClear={() => updateAnalysisFilters(emptyFilters())}
               stakeOptions={stakeOptions}
               gameTypeOptions={gameTypeOptions}
-              filteredCount={analysisState === 'ready' ? analysisResults.length : null}
+              filteredCount={analysisState === 'ready' || analysisState === 'empty' ? filteredAnalysisResults.length : null}
               totalCount={totalHands}
               title="筛选个人牌谱库"
               disabled={analysisState === 'loading'}
@@ -780,7 +810,7 @@ export function PersonalAnalysisWorkspace() {
               <header className="personal-analysis-report-heading">
                 <div>
                   <span>02 · REPORT</span>
-                  <h2>{analysisResults.length.toLocaleString()} 手牌分析结果</h2>
+                  <h2>{filteredAnalysisResults.length.toLocaleString()} 手牌分析结果</h2>
                   {skippedAnalysisHands > 0 && <small className="personal-analysis-report-warning">{skippedAnalysisHands.toLocaleString()} 手牌缺少 Hero 标识，未计入统计</small>}
                 </div>
                 <div className="personal-analysis-tabs" role="tablist" aria-label="个人分析报告">

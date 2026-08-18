@@ -67,11 +67,11 @@ async function settle() {
   });
 }
 
-function cloudHand({ id, profit, position, wentToShowdown }) {
+function cloudHand({ id, profit, position, wentToShowdown, stakes = 'NL100' }) {
   const result = {
     id,
     date: `2026/08/1${id} 12:00:00`,
-    stakes: 'NL100',
+    stakes,
     bb: 1,
     position,
     profit,
@@ -318,5 +318,61 @@ describe('PersonalAnalysisWorkspace access gate', () => {
     expect(archiveImportedHands).not.toHaveBeenCalled();
     expect(container.textContent).toContain('已直接使用缓存生成报告');
     expect(container.textContent).toContain('1 手牌分析结果');
+  });
+
+  it('immediately refreshes the cached report when a covered filter changes', async () => {
+    const consent = {
+      subjectId: 'user-1',
+      consentToken: '00000000-0000-4000-8000-000000000001',
+      acceptedAt: '2026-08-19T00:00:00.000Z'
+    };
+    authValue = {
+      authStatus: 'authenticated',
+      isAuthenticated: true,
+      openLogin: vi.fn()
+    };
+    getOperatorArchivePreference.mockReturnValue('accepted');
+    resolveOperatorArchiveConsent.mockResolvedValue(consent);
+    loadCloudLibraryIndex.mockResolvedValue({
+      library: { id: 'library-1', name: '我的牌谱' },
+      sessions: [{
+        id: 'session-1',
+        handCount: 2,
+        summary: {
+          stakes: [{ label: 'NL100', count: 1 }, { label: 'NL200', count: 1 }],
+          gameTypes: []
+        }
+      }]
+    });
+    loadPersonalAnalysisCache.mockResolvedValue({
+      results: [
+        cloudHand({ id: '1', profit: 2, position: 'BTN', wentToShowdown: false, stakes: 'NL100' }).getHeroResult('SavedHero'),
+        cloudHand({ id: '2', profit: -1, position: 'BB', wentToShowdown: false, stakes: 'NL200' }).getHeroResult('SavedHero')
+      ],
+      cachedSessionIds: ['session-1'],
+      cachedSourceHandCount: 2,
+      cachedResultCount: 2
+    });
+
+    await renderWorkspace();
+    await settle();
+    const analyzeButton = [...container.querySelectorAll('button')]
+      .find((button) => button.textContent.includes('分析所选牌谱'));
+    await act(async () => {
+      analyzeButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain('2 手牌分析结果');
+
+    const nl200Button = [...container.querySelectorAll('button')]
+      .find((button) => button.textContent.includes('NL200'));
+    await act(async () => nl200Button.click());
+
+    expect(container.textContent).toContain('当前结果1/ 2 手牌');
+    expect(container.textContent).toContain('1 手牌分析结果');
+    expect(container.textContent).toContain('已使用本机缓存即时筛选出 1 手牌');
+    expect(loadCloudLibraryHands).not.toHaveBeenCalled();
+    expect(loadCloudLibrarySessionHands).not.toHaveBeenCalled();
   });
 });
