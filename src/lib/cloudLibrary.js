@@ -1057,11 +1057,13 @@ export async function loadCloudSession(sessionId) {
   };
 }
 
-function parseCloudHandRows(rows) {
+function parseCloudHandRows(rows, accountNames = new Map()) {
   return rows.map((row) => {
     try {
       const parsed = parseGgHand(row.raw_text);
       if (!parsed?.id) throw new Error('missing hand id');
+      parsed.analysisHero = accountNames.get(row.poker_account_id) || '';
+      parsed.analysisSessionId = String(row.session_id ?? '');
       return parsed;
     } catch (error) {
       throw new CloudLibraryError(`牌局 ${row.external_hand_id} 的云端原文无法解析。`, {
@@ -1100,7 +1102,7 @@ export async function loadCloudLibraryHands({ libraryId, filters = {} } = {}) {
   const rows = await fetchAll(
     () => {
       let query = database.from('hands')
-        .select('id,external_hand_id,raw_text,played_at,source_ordinal,stakes_label,game_variant,betting_structure,table_type,max_players')
+        .select('id,session_id,poker_account_id,external_hand_id,raw_text,played_at,source_ordinal,stakes_label,game_variant,betting_structure,table_type,max_players')
         .eq('library_id', library.id)
         .eq('analysis_supported', true)
         .order('played_at', { ascending: true, nullsFirst: false })
@@ -1118,10 +1120,62 @@ export async function loadCloudLibraryHands({ libraryId, filters = {} } = {}) {
     '读取牌谱库筛选结果'
   );
 
-  const hands = parseCloudHandRows(rows).filter((hand) => (
+  const accountIds = [...new Set(rows.map((row) => row.poker_account_id).filter(Boolean))];
+  const accountRows = await findRowsInBatches(
+    database,
+    'poker_accounts',
+    'id',
+    accountIds,
+    'id,screen_name',
+    '读取牌谱对应的 Hero'
+  );
+  const accountNames = new Map(accountRows.map((row) => [row.id, row.screen_name]));
+  const hands = parseCloudHandRows(rows, accountNames).filter((hand) => (
     !gameTypes.length || gameTypes.includes(gameTypeKey(hand))
   ));
   return { library: normalizeLibraryRow(library), hands, filters };
+}
+
+/**
+ * Incremental analysis read: fetches only sessions missing from the browser's
+ * derived-data cache. Every session remains paginated so large imports are not
+ * silently truncated by the database row limit.
+ */
+export async function loadCloudLibrarySessionHands({ libraryId, sessionIds = [] } = {}) {
+  await requireSignedIn();
+  const database = getCloudbaseDatabase();
+  const library = await resolveLibrary(database, libraryId);
+  const ids = [...new Set((Array.isArray(sessionIds) ? sessionIds : [])
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean))];
+  if (!ids.length) return { library: normalizeLibraryRow(library), hands: [] };
+
+  const pages = await runWithConcurrency(chunk(ids, LOOKUP_BATCH_SIZE), Math.min(3, READ_PAGE_CONCURRENCY), async (sessionIdsBatch) => fetchAll(
+    () => database.from('hands')
+      .select('id,session_id,poker_account_id,external_hand_id,raw_text,played_at,source_ordinal,stakes_label,game_variant,betting_structure,table_type,max_players')
+      .eq('library_id', library.id)
+      .in('session_id', sessionIdsBatch)
+      .eq('analysis_supported', true)
+      .order('played_at', { ascending: true, nullsFirst: false })
+      .order('source_ordinal', { ascending: true })
+      .order('external_hand_id', { ascending: true }),
+    '增量读取牌谱库场次'
+  ));
+  const rows = pages.flat();
+  const accountIds = [...new Set(rows.map((row) => row.poker_account_id).filter(Boolean))];
+  const accountRows = await findRowsInBatches(
+    database,
+    'poker_accounts',
+    'id',
+    accountIds,
+    'id,screen_name',
+    '读取牌谱对应的 Hero'
+  );
+  const accountNames = new Map(accountRows.map((row) => [row.id, row.screen_name]));
+  return {
+    library: normalizeLibraryRow(library),
+    hands: parseCloudHandRows(rows, accountNames)
+  };
 }
 
 export async function deleteCloudSession(sessionId) {
