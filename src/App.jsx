@@ -44,9 +44,14 @@ import {
   evaluateHandValue,
   exportSummaryCsv,
   parseGgHand,
-  splitHandHistories,
   summarizeHeroResults
 } from './lib/handHistoryAnalyzer';
+import {
+  compactParsedHand,
+  hydrateImportedHand,
+  iterateGgHandHistories,
+  primaryHeroFromChunks
+} from './lib/handHistoryImport.js';
 import './App.css';
 
 const DEFAULT_DATASET_FILTERS = Object.freeze({
@@ -520,17 +525,88 @@ function yieldToBrowser() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-async function parseHistoryChunks(chunks, batchSize = 500) {
+async function parseHistoryChunksOnMain(chunks, batchSize, onProgress) {
   const parsed = [];
+  const primaryHero = primaryHeroFromChunks(chunks);
+  let total = 0;
   for (const chunk of chunks) {
-    const rawHands = splitHandHistories(chunk.text);
-    for (let index = 0; index < rawHands.length; index += batchSize) {
-      const batch = rawHands.slice(index, index + batchSize);
-      parsed.push(...batch.map(parseGgHand));
-      await yieldToBrowser();
-    }
+    for (const _raw of iterateGgHandHistories(chunk.text)) total += 1;
   }
+
+  let completed = 0;
+  for (const chunk of chunks) {
+    let batch = [];
+    for (const raw of iterateGgHandHistories(chunk.text)) {
+      batch.push(hydrateImportedHand(compactParsedHand(parseGgHand(raw), primaryHero)));
+      completed += 1;
+      if (batch.length >= batchSize) {
+        parsed.push(...batch);
+        batch = [];
+        onProgress?.({ completed, total });
+        await yieldToBrowser();
+      }
+    }
+    if (batch.length) parsed.push(...batch);
+  }
+  onProgress?.({ completed, total });
   return parsed;
+}
+
+function parseHistoryChunksInWorker(chunks, batchSize, onProgress) {
+  let worker;
+  try {
+    worker = new Worker(new URL('./workers/handHistoryImport.worker.js', import.meta.url), { type: 'module' });
+  } catch {
+    return null;
+  }
+
+  return new Promise((resolve, reject) => {
+    const parsed = [];
+    let settled = false;
+    const finish = (operation) => {
+      if (settled) return;
+      settled = true;
+      worker.terminate();
+      operation();
+    };
+
+    worker.onmessage = (event) => {
+      const payload = event.data ?? {};
+      if (payload.type === 'ready') {
+        onProgress?.({ completed: 0, total: Number(payload.total ?? 0) });
+        return;
+      }
+      if (payload.type === 'batch') {
+        parsed.push(...(payload.hands ?? []).map(hydrateImportedHand));
+        onProgress?.({
+          completed: Number(payload.completed ?? parsed.length),
+          total: Number(payload.total ?? parsed.length)
+        });
+        return;
+      }
+      if (payload.type === 'error') {
+        finish(() => reject(new Error(payload.message || '牌谱解析失败')));
+        return;
+      }
+      if (payload.type === 'done') finish(() => resolve(parsed));
+    };
+    worker.onerror = (event) => {
+      finish(() => reject(new Error(event.message || '牌谱后台解析失败')));
+    };
+
+    const payloadChunks = chunks.map((chunk) => ({ name: chunk.name, text: chunk.text }));
+    worker.postMessage({ chunks: payloadChunks, batchSize });
+    payloadChunks.length = 0;
+    for (const chunk of chunks) chunk.text = '';
+  });
+}
+
+async function parseHistoryChunks(chunks, batchSize = 200, onProgress) {
+  if (typeof Worker !== 'undefined') {
+    const workerResult = parseHistoryChunksInWorker(chunks, batchSize, onProgress);
+    if (workerResult) return workerResult;
+  }
+  return parseHistoryChunksOnMain(chunks, batchSize, onProgress);
 }
 
 function fileFromEntry(entry, path = '') {
@@ -1409,7 +1485,7 @@ function buildRangeTicks(minValue, maxValue, step) {
 
 const HISTORY_CURVE_LINES = [
   { key: 'beforeRakeBB', label: '水前实际盈利', color: '#22c55e' },
-  { key: 'evBB', label: '水前 EV', color: '#facc15' },
+  { key: 'evBB', label: '水前 All-in EV', color: '#facc15' },
   { key: 'profitBB', label: '水后盈利', color: '#a78bfa' },
   { key: 'nonShowdownBB', label: '非摊牌', color: '#ef4444' },
   { key: 'showdownBB', label: '摊牌', color: '#38bdf8' }
@@ -3411,7 +3487,11 @@ function HandHistoryView() {
     setMessage('正在解析牌谱...');
     try {
       const chunks = await readHistoryFiles(files);
-      const parsed = await parseHistoryChunks(chunks);
+      const parsed = await parseHistoryChunks(chunks, 200, ({ completed, total }) => {
+        setMessage(total
+          ? `正在后台解析牌谱 ${completed.toLocaleString()} / ${total.toLocaleString()}…`
+          : '正在后台扫描牌谱…');
+      });
       const unique = new Map();
       for (const hand of parsed) unique.set(hand.id, hand);
       const allHands = sortHandsByTime([...unique.values()]);
@@ -3444,7 +3524,9 @@ function HandHistoryView() {
         ? (unsupportedCount ? `已识别牌谱；其中 ${unsupportedCount.toLocaleString()} 手暂不支持当前德州分析，已安全跳过。` : '')
         : '没有识别到当前支持分析的 GGPoker 德州牌谱。');
 
-      void queueOperatorArchive(allHands);
+      // Give React a chance to paint the completed local analysis before any
+      // optional cloud persistence starts doing hashing or IndexedDB work.
+      await yieldToBrowser();
 
       if (nextHands.length && nextHero && isAuthenticated) {
         try {
@@ -3464,6 +3546,11 @@ function HandHistoryView() {
           setMessage(`本地分析已完成，但暂时无法连接“我的牌谱”：${cloudError instanceof Error ? cloudError.message : '请稍后重试。'}`);
         }
       }
+
+      // The personal library and the consented operator archive both hash the
+      // raw histories. Keep them sequential so a large import cannot double
+      // the CPU and memory peak.
+      void queueOperatorArchive(allHands);
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof Error ? error.message : '解析失败');
@@ -3845,7 +3932,14 @@ function HandHistoryView() {
 
                     <section className="history-chart-card">
                       <div className="history-chart-head">
-                        <h3>资金曲线</h3>
+                        <div>
+                          <h3>资金曲线</h3>
+                          <small className="history-ev-coverage">
+                            {summary.allInEvOpportunityCount
+                              ? `All-in EV 覆盖 ${summary.allInEvCoveredCount}/${summary.allInEvOpportunityCount} 手${summary.allInEvEstimatedCount ? ` · ${summary.allInEvEstimatedCount} 手翻前估算` : ''}${summary.allInEvCoveredCount < summary.allInEvOpportunityCount ? ` · ${summary.allInEvOpportunityCount - summary.allInEvCoveredCount} 手信息不足未调整` : ''}`
+                              : '当前筛选内没有需要调整的 All-in 手牌'}
+                          </small>
+                        </div>
                         <span>单位：bb</span>
                       </div>
                       <HistoryCurve data={summary.curve} />

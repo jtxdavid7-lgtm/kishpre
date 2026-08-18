@@ -1,3 +1,5 @@
+import { calculateAllInEvForHero } from './allInEv.js';
+
 const MONEY_RE = /\$(-?[\d,]+(?:\.\d+)?)/;
 const HAND_SPLIT_RE = /(?=Poker Hand #)/g;
 const FLOP_RE = /^\*\*\* (?:FIRST |SECOND )?FLOP \*\*\*/;
@@ -516,6 +518,7 @@ export function parseGgHand(raw) {
   const holeCards = new Map();
   const winners = new Map();
   const actions = [];
+  const foldedPlayers = new Set();
   const heroCandidates = [];
   const preflopLines = [];
   let currentStreet = 'preflop';
@@ -570,6 +573,8 @@ export function parseGgHand(raw) {
     if (currentStreet === 'preflop') preflopLines.push(line);
 
     const actor = playerFromAction(line);
+    const parsedActionType = actor ? actionType(line) : null;
+    const allIn = /\band is all-in\b/i.test(line);
     if (actor && (line.includes(' posts ') || line.includes(' calls ') || line.includes(' bets ') || line.includes(' raises '))) {
       const already = streetCommit.get(actor) ?? 0;
       const amount = line.includes(' posts ') ? money(line) : actionAmount(line, already);
@@ -583,19 +588,26 @@ export function parseGgHand(raw) {
           type: line.includes(' posts ') ? 'post' : actionType(line),
           amount,
           potAfter: runningPot,
+          contributionAfter: invested.get(actor) ?? 0,
+          allIn,
+          board: [...board],
           text: line.slice(line.indexOf(': ') + 2)
         });
       }
-    } else if (actor && actionType(line)) {
+    } else if (actor && parsedActionType) {
       actions.push({
         street: currentStreet,
         player: actor,
-        type: actionType(line),
+        type: parsedActionType,
         amount: 0,
         potAfter: runningPot,
+        contributionAfter: invested.get(actor) ?? 0,
+        allIn,
+        board: [...board],
         text: line.slice(line.indexOf(': ') + 2)
       });
     }
+    if (actor && parsedActionType === 'fold') foldedPlayers.add(actor);
 
     const returned = line.match(/^Uncalled bet \(\$([\d,.]+)\) returned to (.+)$/);
     if (returned) {
@@ -603,7 +615,17 @@ export function parseGgHand(raw) {
       const player = returned[2];
       invested.set(player, (invested.get(player) ?? 0) - amount);
       runningPot = Math.max(0, runningPot - amount);
-      actions.push({ street: currentStreet, player, type: 'return', amount, potAfter: runningPot, text: `收回未跟注下注 $${amount}` });
+      actions.push({
+        street: currentStreet,
+        player,
+        type: 'return',
+        amount,
+        potAfter: runningPot,
+        contributionAfter: invested.get(player) ?? 0,
+        allIn: false,
+        board: [...board],
+        text: `收回未跟注下注 $${amount}`
+      });
     }
 
     const collected = line.match(/^(.+?) collected \$([\d,.]+) from (?:the )?(?:main |side )?pot$/);
@@ -667,6 +689,16 @@ export function parseGgHand(raw) {
       const wentToShowdown = Boolean(heroSummary.showed);
       const wonAtShowdown = Boolean(heroSummary.showed && heroSummary.won);
       const wonWhenSawFlop = Boolean(sawFlop && heroSummary.won);
+      const allInEv = calculateAllInEvForHero({
+        raw,
+        handId: id,
+        hero,
+        holeCards,
+        actions,
+        contributions: invested,
+        foldedPlayers
+      });
+      const beforeRakeProfit = profit + rakeShare + jackpotShare;
       return {
         id,
         date,
@@ -681,6 +713,17 @@ export function parseGgHand(raw) {
         totalPot,
         profit,
         profitBB: profit / bb,
+        allInEvBeforeRake: beforeRakeProfit + allInEv.adjustment,
+        allInEvBeforeRakeBB: (beforeRakeProfit + allInEv.adjustment) / bb,
+        allInEvAdjustment: allInEv.adjustment,
+        allInEvAdjustmentBB: allInEv.adjustment / bb,
+        allInEvOpportunity: allInEv.opportunity,
+        allInEvCovered: allInEv.covered,
+        allInEvMethod: allInEv.method,
+        allInEvRelevantPotCount: allInEv.relevantPotCount,
+        allInEvCoveredPotCount: allInEv.coveredPotCount,
+        allInEvSamples: allInEv.samples,
+        allInEvReason: allInEv.reason,
         rake: rakeShare,
         jackpot: jackpotShare,
         sawFlop,
@@ -747,7 +790,7 @@ function summarizePostflopStats(results) {
   return summary;
 }
 
-export function summarizeHeroResults(results) {
+export function summarizeHeroResults(results, { includeCurve = true } = {}) {
   const totalHands = results.length;
   const rawProfit = results.reduce((sum, hand) => sum + hand.profit, 0);
   const gameRake = results.reduce((sum, hand) => sum + hand.rake, 0);
@@ -780,6 +823,14 @@ export function summarizeHeroResults(results) {
   const showdownCount = results.filter((hand) => hand.sawFlop && hand.wentToShowdown).length;
   const wonAtShowdownCount = results.filter((hand) => hand.sawFlop && hand.wentToShowdown && hand.wonAtShowdown).length;
   const wonWhenSawFlopCount = results.filter((hand) => hand.wonWhenSawFlop).length;
+  const allInEvOpportunityCount = results.filter((hand) => hand.allInEvOpportunity).length;
+  const allInEvCoveredCount = results.filter((hand) => hand.allInEvOpportunity && hand.allInEvCovered).length;
+  const allInEvExactCount = results.filter((hand) => hand.allInEvOpportunity && hand.allInEvCovered && hand.allInEvMethod === 'exact').length;
+  const allInEvEstimatedCount = results.filter((hand) => hand.allInEvOpportunity && hand.allInEvCovered && hand.allInEvMethod === 'estimated').length;
+  const allInEvBeforeRakeBB = results.reduce((sum, hand) => {
+    const beforeRakeHandBB = hand.profit / hand.bb + (hand.rake + hand.jackpot) / hand.bb;
+    return sum + (Number.isFinite(hand.allInEvBeforeRakeBB) ? hand.allInEvBeforeRakeBB : beforeRakeHandBB);
+  }, 0);
   const byPosition = new Map();
   const byStakes = new Map();
   const byGameType = new Map();
@@ -789,12 +840,14 @@ export function summarizeHeroResults(results) {
   let runningEv = 0;
   let runningNonShowdown = 0;
   let runningShowdown = 0;
-  const curve = results.map((hand, index) => {
+  const curve = includeCurve ? results.map((hand, index) => {
     const displayProfitBB = hand.profit / hand.bb;
     running += displayProfitBB;
     const rakeBB = (hand.rake + hand.jackpot) / hand.bb;
     runningBeforeRake += displayProfitBB + rakeBB;
-    runningEv += displayProfitBB + rakeBB * 0.36;
+    runningEv += Number.isFinite(hand.allInEvBeforeRakeBB)
+      ? hand.allInEvBeforeRakeBB
+      : displayProfitBB + rakeBB;
     if (hand.wentToShowdown) {
       runningShowdown += hand.profitBB;
     } else {
@@ -808,7 +861,7 @@ export function summarizeHeroResults(results) {
       nonShowdownBB: runningNonShowdown,
       showdownBB: runningShowdown
     };
-  });
+  }) : [];
 
   for (const hand of results) {
     const pos = hand.position || 'Unknown';
@@ -829,6 +882,12 @@ export function summarizeHeroResults(results) {
     totalProfitBB,
     beforeRakeProfit: totalProfit + totalRake,
     beforeRakeProfitBB: totalProfitBB + totalRakeBB,
+    allInEvBeforeRakeBB,
+    allInEvBBPer100: totalHands ? (allInEvBeforeRakeBB / totalHands) * 100 : 0,
+    allInEvOpportunityCount,
+    allInEvCoveredCount,
+    allInEvExactCount,
+    allInEvEstimatedCount,
     totalRake,
     totalJackpot,
     gameRake,

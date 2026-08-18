@@ -291,6 +291,13 @@
 
 .personal-analysis-tabs button.active { color: #06101d; background: #ffca15; }
 
+.personal-analysis-report-warning {
+  display: block;
+  margin-top: 7px;
+  color: #ffb85c;
+  font-size: 12px;
+}
+
 .personal-analysis-kpis {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -313,6 +320,168 @@
 .personal-analysis-kpis strong.positive { color: #43eea5; }
 .personal-analysis-kpis strong.negative { color: #ff737e; }
 .personal-analysis-kpis strong i { color: #526985; font-style: normal; font-weight: 400; }
+
+.personal-analysis-curve-card {
+  margin-top: 14px;
+  padding: 22px;
+  border: 1px solid #1e2f49;
+  border-radius: 18px;
+  background: #091427;
+}
+
+.personal-analysis-curve-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 12px;
+}
+
+.personal-analysis-curve-card > header span,
+.personal-analysis-breakdowns article > header span {
+  color: #2be39d;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .15em;
+}
+
+.personal-analysis-curve-card > header h3,
+.personal-analysis-breakdowns h3 {
+  margin: 5px 0 0;
+  color: #f3f7ff;
+}
+
+.personal-analysis-curve-card > header small {
+  display: block;
+  margin-top: 7px;
+  color: #7f94b4;
+}
+
+.personal-analysis-curve-card > header em {
+  color: #8296b6;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.personal-analysis-curve-wrap { position: relative; }
+
+.personal-analysis-curve {
+  display: block;
+  width: 100%;
+  min-height: 300px;
+  overflow: visible;
+  touch-action: pan-y;
+}
+
+.personal-analysis-grid-line { stroke: #21324b; stroke-width: 1; }
+.personal-analysis-zero-line { stroke: #657895; stroke-width: 1.2; stroke-dasharray: 5 5; }
+.personal-analysis-axis-label { fill: #7388a8; font-size: 10px; }
+.personal-analysis-axis-title { fill: #8fa3c1; font-size: 10px; font-weight: 800; }
+.personal-analysis-curve-line { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.personal-analysis-curve-end { font-size: 10px; font-weight: 900; }
+.personal-analysis-hover-line { stroke: #9eb2cf; stroke-width: 1; stroke-dasharray: 3 4; }
+
+.personal-analysis-curve-hover {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: -2px 0 12px;
+  padding: 10px 13px;
+  border: 1px solid #2a3b57;
+  border-radius: 11px;
+  color: #e8effb;
+  background: #07101f;
+  font-size: 11px;
+}
+
+.personal-analysis-curve-hover strong { color: #f5f8ff; }
+.personal-analysis-curve-hover span { font-weight: 800; }
+
+.personal-analysis-curve-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding-top: 8px;
+}
+
+.personal-analysis-curve-legend button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #253650;
+  border-radius: 9px;
+  color: #6f82a0;
+  background: #07101f;
+  font-size: 11px;
+  font-weight: 800;
+  opacity: .62;
+}
+
+.personal-analysis-curve-legend button.active { color: #dbe7f8; opacity: 1; }
+.personal-analysis-curve-legend button i { width: 9px; height: 9px; border-radius: 50%; }
+
+.personal-analysis-curve-empty {
+  display: grid;
+  min-height: 230px;
+  place-items: center;
+  color: #7f94b4;
+}
+
+.personal-analysis-result-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.personal-analysis-result-grid article {
+  display: grid;
+  min-height: 112px;
+  align-content: space-between;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #1d2d47;
+  border-radius: 14px;
+  background: #0a1528;
+}
+
+.personal-analysis-result-grid span,
+.personal-analysis-result-grid small { color: #8296b6; font-size: 11px; }
+.personal-analysis-result-grid strong { color: #f5f8ff; font-size: clamp(16px, 1.5vw, 21px); }
+.personal-analysis-result-grid strong.positive { color: #43eea5; }
+.personal-analysis-result-grid strong.negative { color: #ff737e; }
+
+.personal-analysis-breakdowns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.personal-analysis-breakdowns > article {
+  padding: 20px;
+  border: 1px solid #1e2f49;
+  border-radius: 16px;
+  background: #091427;
+}
+
+.personal-analysis-breakdowns article > div { display: grid; gap: 9px; margin-top: 17px; }
+
+.personal-analysis-breakdowns p {
+  display: grid;
+  grid-template-columns: minmax(64px, auto) minmax(80px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: #a8bad4;
+  font-size: 12px;
+}
+
+.personal-analysis-breakdowns p i { height: 5px; overflow: hidden; border-radius: 999px; background: #172841; }
+.personal-analysis-breakdowns p b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563eb, #2be39d); }
+.personal-analysis-breakdowns p strong { color: #eef4ff; }
 
 .personal-analysis-roadmap,
 .personal-analysis-leak-shells {
@@ -354,6 +523,7 @@
 .personal-analysis-data-groups article > div:last-child > span { display: grid; gap: 7px; padding: 13px; border-radius: 11px; background: #0d1a30; }
 .personal-analysis-data-groups article > div:last-child small { color: #7f94b4; }
 .personal-analysis-data-groups article > div:last-child strong { color: #f4f8ff; font-size: 19px; }
+.personal-analysis-data-groups article > div:last-child em { color: #667d9f; font-size: 10px; font-style: normal; }
 
 .personal-analysis-leak-shells { grid-template-columns: repeat(2, 1fr); margin-top: 0; }
 .personal-analysis-leak-shells article { position: relative; min-height: 210px; overflow: hidden; }
@@ -384,6 +554,7 @@
 
 @media (max-width: 1100px) {
   .personal-analysis-kpis { grid-template-columns: repeat(3, 1fr); }
+  .personal-analysis-result-grid { grid-template-columns: repeat(3, 1fr); }
   .personal-analysis-data-groups article > div:last-child { grid-template-columns: repeat(3, 1fr); }
 }
 
@@ -400,6 +571,8 @@
   .personal-analysis-requirements,
   .personal-analysis-gate--consent,
   .personal-analysis-kpis,
+  .personal-analysis-result-grid,
+  .personal-analysis-breakdowns,
   .personal-analysis-roadmap,
   .personal-analysis-leak-shells { grid-template-columns: 1fr; }
   .personal-analysis-consent-check,
@@ -411,4 +584,7 @@
   .personal-analysis-tabs { width: 100%; }
   .personal-analysis-tabs button { flex: 1; padding: 0 9px; }
   .personal-analysis-data-groups article > div:last-child { grid-template-columns: repeat(2, 1fr); }
+  .personal-analysis-curve-card { padding: 15px; }
+  .personal-analysis-curve { min-height: 240px; }
+  .personal-analysis-curve-card > header { flex-direction: column; }
 }
