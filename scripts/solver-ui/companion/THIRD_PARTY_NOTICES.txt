@@ -1,0 +1,17 @@
+KishPoker Solver Companion - Third-Party Notices
+================================================
+
+postflop-solver
+---------------
+The bundled solver is based on postflop-solver by Wataru Inariba and is licensed
+under AGPL-3.0-or-later. Its complete corresponding source and license are
+included in source\postflop-solver inside this archive.
+Upstream: https://github.com/b-inary/postflop-solver
+
+Node.js
+-------
+The bundled Node.js runtime is Copyright Node.js contributors and is distributed
+under the MIT license together with permissively licensed dependencies.
+Version-specific license and notices:
+https://github.com/nodejs/node/blob/v24.13.0/LICENSE
+Source: https://github.com/nodejs/node/tree/v24.13.0

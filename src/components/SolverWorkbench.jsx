@@ -1,0 +1,628 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CardPickerModal } from './CardPickerModal.jsx';
+import { RangeEditor } from './RangeEditor.jsx';
+import {
+  createSolverJob,
+  getSolverHealth,
+  getSolverJob,
+  getSolverResult,
+  listSolverJobs,
+  retrySolverJob,
+  solverExportUrl,
+  stopSolverJob
+} from '../lib/solverApi.js';
+import {
+  rangeMapToSolverText,
+  solverTextToRangeMap,
+  summarizeSolverRange
+} from '../lib/solverRange.js';
+import './SolverWorkbench.css';
+
+const TREE_POLICY_ID =
+  'flop25-75-turn75-150-river33-75-150-raise75-ai50-floor-v1';
+const COMPANION_DOWNLOAD_URL = '/downloads/kishpoker-solver-companion-win-x64-0.1.0.zip';
+const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
+const SUIT_ICON = { s: '♠', h: '♥', d: '♦', c: '♣' };
+const ACTION_COLORS = ['#2dd4bf', '#f59e0b', '#fb7185', '#818cf8', '#38bdf8', '#c084fc'];
+const ACTIVE_STATUSES = new Set(['queued', 'running', 'stopping']);
+const STATUS_LABELS = {
+  queued: '排队中',
+  running: '求解中',
+  stopping: '停止中',
+  succeeded: '已完成',
+  failed: '失败',
+  stopped: '已停止',
+  interrupted: '异常中断'
+};
+
+const ECONOMIC_PRESETS = {
+  'gg-rnc-rb40': { rakeRate: 0.03, rakeCapBb: 1.8, flatDropThresholdBb: 30, flatDropAmountBb: 1.5 },
+  'gg-rnc-full-rake': { rakeRate: 0.05, rakeCapBb: 3, flatDropThresholdBb: 30, flatDropAmountBb: 1.5 },
+  'zero-rake': { rakeRate: 0, rakeCapBb: 0, flatDropThresholdBb: 0, flatDropAmountBb: 0 }
+};
+
+const DEFAULT_OOP_RANGE = {
+  AA: { weight: 1 }, KK: { weight: 1 }, QQ: { weight: 1 }, AKs: { weight: 1 }
+};
+const DEFAULT_IP_RANGE = {
+  JJ: { weight: 1 }, TT: { weight: 1 }, AKo: { weight: 1 }, AQs: { weight: 1 }
+};
+
+function bytesLabel(value) {
+  if (!Number.isFinite(value) || value <= 0) return '—';
+  const units = ['B', 'KiB', 'MiB', 'GiB'];
+  let amount = value;
+  let index = 0;
+  while (amount >= 1024 && index < units.length - 1) {
+    amount /= 1024;
+    index += 1;
+  }
+  return `${amount.toFixed(index < 2 ? 0 : 2)} ${units[index]}`;
+}
+
+function percentage(value, digits = 1) {
+  return Number.isFinite(value) ? `${(value * 100).toFixed(digits)}%` : '—';
+}
+
+function evLabel(value) {
+  return Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${value.toFixed(3)}bb` : '—';
+}
+
+function dateLabel(value) {
+  if (!value) return '—';
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }).format(new Date(value));
+}
+
+function actionColor(index) {
+  return ACTION_COLORS[index % ACTION_COLORS.length];
+}
+
+function actionName(action) {
+  if (!action) return '未知行动';
+  if (action.kind === 'check') return '过牌';
+  if (action.kind === 'fold') return '弃牌';
+  if (action.kind === 'call') return `跟注 ${action.amountBb.toFixed(2)}bb`;
+  if (action.kind === 'all-in') return `All-in ${action.amountBb.toFixed(2)}bb`;
+  if (action.kind === 'bet') return `下注 ${action.amountBb.toFixed(2)}bb`;
+  if (action.kind === 'raise') return `加注 ${action.amountBb.toFixed(2)}bb`;
+  return action.id;
+}
+
+function matrixGradient(hand, actions) {
+  let cursor = 0;
+  const stops = [];
+  actions.forEach((action, index) => {
+    const frequency = Math.max(0, Math.min(1, hand.actions[action.id] ?? 0));
+    if (frequency <= 0) return;
+    const next = Math.min(100, cursor + frequency * 100);
+    stops.push(`${actionColor(index)} ${cursor}% ${next}%`);
+    cursor = next;
+  });
+  if (cursor < 100) stops.push(`#1b2433 ${cursor}% 100%`);
+  return `linear-gradient(135deg, ${stops.join(', ')})`;
+}
+
+async function fileToRange(file) {
+  if (/\.(bin|f32le)$/i.test(file.name)) {
+    const buffer = await file.arrayBuffer();
+    if (buffer.byteLength !== 1326 * 4) throw new Error('二进制范围必须正好包含 1326 个 float32');
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    }
+    return { format: 'f32le-base64', data: btoa(binary), display: `已载入 1326-combo f32le（${bytes.length}B）` };
+  }
+  const value = (await file.text()).trim();
+  if (!value) throw new Error('范围文件为空');
+  return { format: 'text', value, map: solverTextToRangeMap(value), display: value };
+}
+
+function SolverRangeSelector({ label, value, onChange, onEdit, onError }) {
+  const inputRef = useRef(null);
+  const isBinary = value.format === 'f32le-base64';
+  const summary = value.map ? summarizeSolverRange(value.map) : null;
+  const labels = value.map ? Object.keys(value.map) : [];
+  return (
+    <section className="solver-range-field">
+      <header>
+        <span>{label}</span>
+        <small>支持 solver 文本或 1326-combo f32le</small>
+      </header>
+      <button type="button" className="solver-range-overview" onClick={onEdit}>
+        <span>
+          <b>{isBinary ? '1326-combo 范围' : summary ? `覆盖 ${(summary.coverage * 100).toFixed(1)}%` : '已导入 solver 文本'}</b>
+          <small>{isBinary ? value.display : summary ? `${summary.cells} 格 · ${summary.combos.toFixed(1)} combos` : '打开矩阵将重新选择范围'}</small>
+        </span>
+        <em>打开 13×13 矩阵</em>
+      </button>
+      {!isBinary && labels.length > 0 && (
+        <div className="solver-range-chips">
+          {labels.slice(0, 12).map((hand) => <span key={hand}>{hand}</span>)}
+          {labels.length > 12 && <span>+{labels.length - 12}</span>}
+        </div>
+      )}
+      <div className="solver-range-actions">
+        <button type="button" onClick={onEdit}>选择范围</button>
+        <button type="button" onClick={() => inputRef.current?.click()}>导入范围</button>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".txt,.range,.bin,.f32le"
+        hidden
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          try {
+            onChange(await fileToRange(file));
+          } catch (cause) {
+            onError?.(cause.message);
+          }
+          event.target.value = '';
+        }}
+      />
+    </section>
+  );
+}
+
+function StatusPanel({ job }) {
+  const progress = job?.progress ?? {};
+  const resources = job?.resources ?? {};
+  return (
+    <section className="solver-status-panel">
+      <header>
+        <div>
+          <span className={`solver-status solver-status--${job?.status ?? 'idle'}`}>
+            {job ? STATUS_LABELS[job.status] : '尚未启动'}
+          </span>
+          <h2>{job ? `任务 ${job.id.slice(0, 18)}` : '等待求解任务'}</h2>
+        </div>
+        <strong>{Number(progress.percent ?? 0).toFixed(1)}%</strong>
+      </header>
+      <div className="solver-progress" aria-label="求解进度">
+        <i style={{ width: `${Math.max(0, Math.min(100, progress.percent ?? 0))}%` }} />
+      </div>
+      <div className="solver-metrics">
+        <div><span>迭代</span><strong>{progress.iteration ?? 0} / {progress.totalIterations ?? '—'}</strong></div>
+        <div><span>Exploitability</span><strong>{percentage(progress.exploitabilityPotFraction, 4)}</strong></div>
+        <div><span>CPU</span><strong>{Number.isFinite(resources.cpuPercent) ? `${resources.cpuPercent.toFixed(0)}%` : '—'}</strong></div>
+        <div><span>当前内存</span><strong>{bytesLabel(resources.workingSetBytes)}</strong></div>
+        <div><span>峰值内存</span><strong>{bytesLabel(resources.peakWorkingSetBytes)}</strong></div>
+        <div><span>阶段</span><strong>{job?.phase ?? 'idle'}</strong></div>
+      </div>
+      {job?.error && <div className="solver-error" role="alert"><b>{job.error.code}</b><span>{job.error.message}</span></div>}
+    </section>
+  );
+}
+
+function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode }) {
+  const node = result.selectedNode;
+  const actions = node.actions;
+  const chosen = selectedHand || node.matrix.find((hand) => hand.reach > 0) || node.matrix[0];
+  return (
+    <section className="solver-result-shell">
+      <header className="solver-result-heading">
+        <div>
+          <span>已验证输出 · {result.manifest.boardText.join(' ')}</span>
+          <h2>{node.street.toUpperCase()} · {node.actor} 决策</h2>
+          <p>范围 EV {evLabel(node.aggregate.totalEv)} · 节点 reach {node.aggregate.reach.toFixed(2)}</p>
+        </div>
+        <div className="solver-result-actions">
+          {actions.map((action, index) => (
+            <span key={action.id} style={{ '--action-color': actionColor(index) }}>
+              <i />{actionName(action)} <b>{percentage(node.aggregate.actions[action.id])}</b>
+            </span>
+          ))}
+        </div>
+      </header>
+      <div className="solver-result-grid">
+        <section className="solver-matrix-panel">
+          <div className="solver-matrix" role="grid" aria-label="13 乘 13 手牌矩阵">
+            <span className="solver-matrix-corner" />
+            {RANKS.map((rank) => <b className="solver-matrix-axis" key={`c-${rank}`}>{rank}</b>)}
+            {RANKS.map((rank, row) => (
+              <div className="solver-matrix-row" key={rank}>
+                <b className="solver-matrix-axis">{rank}</b>
+                {node.matrix.slice(row * 13, row * 13 + 13).map((hand) => (
+                  <button
+                    type="button"
+                    role="gridcell"
+                    key={hand.label}
+                    className={`${chosen?.label === hand.label ? 'active' : ''}${hand.reach <= 0 ? ' empty' : ''}`}
+                    style={{ background: matrixGradient(hand, actions) }}
+                    title={`${hand.label} · EV ${evLabel(hand.totalEv)}`}
+                    onClick={() => onSelectHand(hand)}
+                  >
+                    <strong>{hand.label}</strong>
+                    <small>{hand.reach > 0 ? evLabel(hand.totalEv) : '—'}</small>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
+        <aside className="solver-hand-detail">
+          <span>当前手牌</span>
+          <h3>{chosen.label}</h3>
+          <dl>
+            <div><dt>范围权重</dt><dd>{chosen.reach.toFixed(3)}</dd></div>
+            <div><dt>总 EV</dt><dd>{evLabel(chosen.totalEv)}</dd></div>
+            <div><dt>可用组合</dt><dd>{chosen.combinations}</dd></div>
+          </dl>
+          <div className="solver-hand-actions">
+            {actions.map((action, index) => (
+              <div key={action.id}>
+                <header><span><i style={{ background: actionColor(index) }} />{actionName(action)}</span><b>{percentage(chosen.actions[action.id])}</b></header>
+                <div><i style={{ width: `${Math.max(0, Math.min(100, (chosen.actions[action.id] ?? 0) * 100))}%`, background: actionColor(index) }} /></div>
+                <small>行动 EV {evLabel(chosen.actionEvs[action.id])}</small>
+              </div>
+            ))}
+          </div>
+        </aside>
+      </div>
+      <section className="solver-node-browser">
+        <header><div><span>节点树与行动路径</span><h3>{result.nodes.length} 个已导出决策节点</h3></div><p>点击节点即可切换矩阵；缩进表示行动深度。</p></header>
+        <div className="solver-node-layout">
+          <nav aria-label="求解节点树">
+            {result.nodes.map((candidate) => (
+              <button
+                type="button"
+                key={candidate.id}
+                className={candidate.id === node.id ? 'active' : ''}
+                style={{ '--node-depth': Math.min(candidate.history.length, 8) }}
+                onClick={() => onSelectNode(candidate.id)}
+              >
+                <span>#{candidate.id} · {candidate.street} · {candidate.actor}</span>
+                <small>{candidate.history.at(-1)?.id ?? '根节点'} · {candidate.state.potBb.toFixed(2)}bb pot</small>
+              </button>
+            ))}
+          </nav>
+          <div className="solver-path-detail">
+            <span>当前行动路径</span>
+            {node.history.length === 0
+              ? <p className="solver-root-path">根节点，没有先前行动。</p>
+              : node.history.map((step, index) => (
+                <div key={`${step.id}-${index}`}>
+                  <i>{index + 1}</i><b>{step.street} · {step.actor}</b><span>{step.id}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+export function SolverWorkbench() {
+  const [health, setHealth] = useState(null);
+  const [jobs, setJobs] = useState([]);
+  const [activeJob, setActiveJob] = useState(null);
+  const [result, setResult] = useState(null);
+  const [selectedHand, setSelectedHand] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [pickerTarget, setPickerTarget] = useState(null);
+  const [rangeEditorTarget, setRangeEditorTarget] = useState(null);
+  const [form, setForm] = useState({
+    boardCards: ['As', 'Kh', '9c'],
+    potBb: 17.5,
+    effectiveStackBb: 92,
+    oopRange: { format: 'text', value: rangeMapToSolverText(DEFAULT_OOP_RANGE), map: DEFAULT_OOP_RANGE },
+    ipRange: { format: 'text', value: rangeMapToSolverText(DEFAULT_IP_RANGE), map: DEFAULT_IP_RANGE },
+    economicModel: 'gg-rnc-rb40',
+    ...ECONOMIC_PRESETS['gg-rnc-rb40'],
+    maxIterations: 64,
+    targetExploitabilityPotFraction: 0,
+    exportStreets: 'flop',
+    turnCardLimit: 1
+  });
+  const activeJobId = activeJob?.id;
+  const activeJobStatus = activeJob?.status;
+
+  const updateForm = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const requestBody = useMemo(() => ({
+    schemaVersion: 1,
+    board: form.boardCards.join(''),
+    potBb: Number(form.potBb),
+    effectiveStackBb: Number(form.effectiveStackBb),
+    ranges: {
+      oop: form.oopRange.format === 'f32le-base64'
+        ? { format: 'f32le-base64', data: form.oopRange.data }
+        : { format: 'text', value: form.oopRange.value },
+      ip: form.ipRange.format === 'f32le-base64'
+        ? { format: 'f32le-base64', data: form.ipRange.data }
+        : { format: 'text', value: form.ipRange.value }
+    },
+    economics: {
+      model: form.economicModel,
+      rakeRate: Number(form.rakeRate),
+      rakeCapBb: Number(form.rakeCapBb),
+      flatDropThresholdBb: Number(form.flatDropThresholdBb),
+      flatDropAmountBb: Number(form.flatDropAmountBb)
+    },
+    treePolicyId: TREE_POLICY_ID,
+    solve: {
+      maxIterations: Number(form.maxIterations),
+      targetExploitabilityPotFraction: Number(form.targetExploitabilityPotFraction)
+    },
+    export: {
+      streets: form.exportStreets,
+      nodeLimit: 256,
+      turnCardLimit: Number(form.turnCardLimit)
+    }
+  }), [form]);
+
+  const refreshJobs = async () => {
+    const payload = await listSolverJobs();
+    setJobs(payload.jobs);
+    return payload.jobs;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.allSettled([getSolverHealth(), listSolverJobs()])
+      .then(([healthResult, jobsResult]) => {
+        if (cancelled) return;
+        setHealth(healthResult.status === 'fulfilled'
+          ? healthResult.value
+          : { status: healthResult.reason?.payload?.status ?? 'offline' });
+        if (jobsResult.status === 'fulfilled') {
+          setJobs(jobsResult.value.jobs);
+          const candidate = jobsResult.value.jobs.find((job) => ACTIVE_STATUSES.has(job.status)) || jobsResult.value.jobs[0];
+          if (candidate) setActiveJob(candidate);
+        }
+      })
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!activeJobId) return undefined;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const current = await getSolverJob(activeJobId);
+        if (cancelled) return;
+        setActiveJob(current);
+        setJobs((items) => [current, ...items.filter((item) => item.id !== current.id)]);
+        if (current.status === 'succeeded' && !result) {
+          const nextResult = await getSolverResult(current.id, 0);
+          if (!cancelled) {
+            setResult(nextResult);
+            setSelectedHand(null);
+          }
+        }
+      } catch (cause) {
+        if (!cancelled) setError(cause.message);
+      }
+    };
+    void poll();
+    if (!ACTIVE_STATUSES.has(activeJobStatus)) return () => { cancelled = true; };
+    const timer = setInterval(poll, 1000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [activeJobId, activeJobStatus, result]);
+
+  const start = async () => {
+    setError('');
+    setResult(null);
+    setSelectedHand(null);
+    try {
+      const job = await createSolverJob(requestBody);
+      setActiveJob(job);
+      setJobs((items) => [job, ...items.filter((item) => item.id !== job.id)]);
+    } catch (cause) {
+      setError(cause.message);
+    }
+  };
+
+  const chooseJob = async (job) => {
+    setError('');
+    setActiveJob(job);
+    setResult(null);
+    setSelectedHand(null);
+    if (job.status === 'succeeded') {
+      try { setResult(await getSolverResult(job.id, 0)); }
+      catch (cause) { setError(cause.message); }
+    }
+  };
+
+  const chooseNode = async (nodeId) => {
+    try {
+      setResult(await getSolverResult(activeJob.id, nodeId));
+      setSelectedHand(null);
+    } catch (cause) {
+      setError(cause.message);
+    }
+  };
+
+  const selectEconomicModel = (model) => {
+    setForm((current) => ({ ...current, economicModel: model, ...(ECONOMIC_PRESETS[model] ?? {}) }));
+  };
+
+  const reconnectLocalSolver = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [nextHealth, payload] = await Promise.all([getSolverHealth(), listSolverJobs()]);
+      setHealth(nextHealth);
+      setJobs(payload.jobs);
+      const candidate = payload.jobs.find((job) => ACTIVE_STATUSES.has(job.status)) || payload.jobs[0];
+      if (candidate) setActiveJob(candidate);
+    } catch (cause) {
+      setHealth({ status: cause?.payload?.status ?? 'offline' });
+      setError('本地 Solver 还没有响应，请先安装或启动助手。');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const takenBoardCards = useMemo(() => new Set(form.boardCards.filter(Boolean)), [form.boardCards]);
+  const currentRange = rangeEditorTarget ? form[rangeEditorTarget.field] : null;
+
+  const pickBoardCard = (card) => {
+    if (!pickerTarget) return;
+    setForm((current) => ({
+      ...current,
+      boardCards: current.boardCards.map((value, index) => (index === pickerTarget.index ? card : value))
+    }));
+    setPickerTarget(null);
+  };
+
+  const clearBoardCard = (index) => {
+    setForm((current) => ({
+      ...current,
+      boardCards: current.boardCards.map((value, cardIndex) => (cardIndex === index ? null : value))
+    }));
+  };
+
+  const openRangeEditor = (field) => {
+    setRangeEditorTarget({ field, sessionId: Date.now() });
+  };
+
+  return (
+    <main className="solver-workbench">
+      <section className="solver-intro">
+        <div><span>KioSolver · LOCAL ENGINE</span><h1>在线 KioSolver 工具</h1><p>在网页中配置牌面、范围和动作树，求解过程使用你电脑的 CPU 和内存，数据保留在本机。</p></div>
+        <aside>
+          <i className={health?.status === 'ready' ? 'ready' : ''} />
+          <span>{loading ? '正在连接本地服务' : health?.status === 'ready' ? '本地引擎就绪' : '本地引擎未连接'}</span>
+          <small>API v1 · 仅监听本机</small>
+          <a href={COMPANION_DOWNLOAD_URL} download>下载 / 更新本地助手 · 33.3 MB</a>
+        </aside>
+      </section>
+
+      {!loading && health?.status !== 'ready' && (
+        <section className="solver-companion-setup">
+          <div>
+            <span>WINDOWS LOCAL COMPANION</span>
+            <h2>先安装本地 Solver 助手</h2>
+            <p>网站只负责界面，牌树计算和结果都留在你的电脑。首次解压后双击 <b>install.cmd</b>，以后网页可直接唤起。</p>
+          </div>
+          <ol>
+            <li><b>1</b><span>下载并解压<small>Windows x64 · 33.3 MB</small></span></li>
+            <li><b>2</b><span>双击 install.cmd<small>只安装到当前 Windows 用户</small></span></li>
+            <li><b>3</b><span>回到这里重新连接<small>计算使用本机 CPU 和内存</small></span></li>
+          </ol>
+          <div className="solver-companion-actions">
+            <a href={COMPANION_DOWNLOAD_URL} download>下载本地 Solver</a>
+            <a className="secondary" href="kishsolver://start">已安装，启动助手</a>
+            <button type="button" onClick={() => void reconnectLocalSolver()}>重新检测</button>
+          </div>
+        </section>
+      )}
+
+      {error && <div className="solver-global-error" role="alert"><b>无法完成操作</b><span>{error}</span><button type="button" onClick={() => setError('')}>关闭</button></div>}
+
+      <div className="solver-builder-grid">
+        <section className="solver-config-panel">
+          <header><span>01 · INPUT</span><h2>求解配置</h2></header>
+          <div className="solver-basic-fields">
+            <div className="solver-board-field">
+              <span>翻牌</span>
+              <div className="card-slots board-cards solver-flop-cards">
+                {form.boardCards.map((card, index) => {
+                  const classes = ['card-slot', 'board-slot'];
+                  if (card) classes.push('filled', `suit-${card[1]}`);
+                  else classes.push('empty');
+                  return (
+                    <button
+                      key={`solver-board-${index}`}
+                      type="button"
+                      className={classes.join(' ')}
+                      onClick={() => setPickerTarget({ index, currentValue: card })}
+                    >
+                      <span className="card-face">
+                        <span className="card-rank">{card?.[0] ?? '--'}</span>
+                        <span className="card-pip">{card ? SUIT_ICON[card[1]] : ''}</span>
+                      </span>
+                      {card && (
+                        <span className="slot-clear" onClick={(event) => { event.stopPropagation(); clearBoardCard(index); }}>×</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <label><span>底池（bb）</span><input type="number" step="0.01" min="0.01" value={form.potBb} onChange={(event) => updateForm('potBb', event.target.value)} /></label>
+            <label><span>有效筹码（bb）</span><input type="number" step="0.01" min="0.01" value={form.effectiveStackBb} onChange={(event) => updateForm('effectiveStackBb', event.target.value)} /></label>
+          </div>
+          <div className="solver-ranges">
+            <SolverRangeSelector label="OOP 范围" value={form.oopRange} onChange={(value) => updateForm('oopRange', value)} onEdit={() => openRangeEditor('oopRange')} onError={setError} />
+            <SolverRangeSelector label="IP 范围" value={form.ipRange} onChange={(value) => updateForm('ipRange', value)} onEdit={() => openRangeEditor('ipRange')} onError={setError} />
+          </div>
+          <div className="solver-section-label"><span>02 · ECONOMICS</span><h3>抽水模型</h3></div>
+          <label className="solver-wide-field"><span>预设</span><select value={form.economicModel} onChange={(event) => selectEconomicModel(event.target.value)}><option value="gg-rnc-rb40">GG R&C · 40% 回馈后 3% / 1.8bb + JP</option><option value="gg-rnc-full-rake">GG R&C · 5% / 3bb + JP</option><option value="zero-rake">零抽水基准</option><option value="custom">自定义</option></select></label>
+          <div className="solver-economic-fields">
+            <label><span>比例</span><input type="number" step="0.01" min="0" max="1" value={form.rakeRate} onChange={(event) => updateForm('rakeRate', event.target.value)} /></label>
+            <label><span>封顶 bb</span><input type="number" step="0.01" min="0" value={form.rakeCapBb} onChange={(event) => updateForm('rakeCapBb', event.target.value)} /></label>
+            <label><span>JP 门槛 bb</span><input type="number" step="0.01" min="0" value={form.flatDropThresholdBb} onChange={(event) => updateForm('flatDropThresholdBb', event.target.value)} /></label>
+            <label><span>JP 金额 bb</span><input type="number" step="0.01" min="0" value={form.flatDropAmountBb} onChange={(event) => updateForm('flatDropAmountBb', event.target.value)} /></label>
+          </div>
+          <div className="solver-section-label"><span>03 · TREE & SOLVE</span><h3>动作树与精度</h3></div>
+          <div className="solver-tree-policy">
+            <div><span>FLOP</span><b>25%</b><b>75%</b></div>
+            <div><span>TURN</span><b>75%</b><b>150%</b></div>
+            <div><span>RIVER</span><b>33%</b><b>75%</b><b>150%</b></div>
+            <p>三条街加注均为跟注后底池的 75%；行动后剩余筹码不超过行动前的 50% 时合并为 All-in。</p>
+          </div>
+          <div className="solver-solve-fields">
+            <label><span>最大迭代</span><input type="number" min="1" max="100000" value={form.maxIterations} onChange={(event) => updateForm('maxIterations', event.target.value)} /></label>
+            <label><span>目标 exploitability / pot</span><input type="number" step="0.0001" min="0" max="1" value={form.targetExploitabilityPotFraction} onChange={(event) => updateForm('targetExploitabilityPotFraction', event.target.value)} /></label>
+            <label><span>导出街道</span><select value={form.exportStreets} onChange={(event) => updateForm('exportStreets', event.target.value)}><option value="flop">翻牌节点（推荐）</option><option value="flop-turn">翻牌 + 转牌预览</option></select></label>
+            {form.exportStreets === 'flop-turn' && <label><span>转牌样本数 / 边界</span><input type="number" min="1" max="49" value={form.turnCardLimit} onChange={(event) => updateForm('turnCardLimit', event.target.value)} /></label>}
+          </div>
+          <div className="solver-run-actions">
+            <button type="button" className="solver-run" disabled={health?.status !== 'ready' || !form.boardCards.every(Boolean) || ACTIVE_STATUSES.has(activeJob?.status)} onClick={start}>启动求解</button>
+            <button type="button" className="solver-stop" disabled={!ACTIVE_STATUSES.has(activeJob?.status)} onClick={async () => setActiveJob(await stopSolverJob(activeJob.id))}>停止</button>
+          </div>
+        </section>
+
+        <aside className="solver-side-column">
+          <StatusPanel job={activeJob} />
+          <section className="solver-job-history">
+            <header><span>最近任务</span><button type="button" onClick={() => void refreshJobs()}>刷新</button></header>
+            {jobs.length === 0 && <p>还没有持久化任务。</p>}
+            {jobs.slice(0, 8).map((job) => (
+              <button type="button" key={job.id} className={job.id === activeJob?.id ? 'active' : ''} onClick={() => void chooseJob(job)}>
+                <i className={`solver-dot solver-dot--${job.status}`} /><span><b>{job.inputSha256.slice(0, 12)}</b><small>{dateLabel(job.createdAt)}</small></span><em>{STATUS_LABELS[job.status]}</em>
+              </button>
+            ))}
+          </section>
+          {activeJob && ['failed', 'stopped', 'interrupted'].includes(activeJob.status) && <button type="button" className="solver-retry" onClick={async () => { const job = await retrySolverJob(activeJob.id); setActiveJob(job); setResult(null); }}>按相同输入重试</button>}
+          {activeJob?.status === 'succeeded' && <a className="solver-export" href={solverExportUrl(activeJob.id)} download>导出网站数据 <span>JSON · SHA-256 {activeJob.result?.sha256.slice(0, 12)}</span></a>}
+        </aside>
+      </div>
+
+      {result && <ResultWorkspace result={result} selectedHand={selectedHand} onSelectHand={setSelectedHand} onSelectNode={(id) => void chooseNode(id)} />}
+
+      <CardPickerModal
+        open={Boolean(pickerTarget)}
+        currentValue={pickerTarget?.currentValue ?? null}
+        takenCards={takenBoardCards}
+        onClose={() => setPickerTarget(null)}
+        onSelect={pickBoardCard}
+        title="选择翻牌"
+      />
+
+      <RangeEditor
+        key={rangeEditorTarget?.sessionId ?? 'solver-range-editor'}
+        open={Boolean(rangeEditorTarget)}
+        title={`${rangeEditorTarget?.field === 'oopRange' ? 'OOP' : 'IP'} · 范围`}
+        range={currentRange?.map ?? {}}
+        onClose={() => setRangeEditorTarget(null)}
+        onChange={(nextRange) => {
+          if (rangeEditorTarget?.field) {
+            updateForm(rangeEditorTarget.field, {
+              format: 'text',
+              value: rangeMapToSolverText(nextRange),
+              map: nextRange
+            });
+          }
+        }}
+      />
+    </main>
+  );
+}

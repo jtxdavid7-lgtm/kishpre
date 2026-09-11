@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { RangeMatrix } from './components/RangeMatrix.jsx';
 import { RangeEditor } from './components/RangeEditor.jsx';
+import { CardPickerModal } from './components/CardPickerModal.jsx';
 import { BASE_RANGES } from './data/base';
 import { PROFILES } from './data/profiles';
 import { getRangePayload } from './lib/rangeEngine';
@@ -12,6 +13,7 @@ import { DatasetFilterPanel } from './components/DatasetFilterPanel.jsx';
 import { PoolLeakExplorer } from './components/PoolLeakExplorer.jsx';
 import { PersonalAnalysisWorkspace } from './components/PersonalAnalysisWorkspace.jsx';
 import { GtoQueryExplorer } from './components/GtoQueryExplorer.jsx';
+import { SolverWorkbench } from './components/SolverWorkbench.jsx';
 import {
   deleteCloudSession,
   ensureDefaultCloudLibrary,
@@ -172,6 +174,7 @@ const FEATURE_BLUEPRINT = [
   { key: 'reports', action: 'history' },
   { key: 'poolLeaks', action: 'poolLeaks' },
   { key: 'gto', action: 'gto' },
+  { key: 'solver', action: 'solver' },
   { key: 'equity', action: 'equity' },
   { key: 'variance', action: 'variance' },
   { key: 'rng', action: 'download' },
@@ -256,6 +259,11 @@ const HOMEPAGE_COPY = {
         label: 'GTO QUERY · 正式数据',
         title: 'GTO 策略节点查询器',
         desc: '沿翻前行动树查询正式 RocketSolver 静态快照，查看每类起手牌的行动频率、策略 EV 与行动 EV。'
+      },
+      solver: {
+        label: 'KioSolver · 本地计算',
+        title: '在线 KioSolver 工具',
+        desc: '在网页选择翻牌与双方范围，由你电脑上的本地 Solver 完成求解。'
       }
     },
     actions: {
@@ -265,6 +273,7 @@ const HOMEPAGE_COPY = {
       history: '进入 K2note',
       poolLeaks: '查询玩家池漏洞',
       gto: '打开 GTO 查询器',
+      solver: '打开 KioSolver',
       download: '下载插件'
     }
   },
@@ -337,6 +346,11 @@ const HOMEPAGE_COPY = {
         label: 'GTO QUERY · SOLVED DATA',
         title: 'GTO strategy node explorer',
         desc: 'Navigate the solved preflop action tree and inspect static RocketSolver frequencies, strategy EV, and action EV by starting hand.'
+      },
+      solver: {
+        label: 'KioSolver · LOCAL COMPUTE',
+        title: 'Online KioSolver Tool',
+        desc: 'Choose a flop and both ranges in the browser, then solve locally with your own computer.'
       }
     },
     actions: {
@@ -346,6 +360,7 @@ const HOMEPAGE_COPY = {
       history: 'Open K2note',
       poolLeaks: 'Explore pool leaks',
       gto: 'Open GTO explorer',
+      solver: 'Open KioSolver',
       download: 'Download plugin'
     }
   }
@@ -1072,43 +1087,6 @@ function EquityView() {
           }
         }}
       />
-    </div>
-  );
-}
-
-function CardPickerModal({ open, onClose, onSelect, takenCards, currentValue, title }) {
-  if (!open) return null;
-  return (
-    <div className="picker-backdrop">
-      <div className="picker-panel">
-        <div className="picker-head">
-          <strong>{title}</strong>
-          <button type="button" onClick={onClose}>×</button>
-        </div>
-        <div className="card-grid modal-grid">
-          {PICKER_SUITS.flatMap((suit) => (
-            PICKER_RANKS.map((rank) => {
-              const card = `${rank}${suit}`;
-              const disabled = takenCards.has(card) && card !== currentValue;
-              const suitGlyph = SUIT_ICON[suit] ?? '';
-              const suitClass = `suit-${suit}`;
-              return (
-                <button
-                  key={card}
-                  type="button"
-                  className={`card-button ${suitClass} ${disabled ? 'disabled' : ''}`}
-                  disabled={disabled}
-                  onClick={() => onSelect(card)}
-                  aria-label={`${rank}${suit}`}
-                >
-                  <span className="card-rank">{rank}</span>
-                  <span className="card-pip">{suitGlyph}</span>
-                </button>
-              );
-            })
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
@@ -4153,6 +4131,7 @@ function HomeView() {
   const openHistory = () => window.location.assign('?tool=history');
   const openPoolLeaks = () => window.location.assign('?tool=pool-leaks');
   const openGto = () => window.location.assign('?tool=gto');
+  const openSolver = () => window.location.assign('?tool=solver');
   const openInsights = () => {
     if (isAuthenticated) {
       window.location.assign('?tool=insights');
@@ -4215,6 +4194,7 @@ function HomeView() {
       if (item.action === 'history') return openHistory;
       if (item.action === 'poolLeaks') return openPoolLeaks;
       if (item.action === 'gto') return openGto;
+      if (item.action === 'solver') return openSolver;
       if (item.action === 'download') return downloadPlugin;
       return null;
     })();
@@ -4437,6 +4417,32 @@ function GtoQueryView() {
   );
 }
 
+function SolverView() {
+  useEffect(() => {
+    document.documentElement.lang = 'zh-CN';
+    document.title = '在线 KioSolver 工具 | KishPoker';
+    document.querySelector('meta[name="description"]')?.setAttribute(
+      'content',
+      '在网页配置翻牌、范围和动作树，使用本机 KioSolver 计算并查看策略频率、EV 与节点路径。'
+    );
+  }, []);
+
+  return (
+    <div className="site site--solver">
+      <nav className="top-nav">
+        <button type="button" className="brand brand--button" onClick={() => window.location.assign('/')}>
+          KISHPOKER · KioSolver
+        </button>
+        <div className="top-nav-actions">
+          <button type="button" className="secondary" onClick={() => window.location.assign('?tool=gto')}>GTO 查询器</button>
+          <button type="button" className="secondary" onClick={() => window.location.assign('/')}>主页</button>
+        </div>
+      </nav>
+      <SolverWorkbench />
+    </div>
+  );
+}
+
 function PersonalAnalysisView() {
   useEffect(() => {
     document.documentElement.lang = 'zh-CN';
@@ -4480,6 +4486,7 @@ function App() {
   if (tool === 'insights') return <PersonalAnalysisView />;
   if (tool === 'pool-leaks') return <PoolLeakView />;
   if (tool === 'gto') return <GtoQueryView />;
+  if (tool === 'solver') return <SolverView />;
   return <HomeView />;
 }
 
