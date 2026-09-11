@@ -22,6 +22,8 @@ import './SolverWorkbench.css';
 const TREE_POLICY_ID =
   'flop25-75-turn75-150-river33-75-150-raise75-ai50-floor-v1';
 const COMPANION_DOWNLOAD_URL = '/downloads/kishpoker-solver-companion-win-x64-0.1.2.zip';
+const FIRST_VISIT_PREVIEW = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('solverPreview') === 'first-visit';
 const PRODUCTION_PREVIEW_BASE_URL = '/data/gto/gg-rnc-rb40-s000-production-preview-v1';
 const PRODUCTION_PREVIEW_MANIFEST_URL = `${PRODUCTION_PREVIEW_BASE_URL}/manifest.json`;
 const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
@@ -604,6 +606,13 @@ export function SolverWorkbench() {
   };
 
   useEffect(() => {
+    if (FIRST_VISIT_PREVIEW) {
+      setHealth({ status: 'offline' });
+      setJobs([]);
+      setActiveJob(null);
+      setLoading(false);
+      return undefined;
+    }
     let cancelled = false;
     Promise.allSettled([getSolverHealth(), listSolverJobs()])
       .then(([healthResult, jobsResult]) => {
