@@ -21,8 +21,10 @@ import './SolverWorkbench.css';
 
 const TREE_POLICY_ID =
   'flop25-75-turn75-150-river33-75-150-raise75-ai50-floor-v1';
-const COMPANION_DOWNLOAD_URL = '/downloads/kishpoker-solver-companion-win-x64-0.1.3-setup.exe';
-const COMPANION_FALLBACK_URL = '/downloads/kishpoker-solver-companion-win-x64-0.1.3.zip';
+const COMPANION_CDN_BASE_URL =
+  'https://kish2note-d6ggxsz7b384cb278-1301236168.tcloudbaseapp.com/downloads';
+const COMPANION_DOWNLOAD_URL = `${COMPANION_CDN_BASE_URL}/kishpoker-solver-companion-win-x64-0.1.3-setup.exe`;
+const COMPANION_FALLBACK_URL = `${COMPANION_CDN_BASE_URL}/kishpoker-solver-companion-win-x64-0.1.3.zip`;
 const FIRST_VISIT_PREVIEW = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('solverPreview') === 'first-visit';
 const PRODUCTION_PREVIEW_BASE_URL = '/data/gto/gg-rnc-rb40-s000-production-preview-v1';
