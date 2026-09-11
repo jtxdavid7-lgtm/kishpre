@@ -204,6 +204,22 @@ const HOMEPAGE_COPY = {
       previewItems: ['资金曲线', '核心数据', '逐手复盘'],
       previewFooter: '无需登录，导入后立即开始'
     },
+    coreSuite: {
+      eyebrow: 'KISHPOKER · 三大核心工具',
+      title: '复盘、查询、求解，都从这里开始',
+      desc: '看清自己的牌局，沿解算树查询策略，或让本机引擎现场求解。三个核心工作台直接进入。',
+      k2noteTag: '牌谱分析 · 浏览器本地解析',
+      gtoTag: 'GTO QUERY · 正式翻前数据',
+      gtoTitle: 'GTO 查询器',
+      gtoHeadline: '沿行动树定位节点，直接看范围、频率与 EV',
+      gtoDesc: '覆盖完整 GG R&C 翻前行动树，并把可用的翻后策略节点接在同一条路径上。',
+      gtoFacts: ['2,588 个翻前节点', '手牌频率与策略 EV', '按 IP / OOP 行动导航'],
+      solverTag: 'KioSolver · LOCAL ENGINE',
+      solverTitle: '在线 KioSolver',
+      solverHeadline: '网页搭建动作树，你的电脑负责求解',
+      solverDesc: '选择牌面、范围、下注尺寸和精度，本地引擎计算并把每个具体花色组合的策略与 EV 返回网页。',
+      solverFacts: ['一键安装本地引擎', '使用本机 CPU 与内存', '求解数据保留在本机']
+    },
     flagship: {
       eyebrow: 'K2note 会员工作台 · 登录后',
       title: '把每次 Session，积累成长期牌谱资产',
@@ -290,6 +306,22 @@ const HOMEPAGE_COPY = {
       previewTitle: 'One session, from the result back to every hand.',
       previewItems: ['Bankroll graph', 'Core stats', 'Hand review'],
       previewFooter: 'Import and start immediately — no sign-in required'
+    },
+    coreSuite: {
+      eyebrow: 'KISHPOKER · THREE CORE TOOLS',
+      title: 'Review, query, and solve from one place',
+      desc: 'Understand your own sessions, navigate solved strategy, or run a fresh local solve. Each core workspace is one click away.',
+      k2noteTag: 'HAND ANALYSIS · LOCAL PARSING',
+      gtoTag: 'GTO QUERY · SOLVED PREFLOP DATA',
+      gtoTitle: 'GTO Explorer',
+      gtoHeadline: 'Navigate the action tree and inspect ranges, frequencies, and EV',
+      gtoDesc: 'Explore the complete GG R&C preflop tree and continue into available postflop strategy nodes on the same path.',
+      gtoFacts: ['2,588 preflop nodes', 'Hand frequency and strategy EV', 'IP / OOP action navigation'],
+      solverTag: 'KioSolver · LOCAL ENGINE',
+      solverTitle: 'Online KioSolver',
+      solverHeadline: 'Build the tree in your browser and solve on your computer',
+      solverDesc: 'Choose the board, ranges, bet sizes, and precision. The local engine returns strategy and EV for concrete suit combinations.',
+      solverFacts: ['One-click local setup', 'Uses your CPU and memory', 'Solve data stays on device']
     },
     flagship: {
       eyebrow: 'K2note MEMBER WORKSPACE · SIGNED IN',
@@ -4205,7 +4237,9 @@ function HomeView() {
       actionLabel: actionHandler ? copy.actions[item.action] : null
     };
   });
-  const supportingFeatureCards = featureCards.filter((feature) => feature.key !== 'reports');
+  const supportingFeatureCards = featureCards.filter(
+    (feature) => !['reports', 'gto', 'solver'].includes(feature.key)
+  );
 
   return (
     <div className="site site--home">
@@ -4227,40 +4261,38 @@ function HomeView() {
         </div>
       </nav>
 
-      <header className="hero hero--kish2note">
-        <div className="hero-copy">
-          <p className="eyebrow">{copy.hero.eyebrow}</p>
-          <h1>{copy.hero.product}</h1>
-          <h2>{copy.hero.title}</h2>
-          <p className="hero-description">{copy.hero.desc}</p>
-          <p className="hero-privacy"><i aria-hidden="true" />{copy.hero.privacy}</p>
-          <div className="cta-row">
-            <button type="button" className="primary hero-primary" onClick={openHistory}>{copy.hero.primaryCta}<span aria-hidden="true">→</span></button>
-            <button type="button" className="secondary hero-library" onClick={openInsights}>{copy.hero.secondaryCta}</button>
-          </div>
+      <section className="core-suite" aria-labelledby="core-suite-title">
+        <header className="core-suite-heading">
+          <p className="eyebrow">{copy.coreSuite.eyebrow}</p>
+          <h1 id="core-suite-title">{copy.coreSuite.title}</h1>
+          <p>{copy.coreSuite.desc}</p>
+        </header>
+        <div className="core-product-grid">
+          <article className="core-product core-product--k2note">
+            <header><span>01</span><i>{copy.coreSuite.k2noteTag}</i></header>
+            <div className="core-product-copy"><h2>{copy.hero.product}</h2><h3>{copy.hero.title}</h3><p>{copy.hero.desc}</p></div>
+            <div className="core-product-preview core-k2note-preview" aria-label={copy.hero.previewLabel}>
+              <div className="hero-preview-chart" aria-hidden="true"><svg viewBox="0 0 360 112" preserveAspectRatio="none"><path className="hero-chart-area" d="M0 96 C35 92 48 77 76 80 S118 64 142 68 S178 46 202 53 S240 30 266 39 S316 13 360 18 L360 112 L0 112 Z" /><path className="hero-chart-line" d="M0 96 C35 92 48 77 76 80 S118 64 142 68 S178 46 202 53 S240 30 266 39 S316 13 360 18" /><circle cx="360" cy="18" r="5" /></svg></div>
+              <div className="core-preview-facts">{copy.hero.previewItems.map((item) => <span key={item}>{item}</span>)}</div>
+            </div>
+            <footer><button type="button" className="core-product-primary" onClick={openHistory}>{copy.hero.primaryCta}<span aria-hidden="true">→</span></button><button type="button" className="core-product-secondary" onClick={openInsights}>{copy.hero.secondaryCta}</button></footer>
+          </article>
+          <article className="core-product core-product--gto">
+            <header><span>02</span><i>{copy.coreSuite.gtoTag}</i></header>
+            <div className="core-product-copy"><h2>{copy.coreSuite.gtoTitle}</h2><h3>{copy.coreSuite.gtoHeadline}</h3><p>{copy.coreSuite.gtoDesc}</p></div>
+            <div className="core-product-preview core-gto-preview" aria-hidden="true"><div className="core-gto-path"><b>BTN</b><span>Raise 2bb</span><i>→</i><b>BB</b><span>Call</span></div><div className="core-gto-matrix">{['AA', 'AKs', 'AQs', 'KK', 'KQs', 'A5s', 'QQ', 'JTs', '76s'].map((hand) => <span key={hand}>{hand}</span>)}</div></div>
+            <div className="core-product-facts">{copy.coreSuite.gtoFacts.map((fact) => <span key={fact}>{fact}</span>)}</div>
+            <footer><button type="button" className="core-product-primary" onClick={openGto}>{copy.actions.gto}<span aria-hidden="true">→</span></button></footer>
+          </article>
+          <article className="core-product core-product--solver">
+            <header><span>03</span><i>{copy.coreSuite.solverTag}</i></header>
+            <div className="core-product-copy"><h2>{copy.coreSuite.solverTitle}</h2><h3>{copy.coreSuite.solverHeadline}</h3><p>{copy.coreSuite.solverDesc}</p></div>
+            <div className="core-product-preview core-solver-preview" aria-hidden="true"><div className="core-solver-status"><span><i />LOCAL ENGINE</span><b>READY</b></div><div className="core-solver-board"><span className="suit-s">A♠</span><span className="suit-h">K♥</span><span className="suit-c">9♣</span></div><div className="core-solver-progress"><i /></div><div className="core-solver-metrics"><span>64 / 64</span><span>3.11 GiB</span><span>2.9981%</span></div></div>
+            <div className="core-product-facts">{copy.coreSuite.solverFacts.map((fact) => <span key={fact}>{fact}</span>)}</div>
+            <footer><button type="button" className="core-product-primary" onClick={openSolver}>{copy.actions.solver}<span aria-hidden="true">→</span></button></footer>
+          </article>
         </div>
-        <aside className="hero-analysis-preview" aria-label={copy.hero.previewLabel}>
-          <header><span>{copy.hero.previewLabel}</span><i>LOCAL</i></header>
-          <strong>{copy.hero.previewTitle}</strong>
-          <div className="hero-preview-chart" aria-hidden="true">
-            <svg viewBox="0 0 360 112" preserveAspectRatio="none">
-              <path className="hero-chart-area" d="M0 96 C35 92 48 77 76 80 S118 64 142 68 S178 46 202 53 S240 30 266 39 S316 13 360 18 L360 112 L0 112 Z" />
-              <path className="hero-chart-line" d="M0 96 C35 92 48 77 76 80 S118 64 142 68 S178 46 202 53 S240 30 266 39 S316 13 360 18" />
-              <circle cx="360" cy="18" r="5" />
-            </svg>
-          </div>
-          <div className="hero-preview-list">
-            {copy.hero.previewItems.map((item, index) => (
-              <div key={item}>
-                <span>{String(index + 1).padStart(2, '0')}</span>
-                <strong>{item}</strong>
-                <i aria-hidden="true">↗</i>
-              </div>
-            ))}
-          </div>
-          <footer>{copy.hero.previewFooter}</footer>
-        </aside>
-      </header>
+      </section>
 
       <section className="kish2note-showcase">
         <header>
