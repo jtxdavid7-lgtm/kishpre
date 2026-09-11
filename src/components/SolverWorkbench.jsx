@@ -21,7 +21,8 @@ import './SolverWorkbench.css';
 
 const TREE_POLICY_ID =
   'flop25-75-turn75-150-river33-75-150-raise75-ai50-floor-v1';
-const COMPANION_DOWNLOAD_URL = '/downloads/kishpoker-solver-companion-win-x64-0.1.2.zip';
+const COMPANION_DOWNLOAD_URL = '/downloads/kishpoker-solver-companion-win-x64-0.1.3-setup.exe';
+const COMPANION_FALLBACK_URL = '/downloads/kishpoker-solver-companion-win-x64-0.1.3.zip';
 const FIRST_VISIT_PREVIEW = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('solverPreview') === 'first-visit';
 const PRODUCTION_PREVIEW_BASE_URL = '/data/gto/gg-rnc-rb40-s000-production-preview-v1';
@@ -882,7 +883,7 @@ export function SolverWorkbench() {
           <i className={health?.status === 'ready' ? 'ready' : ''} />
           <span>{loading ? '正在连接本地服务' : health?.status === 'ready' ? '本地引擎就绪' : '本地引擎未连接'}</span>
           <small>API v1 · 仅监听本机</small>
-          <a href={COMPANION_DOWNLOAD_URL} download>下载 / 更新本地助手 · 33.3 MB</a>
+          <a href={COMPANION_DOWNLOAD_URL} download>下载 / 更新本地助手 · 一键安装</a>
         </aside>
       </section>
 
@@ -949,18 +950,19 @@ export function SolverWorkbench() {
         <section className="solver-companion-setup">
           <div>
             <span>WINDOWS LOCAL COMPANION</span>
-            <h2>先安装本地 Solver 助手</h2>
-            <p>网站只负责界面，牌树计算和结果都留在你的电脑。首次解压后双击 <b>install.cmd</b>，以后网页可直接唤起。</p>
+            <h2>双击一次，连接本地 Solver</h2>
+            <p>网站只负责界面，牌树计算和结果都留在你的电脑。首次下载后双击安装器，以后网页可直接唤起，不需要重复安装。</p>
           </div>
           <ol>
-            <li><b>1</b><span>下载并解压<small>Windows x64 · 33.3 MB</small></span></li>
-            <li><b>2</b><span>双击 install.cmd<small>只安装到当前 Windows 用户</small></span></li>
-            <li><b>3</b><span>回到这里重新连接<small>计算使用本机 CPU 和内存</small></span></li>
+            <li><b>1</b><span>下载安装器<small>Windows x64 · 33.0 MB</small></span></li>
+            <li><b>2</b><span>双击完成安装<small>无需管理员权限 · 首版可能显示“未知发布者”</small></span></li>
+            <li><b>3</b><span>回到这里重新检测<small>以后网页会自动关联本地引擎</small></span></li>
           </ol>
           <div className="solver-companion-actions">
-            <a href={COMPANION_DOWNLOAD_URL} download>下载本地 Solver</a>
+            <a href={COMPANION_DOWNLOAD_URL} download>一键安装本地 Solver</a>
             <a className="secondary" href="kishsolver://start">已安装，启动助手</a>
             <button type="button" onClick={() => void reconnectLocalSolver()}>重新检测</button>
+            <a className="secondary" href={COMPANION_FALLBACK_URL} download>ZIP 备用下载</a>
           </div>
         </section>
       )}

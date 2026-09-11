@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.1.2',
+    [string]$Version = '0.1.3',
     [string]$SolverBinary = 'F:\kish-gto\solver-engines\postflop-solver-gg\target\release\examples\gg_fulltree_direct_pack.exe'
 )
 
@@ -11,6 +11,7 @@ $stageRoot = Join-Path $outputRoot "kishpoker-solver-companion-win-x64-$Version"
 $runtimeRoot = Join-Path $stageRoot 'runtime'
 $downloadRoot = Join-Path $siteRoot 'public\downloads'
 $zipPath = Join-Path $downloadRoot "kishpoker-solver-companion-win-x64-$Version.zip"
+$installerPath = Join-Path $downloadRoot "kishpoker-solver-companion-win-x64-$Version-setup.exe"
 
 foreach ($required in @($SolverBinary, (Get-Command node.exe).Source)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
@@ -57,13 +58,81 @@ if (Test-Path -LiteralPath $zipPath) {
 }
 Compress-Archive -LiteralPath $stageRoot -DestinationPath $zipPath -CompressionLevel Optimal
 
+$iexpress = (Get-Command iexpress.exe -ErrorAction Stop).Source
+$installerBuildRoot = Join-Path ([IO.Path]::GetTempPath()) "kishpoker-solver-installer-$Version"
+$installerPayloadRoot = Join-Path $installerBuildRoot 'payload'
+$installerPayloadZip = Join-Path $installerPayloadRoot 'payload.zip'
+$installerBootstrap = Join-Path $installerPayloadRoot 'setup.cmd'
+$installerSed = Join-Path $installerBuildRoot 'installer.sed'
+$installerOutput = Join-Path $installerBuildRoot "kishpoker-solver-companion-win-x64-$Version-setup.exe"
+
+if (Test-Path -LiteralPath $installerBuildRoot) {
+    $resolvedInstallerBuild = (Resolve-Path -LiteralPath $installerBuildRoot).Path
+    $resolvedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+    if (-not $resolvedInstallerBuild.StartsWith($resolvedTemp, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Unsafe installer staging path: $resolvedInstallerBuild"
+    }
+    Remove-Item -LiteralPath $installerBuildRoot -Recurse -Force
+}
+New-Item -ItemType Directory -Force -Path $installerPayloadRoot | Out-Null
+Compress-Archive -Path (Join-Path $stageRoot '*') -DestinationPath $installerPayloadZip -CompressionLevel Optimal
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'companion\one-click-install.cmd') -Destination $installerBootstrap
+
+$installerOutputForSed = $installerOutput
+$installerPayloadForSed = $installerPayloadRoot.TrimEnd('\') + '\'
+$sedContent = @"
+[Version]
+Class=IEXPRESS
+SEDVersion=3
+[Options]
+PackagePurpose=InstallApp
+ShowInstallProgramWindow=1
+HideExtractAnimation=1
+UseLongFileName=1
+InsideCompressed=0
+CAB_FixedSize=0
+CAB_ResvCodeSigning=0
+RebootMode=N
+InstallPrompt=
+DisplayLicense=
+FinishMessage=
+TargetName=$installerOutputForSed
+FriendlyName=KishPoker Solver Setup
+AppLaunched=cmd.exe /d /c setup.cmd
+PostInstallCmd=<None>
+AdminQuietInstCmd=
+UserQuietInstCmd=
+SourceFiles=SourceFiles
+[Strings]
+FILE0="payload.zip"
+FILE1="setup.cmd"
+[SourceFiles]
+SourceFiles0=$installerPayloadForSed
+[SourceFiles0]
+%FILE0%=
+%FILE1%=
+"@
+Set-Content -LiteralPath $installerSed -Value $sedContent -Encoding ASCII
+$iexpressProcess = Start-Process -FilePath $iexpress -ArgumentList @('/N', '/Q', $installerSed) -Wait -PassThru -WindowStyle Hidden
+if ($iexpressProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $installerOutput -PathType Leaf)) {
+    throw "IExpress failed to build the one-click installer (exit $($iexpressProcess.ExitCode))."
+}
+Copy-Item -LiteralPath $installerOutput -Destination $installerPath -Force
+Remove-Item -LiteralPath $installerBuildRoot -Recurse -Force
+
 $zip = Get-Item -LiteralPath $zipPath
+$installer = Get-Item -LiteralPath $installerPath
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash.ToLowerInvariant()
+$installerHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installerPath).Hash.ToLowerInvariant()
 [pscustomobject]@{
     version = $Version
     zipPath = $zip.FullName
     zipBytes = $zip.Length
     zipMiB = [Math]::Round($zip.Length / 1MB, 2)
+    installerPath = $installer.FullName
+    installerBytes = $installer.Length
+    installerMiB = [Math]::Round($installer.Length / 1MB, 2)
+    installerSha256 = $installerHash
     solverBytes = (Get-Item -LiteralPath $SolverBinary).Length
     nodeBytes = (Get-Item -LiteralPath (Get-Command node.exe).Source).Length
     sha256 = $hash

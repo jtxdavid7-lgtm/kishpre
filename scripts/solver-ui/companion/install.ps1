@@ -17,6 +17,10 @@ if (Test-Path -LiteralPath $installRoot) {
     if (-not $resolvedInstall.StartsWith($installParent, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Refusing to replace unexpected installation path: $resolvedInstall"
     }
+    $installedNode = Join-Path $resolvedInstall 'node.exe'
+    Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.ExecutablePath -and $_.ExecutablePath.Equals($installedNode, [StringComparison]::OrdinalIgnoreCase) } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Remove-Item -LiteralPath $resolvedInstall -Recurse -Force
 }
 Copy-Item -LiteralPath $runtimeSource -Destination $installRoot -Recurse -Force
@@ -49,7 +53,9 @@ $shortcut.Save()
 
 Start-Process -FilePath $wscript -ArgumentList ('"{0}"' -f $launcher)
 Start-Sleep -Seconds 2
-Start-Process 'https://kishpoker.cn/?tool=solver'
+if ($env:KISH_SOLVER_INSTALL_NO_BROWSER -ne '1') {
+    Start-Process 'https://kishpoker.cn/?tool=solver'
+}
 
 Write-Host ''
 Write-Host 'KishPoker Solver Companion installed and started.' -ForegroundColor Green
