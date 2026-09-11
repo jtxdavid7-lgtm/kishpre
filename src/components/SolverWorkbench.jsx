@@ -290,10 +290,8 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode, eye
 
   const followAction = (action) => {
     const children = childNodesForAction(result.nodes, node, action);
-    const reachesNextStreet = children.some(
-      (candidate) => candidate.currentBoardText.length > node.currentBoardText.length
-    );
-    if (children.length === 1 && !reachesNextStreet) {
+    if (children.length === 1) {
+      setPendingSelection(null);
       void onSelectNode(children[0].id);
       return;
     }
