@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "datasetId": "gg-rnc-rb40-s000-production-preview-v1",
+  "title": "BTN vs BB 单次加注底池 · 生产样本预览",
+  "generatedAt": "2026-09-11T11:40:27.341Z",
+  "releaseStatus": "candidate-preview",
+  "releaseEligible": false,
+  "scenario": {
+    "id": "s000-bb-vs-btn-single-raised",
+    "positions": {
+      "oop": "BB",
+      "ip": "BTN"
+    },
+    "startingPotBb": 4.5,
+    "effectiveStackBb": 98
+  },
+  "solve": {
+    "mode": "fixed-iterations",
+    "maxIterations": 384,
+    "exportedStreets": [
+      "flop"
+    ],
+    "note": "转牌和河牌参与向后求解；当前预览只导出翻牌决策节点。"
+  },
+  "economics": {
+    "regularRakeRate": 0.03,
+    "regularRakeCapBb": 1.8,
+    "jpFlatDropThresholdBb": 30,
+    "jpFlatDropAmountBb": 1.5,
+    "note": "普通抽水已计入 40% rakeback；JP 不返。"
+  },
+  "tree": {
+    "policyId": "flop25-75-turn75-150-river33-75-150-raise75-ai50-floor-v1",
+    "flopBetPotFractions": [
+      0.25,
+      0.75
+    ],
+    "turnBetPotFractions": [
+      0.75,
+      1.5
+    ],
+    "riverBetPotFractions": [
+      0.33,
+      0.75,
+      1.5
+    ],
+    "raisePotAfterCallFraction": 0.75
+  },
+  "sampleCount": 4,
+  "samples": [
+    {
+      "id": "thjsqd",
+      "board": "ThJsQd",
+      "boardText": [
+        "Th",
+        "Js",
+        "Qd"
+      ],
+      "texture": "非配对彩虹",
+      "description": "高张连续彩虹面",
+      "asset": "boards/ThJsQd.json",
+      "byteLength": 4979666,
+      "sha256": "ea32d55d78da7333a2c19b8122f8a4f0b46b36e52e25fb41f612d7ba1a23a00a",
+      "maxIterations": 384,
+      "finalExploitabilityPotFraction": 0.0022166103590279818,
+      "decisionNodes": 20,
+      "treeHash": "415a7256c3876da57c78daf1eb107abdd91915f32a82438838f5bca984ca475b",
+      "rangeHash": "b506aed735539ed73ec1b87a87fb561e360b391c9f43bf4c31bf7678e273ece2",
+      "modelHash": "6afa8f7a6cf4eda644d65e8b21994fbe4a8c132ab92d663075a8ea996a671562"
+    },
+    {
+      "id": "thtskd",
+      "board": "ThTsKd",
+      "boardText": [
+        "Th",
+        "Ts",
+        "Kd"
+      ],
+      "texture": "配对彩虹",
+      "description": "高张配对彩虹面",
+      "asset": "boards/ThTsKd.json",
+      "byteLength": 4934322,
+      "sha256": "d7e16740c47a997ed8d87fb92d5dc67f286dde3a95d10726e80d869e68935578",
+      "maxIterations": 384,
+      "finalExploitabilityPotFraction": 0.0023728858213871717,
+      "decisionNodes": 20,
+      "treeHash": "415a7256c3876da57c78daf1eb107abdd91915f32a82438838f5bca984ca475b",
+      "rangeHash": "b506aed735539ed73ec1b87a87fb561e360b391c9f43bf4c31bf7678e273ece2",
+      "modelHash": "c7895d4df887d3c564d0ab6c39bd069c508f1452e20feeff3ab096eb57d17f90"
+    },
+    {
+      "id": "3hjsas",
+      "board": "3hJsAs",
+      "boardText": [
+        "3h",
+        "Js",
+        "As"
+      ],
+      "texture": "非配对双色",
+      "description": "A 高双色面",
+      "asset": "boards/3hJsAs.json",
+      "byteLength": 5008392,
+      "sha256": "99f08f0dd695d7cfa99ee97931807c91953082d92903759dd2149fa1b9915dee",
+      "maxIterations": 384,
+      "finalExploitabilityPotFraction": 0.0026289199013262987,
+      "decisionNodes": 20,
+      "treeHash": "415a7256c3876da57c78daf1eb107abdd91915f32a82438838f5bca984ca475b",
+      "rangeHash": "b506aed735539ed73ec1b87a87fb561e360b391c9f43bf4c31bf7678e273ece2",
+      "modelHash": "2e1a9705a8d691d1f40f93709584e183996276c69e2e08be59cd1a480786e32a"
+    },
+    {
+      "id": "3hjhjs",
+      "board": "3hJhJs",
+      "boardText": [
+        "3h",
+        "Jh",
+        "Js"
+      ],
+      "texture": "配对双色",
+      "description": "J 配对双色面",
+      "asset": "boards/3hJhJs.json",
+      "byteLength": 5117854,
+      "sha256": "fabd65e78f2776fbc5886ac4c7eb791f664b40ac197d3b2f53254d71c06aa279",
+      "maxIterations": 384,
+      "finalExploitabilityPotFraction": 0.002529847901314497,
+      "decisionNodes": 20,
+      "treeHash": "415a7256c3876da57c78daf1eb107abdd91915f32a82438838f5bca984ca475b",
+      "rangeHash": "b506aed735539ed73ec1b87a87fb561e360b391c9f43bf4c31bf7678e273ece2",
+      "modelHash": "16aafbd174c3e6dc94010e11276a39a2bce5dc24cb2d3801248b9c76ae6308e1"
+    }
+  ]
+}
