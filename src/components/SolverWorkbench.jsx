@@ -271,7 +271,7 @@ function StatusPanel({ job }) {
   );
 }
 
-function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode, eyebrow = '已验证输出' }) {
+function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode, onChooseRunout, eyebrow = '已验证输出' }) {
   const node = result.selectedNode;
   const actions = node.actions;
   const chosen = selectedHand || node.matrix.find((hand) => hand.reach > 0) || node.matrix[0];
@@ -290,8 +290,10 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode, eye
 
   const followAction = (action) => {
     const children = childNodesForAction(result.nodes, node, action);
-    if (children.length === 1) {
-      setPendingSelection(null);
+    const reachesNextStreet = children.some(
+      (candidate) => candidate.currentBoardText.length > node.currentBoardText.length
+    );
+    if (children.length === 1 && !reachesNextStreet) {
       void onSelectNode(children[0].id);
       return;
     }
@@ -429,6 +431,20 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode, eye
                 </button>
               );
             })}
+            {pendingChildren.some((candidate) => candidate.currentBoardText.length > node.currentBoardText.length) && node.street !== 'river' && (
+              <button
+                type="button"
+                className="solver-runout-picker"
+                onClick={() => onChooseRunout({
+                  action: pendingAction,
+                  node,
+                  index: node.street === 'flop' ? 0 : 1
+                })}
+              >
+                ＋ 选择其他{node.street === 'flop' ? '转牌' : '河牌'}
+                <small>重新计算这张牌</small>
+              </button>
+            )}
           </div>
         )}
         <details className="solver-advanced-nodes">
@@ -456,6 +472,7 @@ export function SolverWorkbench() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pickerTarget, setPickerTarget] = useState(null);
+  const [pendingRunoutNavigation, setPendingRunoutNavigation] = useState(null);
   const [rangeEditorTarget, setRangeEditorTarget] = useState(null);
   const [previewManifest, setPreviewManifest] = useState(null);
   const [previewSampleId, setPreviewSampleId] = useState('');
@@ -674,10 +691,18 @@ export function SolverWorkbench() {
         setActiveJob(current);
         setJobs((items) => [current, ...items.filter((item) => item.id !== current.id)]);
         if (current.status === 'succeeded' && !result) {
-          const nextResult = await getSolverResult(current.id, 0);
+          let nextResult = await getSolverResult(current.id, 0);
+          if (pendingRunoutNavigation) {
+            const targetNode = nextResult.nodes.find((candidate) => (
+              sameHistory(candidate.history, pendingRunoutNavigation.history)
+              && candidate.currentBoardText.join(',') === pendingRunoutNavigation.board.join(',')
+            ));
+            if (targetNode) nextResult = await getSolverResult(current.id, targetNode.id);
+          }
           if (!cancelled) {
             setResult(nextResult);
             setSelectedHand(null);
+            setPendingRunoutNavigation(null);
           }
         }
       } catch (cause) {
@@ -688,20 +713,24 @@ export function SolverWorkbench() {
     if (!ACTIVE_STATUSES.has(activeJobStatus)) return () => { cancelled = true; };
     const timer = setInterval(poll, 1000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [activeJobId, activeJobStatus, result]);
+  }, [activeJobId, activeJobStatus, pendingRunoutNavigation, result]);
 
-  const start = async () => {
+  const submitSolverRequest = async (body, navigation = null) => {
     setError('');
     setResult(null);
     setSelectedHand(null);
+    setPendingRunoutNavigation(navigation);
     try {
-      const job = await createSolverJob(requestBody);
+      const job = await createSolverJob(body);
       setActiveJob(job);
       setJobs((items) => [job, ...items.filter((item) => item.id !== job.id)]);
     } catch (cause) {
+      setPendingRunoutNavigation(null);
       setError(cause.message);
     }
   };
+
+  const start = () => submitSolverRequest(requestBody);
 
   const chooseJob = async (job) => {
     setError('');
@@ -745,13 +774,55 @@ export function SolverWorkbench() {
   };
 
   const takenBoardCards = useMemo(
-    () => new Set([...form.boardCards, ...form.runoutCards].filter(Boolean)),
-    [form.boardCards, form.runoutCards]
+    () => new Set([
+      ...form.boardCards,
+      ...form.runoutCards,
+      ...(pickerTarget?.sourceNode?.currentBoardText ?? [])
+    ].filter(Boolean)),
+    [form.boardCards, form.runoutCards, pickerTarget]
   );
   const currentRange = rangeEditorTarget ? form[rangeEditorTarget.field] : null;
 
   const pickBoardCard = (card) => {
     if (!pickerTarget) return;
+    if (pickerTarget.kind === 'result-runout') {
+      const sourceNode = pickerTarget.sourceNode;
+      const index = pickerTarget.index;
+      const nextRunoutCards = index === 0
+        ? [card, null]
+        : [sourceNode.currentBoardText[3], card];
+      const navigation = {
+        history: [
+          ...sourceNode.history,
+          {
+            id: pickerTarget.action.id,
+            actor: sourceNode.actor,
+            street: sourceNode.street
+          }
+        ],
+        board: [...sourceNode.currentBoardText, card]
+      };
+      setForm((current) => ({
+        ...current,
+        runoutCards: nextRunoutCards,
+        exportStreets: index === 0 && current.exportStreets === 'flop'
+          ? 'flop-turn'
+          : current.exportStreets
+      }));
+      setPickerTarget(null);
+      void submitSolverRequest({
+        ...requestBody,
+        export: {
+          ...requestBody.export,
+          streets: index === 0 && requestBody.export.streets === 'flop'
+            ? 'flop-turn'
+            : requestBody.export.streets,
+          turnCard: nextRunoutCards[0],
+          riverCard: index === 1 ? nextRunoutCards[1] : null
+        }
+      }, navigation);
+      return;
+    }
     setForm((current) => pickerTarget.kind === 'runout'
       ? {
           ...current,
@@ -1029,7 +1100,7 @@ export function SolverWorkbench() {
         </aside>
       </div>
 
-      {result && <ResultWorkspace result={result} selectedHand={selectedHand} onSelectHand={setSelectedHand} onSelectNode={(id) => void chooseNode(id)} />}
+      {result && <ResultWorkspace result={result} selectedHand={selectedHand} onSelectHand={setSelectedHand} onSelectNode={(id) => void chooseNode(id)} onChooseRunout={({ action, node, index }) => setPickerTarget({ kind: 'result-runout', action, sourceNode: node, index, currentValue: null })} />}
 
       <CardPickerModal
         open={Boolean(pickerTarget)}
@@ -1037,7 +1108,7 @@ export function SolverWorkbench() {
         takenCards={takenBoardCards}
         onClose={() => setPickerTarget(null)}
         onSelect={pickBoardCard}
-        title={pickerTarget?.kind === 'runout' ? `选择${pickerTarget.index === 0 ? '转牌' : '河牌'}` : '选择翻牌'}
+        title={pickerTarget?.kind === 'runout' || pickerTarget?.kind === 'result-runout' ? `选择${pickerTarget.index === 0 ? '转牌' : '河牌'}` : '选择翻牌'}
       />
 
       <RangeEditor
