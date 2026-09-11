@@ -12,6 +12,16 @@ import {
 
 const temporaryDirectories = [];
 
+function fixtureComboCards(comboIndex) {
+  let remaining = comboIndex;
+  for (let lowCard = 0; lowCard < 51; lowCard += 1) {
+    const rowLength = 51 - lowCard;
+    if (remaining < rowLength) return [lowCard + 1 + remaining, lowCard];
+    remaining -= rowLength;
+  }
+  throw new Error(`invalid fixture combo ${comboIndex}`);
+}
+
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) =>
     fs.rm(directory, { recursive: true, force: true })
@@ -26,8 +36,12 @@ async function compactFixture() {
   const buffer = Buffer.alloc(1326 * valuesPerRow * 4);
   for (let index = 0; index < 1326; index += 1) {
     const offset = index * valuesPerRow * 4;
+    if (fixtureComboCards(index).includes(50)) {
+      buffer.writeFloatLE(Number.NaN, offset);
+      continue;
+    }
     buffer.writeFloatLE(1, offset);
-    buffer.writeFloatLE(2, offset + 4);
+    buffer.writeFloatLE(index === 0 ? 3 : 2, offset + 4);
     buffer.writeFloatLE(0.25, offset + 8);
     buffer.writeFloatLE(1.5, offset + 12);
     buffer.writeFloatLE(0.75, offset + 16);
@@ -98,6 +112,18 @@ describe('solver compact pack web adapter', () => {
     expect(result.selectedNode.aggregate.totalEv).toBeCloseTo(2);
     expect(result.selectedNode.matrix.find((hand) => hand.label === 'AKs').actions.Check)
       .toBeCloseTo(0.25);
+    const aces = result.selectedNode.matrix.find((hand) => hand.label === 'AA');
+    expect(aces.combinations).toBe(3);
+    expect(aces.combos).toHaveLength(3);
+    expect(aces.combos.every((combo) => !combo.cards.includes('Ad'))).toBe(true);
+    const deuces = result.selectedNode.matrix.find((hand) => hand.label === '22');
+    expect(new Set(deuces.combos.map((combo) => combo.totalEv))).toEqual(new Set([2, 3]));
+    expect(deuces.combos[0]).toMatchObject({
+      cards: ['2s', '2h'],
+      totalEv: 3,
+      actions: { Check: 0.25, 'Bet 4.37': 0.75 },
+      actionEvs: { Check: 1.5, 'Bet 4.37': 2.25 }
+    });
   });
 
   it('builds a self-contained website-readable export', async () => {

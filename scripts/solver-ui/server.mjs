@@ -181,9 +181,14 @@ function commandArguments(job) {
     '--output',
     job.packPath
   ];
-  if (input.export.streets === 'flop-turn') {
+  if (input.export.streets !== 'flop') {
     args.push('--turn-card-limit', String(input.export.turnCardLimit));
   }
+  if (input.export.streets === 'flop-turn-river') {
+    args.push('--river-card-limit', String(input.export.riverCardLimit));
+  }
+  if (input.export.turnCard) args.push('--turn-card', input.export.turnCard);
+  if (input.export.riverCard) args.push('--river-card', input.export.riverCard);
   if (input.economics.model === 'zero-rake') args.push('--zero-rake');
   for (const position of ['oop', 'ip']) {
     const range = input.ranges[position];

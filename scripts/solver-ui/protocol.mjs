@@ -44,9 +44,12 @@ export const DEFAULT_SOLVER_JOB_INPUT = Object.freeze({
     targetExploitabilityPotFraction: 0
   }),
   export: Object.freeze({
-    streets: 'flop',
-    nodeLimit: 256,
-    turnCardLimit: 1
+    streets: 'flop-turn-river',
+    nodeLimit: 512,
+    turnCardLimit: 1,
+    riverCardLimit: 1,
+    turnCard: null,
+    riverCard: null
   })
 });
 
@@ -99,6 +102,18 @@ export function normalizeBoard(value) {
   return normalized.join('');
 }
 
+function normalizeOptionalCard(value, field) {
+  if (value == null || value === '') return null;
+  const card = String(value).trim();
+  if (card.length !== 2) fail(`${field} 必须是一张牌，例如 7d`, field);
+  const rank = card[0]?.toUpperCase();
+  const suit = card[1]?.toLowerCase();
+  if (!'23456789TJQKA'.includes(rank) || !'hsdc'.includes(suit)) {
+    fail(`${field} 不是有效扑克牌`, field);
+  }
+  return `${rank}${suit}`;
+}
+
 function normalizeRange(value, field) {
   if (!value || typeof value !== 'object') fail(`${field} 范围缺失`, field);
   if (value.format === 'text') {
@@ -134,9 +149,12 @@ export function normalizeSolverJobInput(raw = {}) {
     fail('未知抽水模型', 'economics.model');
   }
   const zeroRake = model === 'zero-rake';
+  const board = normalizeBoard(raw.board);
+  const turnCard = normalizeOptionalCard(exportRaw.turnCard, 'export.turnCard');
+  const riverCard = normalizeOptionalCard(exportRaw.riverCard, 'export.riverCard');
   const input = {
     schemaVersion: SOLVER_API_SCHEMA_VERSION,
-    board: normalizeBoard(raw.board),
+    board,
     potBb: chipNumber(raw.potBb, 'potBb', { minimum: 0.01, maximum: 100_000 }),
     effectiveStackBb: chipNumber(raw.effectiveStackBb, 'effectiveStackBb', {
       minimum: 0.01,
@@ -184,21 +202,39 @@ export function normalizeSolverJobInput(raw = {}) {
       )
     },
     export: {
-      streets: String(exportRaw.streets ?? 'flop'),
-      nodeLimit: integer(exportRaw.nodeLimit ?? 256, 'export.nodeLimit', 1, 20_000),
+      streets: String(exportRaw.streets ?? 'flop-turn-river'),
+      nodeLimit: integer(exportRaw.nodeLimit ?? 512, 'export.nodeLimit', 1, 20_000),
       turnCardLimit: integer(
         exportRaw.turnCardLimit ?? 1,
         'export.turnCardLimit',
         1,
         49
-      )
+      ),
+      riverCardLimit: integer(
+        exportRaw.riverCardLimit ?? 1,
+        'export.riverCardLimit',
+        1,
+        48
+      ),
+      turnCard,
+      riverCard
     }
   };
   if (input.treePolicyId !== SOLVER_TREE_POLICY_ID) {
     fail('首版只允许已确认的 KishPoker UI 动作树', 'treePolicyId');
   }
-  if (!['flop', 'flop-turn'].includes(input.export.streets)) {
-    fail('export.streets 只支持 flop 或 flop-turn', 'export.streets');
+  if (!['flop', 'flop-turn', 'flop-turn-river'].includes(input.export.streets)) {
+    fail('export.streets 只支持 flop、flop-turn 或 flop-turn-river', 'export.streets');
+  }
+  const boardCards = board.match(/.{2}/g) ?? [];
+  if (turnCard && boardCards.includes(turnCard)) {
+    fail('Turn 不能与翻牌重复', 'export.turnCard');
+  }
+  if (riverCard && !turnCard) {
+    fail('选择 River 前必须先选择 Turn', 'export.riverCard');
+  }
+  if (riverCard && [...boardCards, turnCard].includes(riverCard)) {
+    fail('River 不能与已有公共牌重复', 'export.riverCard');
   }
   return input;
 }

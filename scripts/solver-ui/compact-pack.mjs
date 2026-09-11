@@ -6,6 +6,7 @@ const RANKS_ASCENDING = Object.freeze([
   '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'
 ]);
 const RANKS_DESCENDING = Object.freeze([...RANKS_ASCENDING].reverse());
+const SUITS = Object.freeze(['h', 's', 'd', 'c']);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -32,6 +33,10 @@ function handLabel(cards) {
     `${RANKS_ASCENDING[Math.floor(high / 4)]}${RANKS_ASCENDING[Math.floor(low / 4)]}` +
     (high % 4 === low % 4 ? 's' : 'o')
   );
+}
+
+function cardText(card) {
+  return `${RANKS_ASCENDING[Math.floor(card / 4)]}${SUITS[card % 4]}`;
 }
 
 export function solverMatrixLabels() {
@@ -102,7 +107,8 @@ export async function decodeCompactPackNode(packPath, nodeId = 0) {
       totalEvReach: 0,
       actionReach: Array(actions.length).fill(0),
       actionEvWeighted: Array(actions.length).fill(0),
-      actionEvReach: Array(actions.length).fill(0)
+      actionEvReach: Array(actions.length).fill(0),
+      combos: []
     }])
   );
   const aggregate = {
@@ -117,10 +123,28 @@ export async function decodeCompactPackNode(packPath, nodeId = 0) {
     const offset = layout.byteOffset + comboIndex * valuesPerRow * 4;
     const reach = buffer.readFloatLE(offset);
     if (!Number.isFinite(reach)) continue;
-    const bucket = buckets.get(handLabel(comboCards(comboIndex)));
+    const cards = comboCards(comboIndex);
+    const bucket = buckets.get(handLabel(cards));
     bucket.combinations += 1;
-    if (!(reach > 0)) continue;
     const totalEv = buffer.readFloatLE(offset + 4);
+    const comboActions = {};
+    const comboActionEvs = {};
+    actions.forEach((action, actionIndex) => {
+      const actionOffset = offset + (2 + actionIndex * 2) * 4;
+      const frequency = buffer.readFloatLE(actionOffset);
+      const actionEv = buffer.readFloatLE(actionOffset + 4);
+      comboActions[action.id] = Number.isFinite(frequency) ? frequency : 0;
+      comboActionEvs[action.id] = Number.isFinite(actionEv) ? actionEv : null;
+    });
+    bucket.combos.push({
+      index: comboIndex,
+      cards: cards.map(cardText),
+      reach,
+      totalEv: Number.isFinite(totalEv) ? totalEv : null,
+      actions: comboActions,
+      actionEvs: comboActionEvs
+    });
+    if (!(reach > 0)) continue;
     bucket.reach += reach;
     aggregate.reach += reach;
     if (Number.isFinite(totalEv)) {
@@ -163,7 +187,8 @@ export async function decodeCompactPackNode(packPath, nodeId = 0) {
         bucket.actionEvReach[actionIndex] > 0
           ? bucket.actionEvWeighted[actionIndex] / bucket.actionEvReach[actionIndex]
           : null
-      ]))
+      ])),
+      combos: bucket.combos
     };
   });
   return {

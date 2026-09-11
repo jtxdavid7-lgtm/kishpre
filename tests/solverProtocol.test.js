@@ -13,6 +13,13 @@ describe('solver UI protocol', () => {
     const input = normalizeSolverJobInput(DEFAULT_SOLVER_JOB_INPUT);
     expect(input.board).toBe('AsKh9c');
     expect(input.treePolicyId).toBe(SOLVER_TREE_POLICY_ID);
+    expect(input.export).toMatchObject({
+      streets: 'flop-turn-river',
+      turnCardLimit: 1,
+      riverCardLimit: 1,
+      turnCard: null,
+      riverCard: null
+    });
     expect(input.economics).toEqual({
       model: 'gg-rnc-rb40',
       rakeRate: 0.03,
@@ -44,6 +51,22 @@ describe('solver UI protocol', () => {
         ip: DEFAULT_SOLVER_JOB_INPUT.ranges.ip
       }
     })).toThrow('1326');
+  });
+
+  it('normalizes a selected turn and river without allowing duplicate board cards', () => {
+    const input = normalizeSolverJobInput({
+      ...DEFAULT_SOLVER_JOB_INPUT,
+      export: { ...DEFAULT_SOLVER_JOB_INPUT.export, turnCard: '7D', riverCard: 'tc' }
+    });
+    expect(input.export).toMatchObject({ turnCard: '7d', riverCard: 'Tc' });
+    expect(() => normalizeSolverJobInput({
+      ...DEFAULT_SOLVER_JOB_INPUT,
+      export: { ...DEFAULT_SOLVER_JOB_INPUT.export, turnCard: 'As' }
+    })).toThrow('翻牌重复');
+    expect(() => normalizeSolverJobInput({
+      ...DEFAULT_SOLVER_JOB_INPUT,
+      export: { ...DEFAULT_SOLVER_JOB_INPUT.export, turnCard: null, riverCard: 'Tc' }
+    })).toThrow('必须先选择 Turn');
   });
 
   it('uses a stable input hash independent of object key order', () => {

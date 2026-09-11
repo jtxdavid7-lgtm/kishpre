@@ -16,11 +16,12 @@ import {
   solverTextToRangeMap,
   summarizeSolverRange
 } from '../lib/solverRange.js';
+import { childNodesForAction, sameHistory } from '../lib/solverNavigation.js';
 import './SolverWorkbench.css';
 
 const TREE_POLICY_ID =
   'flop25-75-turn75-150-river33-75-150-raise75-ai50-floor-v1';
-const COMPANION_DOWNLOAD_URL = '/downloads/kishpoker-solver-companion-win-x64-0.1.0.zip';
+const COMPANION_DOWNLOAD_URL = '/downloads/kishpoker-solver-companion-win-x64-0.1.1.zip';
 const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
 const SUIT_ICON = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const ACTION_COLORS = ['#2dd4bf', '#f59e0b', '#fb7185', '#818cf8', '#38bdf8', '#c084fc'];
@@ -101,7 +102,19 @@ function matrixGradient(hand, actions) {
     cursor = next;
   });
   if (cursor < 100) stops.push(`#1b2433 ${cursor}% 100%`);
-  return `linear-gradient(135deg, ${stops.join(', ')})`;
+  return `linear-gradient(90deg, ${stops.join(', ')})`;
+}
+
+function ComboCards({ cards }) {
+  return cards.map((card) => (
+    <span key={card} className={`solver-combo-card suit-${card[1]}`}>
+      {card[0]}{SUIT_ICON[card[1]]}
+    </span>
+  ));
+}
+
+function boardCardLabel(card) {
+  return card ? `${card[0]}${SUIT_ICON[card[1]]}` : '下一街';
 }
 
 async function fileToRange(file) {
@@ -202,11 +215,35 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode }) {
   const node = result.selectedNode;
   const actions = node.actions;
   const chosen = selectedHand || node.matrix.find((hand) => hand.reach > 0) || node.matrix[0];
+  const [pendingSelection, setPendingSelection] = useState(null);
+  const pendingAction = pendingSelection?.nodeId === node.id ? pendingSelection.action : null;
+  const pendingChildren = pendingAction
+    ? childNodesForAction(result.nodes, node, pendingAction)
+    : [];
+  const parentNode = node.history.length === 0
+    ? null
+    : result.nodes.find((candidate) => {
+        if (!sameHistory(candidate.history, node.history.slice(0, -1))) return false;
+        const previousBoard = node.history.at(-1)?.currentBoard ?? [];
+        return candidate.currentBoard?.join(',') === previousBoard.join(',');
+      });
+
+  const followAction = (action) => {
+    const children = childNodesForAction(result.nodes, node, action);
+    const reachesNextStreet = children.some(
+      (candidate) => candidate.currentBoardText.length > node.currentBoardText.length
+    );
+    if (children.length === 1 && !reachesNextStreet) {
+      void onSelectNode(children[0].id);
+      return;
+    }
+    setPendingSelection({ nodeId: node.id, action });
+  };
   return (
     <section className="solver-result-shell">
       <header className="solver-result-heading">
         <div>
-          <span>已验证输出 · {result.manifest.boardText.join(' ')}</span>
+          <span>已验证输出 · {node.currentBoardText.map(boardCardLabel).join(' ')}</span>
           <h2>{node.street.toUpperCase()} · {node.actor} 决策</h2>
           <p>范围 EV {evLabel(node.aggregate.totalEv)} · 节点 reach {node.aggregate.reach.toFixed(2)}</p>
         </div>
@@ -232,12 +269,12 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode }) {
                     role="gridcell"
                     key={hand.label}
                     className={`${chosen?.label === hand.label ? 'active' : ''}${hand.reach <= 0 ? ' empty' : ''}`}
-                    style={{ background: matrixGradient(hand, actions) }}
                     title={`${hand.label} · EV ${evLabel(hand.totalEv)}`}
                     onClick={() => onSelectHand(hand)}
                   >
                     <strong>{hand.label}</strong>
                     <small>{hand.reach > 0 ? evLabel(hand.totalEv) : '—'}</small>
+                    <i className="solver-matrix-mix" style={{ background: matrixGradient(hand, actions) }} />
                   </button>
                 ))}
               </div>
@@ -261,36 +298,81 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode }) {
               </div>
             ))}
           </div>
+          <section className="solver-combo-detail">
+            <header>
+              <span>具体花色组合</span>
+              <b>{chosen.combos?.filter((combo) => combo.reach > 0).length ?? 0} 个在范围内</b>
+            </header>
+            <div className="solver-combo-list">
+              {(chosen.combos ?? []).map((combo) => (
+                <article key={combo.index} className={combo.reach > 0 ? '' : 'inactive'}>
+                  <header>
+                    <strong><ComboCards cards={combo.cards} /></strong>
+                    <b>{combo.reach > 0 ? evLabel(combo.totalEv) : '不在范围'}</b>
+                  </header>
+                  {combo.reach > 0 && (
+                    <div className="solver-combo-actions">
+                      {actions.map((action, index) => (
+                        <span key={action.id} title={`${actionName(action)} · 行动 EV ${evLabel(combo.actionEvs[action.id])}`}>
+                          <i style={{ background: actionColor(index) }} />
+                          {percentage(combo.actions[action.id])}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          </section>
         </aside>
       </div>
-      <section className="solver-node-browser">
-        <header><div><span>节点树与行动路径</span><h3>{result.nodes.length} 个已导出决策节点</h3></div><p>点击节点即可切换矩阵；缩进表示行动深度。</p></header>
-        <div className="solver-node-layout">
-          <nav aria-label="求解节点树">
+      <section className="solver-line-browser">
+        <header>
+          <div>
+            <span>按牌桌顺序查看策略</span>
+            <h3>{node.street.toUpperCase()} · 轮到 {node.actor}</h3>
+            <p>{node.currentBoardText.map(boardCardLabel).join('  ')} · 底池 {node.state.potBb.toFixed(2)}bb</p>
+          </div>
+          {parentNode && <button type="button" className="solver-line-back" onClick={() => void onSelectNode(parentNode.id)}>← 返回上一步</button>}
+        </header>
+        <div className="solver-line-actions">
+          {actions.map((action, index) => {
+            const children = childNodesForAction(result.nodes, node, action);
+            return (
+              <button type="button" key={action.id} onClick={() => followAction(action)} style={{ '--action-color': actionColor(index) }}>
+                <i />
+                <span><b>{node.actor} · {actionName(action)}</b><small>点击查看后续策略</small></span>
+                <strong>{percentage(node.aggregate.actions[action.id])}</strong>
+                {children.length > 1 && <em>{children.length} 张出牌</em>}
+              </button>
+            );
+          })}
+        </div>
+        {pendingAction && (
+          <div className="solver-runout-choices">
+            <header><span>{actionName(pendingAction)}之后</span><b>{pendingChildren.length > 0 ? '选择下一张公共牌' : '这条行动已结束牌局'}</b></header>
+            {pendingChildren.map((candidate) => {
+              const nextCard = candidate.currentBoardText[node.currentBoardText.length];
+              return (
+                <button type="button" key={candidate.id} className={`suit-${nextCard?.[1] ?? ''}`} onClick={() => void onSelectNode(candidate.id)}>
+                  {boardCardLabel(nextCard)}
+                  <small>进入 {candidate.street.toUpperCase()}</small>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <details className="solver-advanced-nodes">
+          <summary>高级：查看全部 {result.nodes.length} 个内部节点</summary>
+          <nav aria-label="全部求解节点">
             {result.nodes.map((candidate) => (
-              <button
-                type="button"
-                key={candidate.id}
-                className={candidate.id === node.id ? 'active' : ''}
-                style={{ '--node-depth': Math.min(candidate.history.length, 8) }}
-                onClick={() => onSelectNode(candidate.id)}
-              >
+              <button type="button" key={candidate.id} className={candidate.id === node.id ? 'active' : ''} onClick={() => void onSelectNode(candidate.id)}>
                 <span>#{candidate.id} · {candidate.street} · {candidate.actor}</span>
-                <small>{candidate.history.at(-1)?.id ?? '根节点'} · {candidate.state.potBb.toFixed(2)}bb pot</small>
+                <small>{candidate.history.at(-1)?.id ?? '根节点'} · {candidate.state.potBb.toFixed(2)}bb</small>
               </button>
             ))}
           </nav>
-          <div className="solver-path-detail">
-            <span>当前行动路径</span>
-            {node.history.length === 0
-              ? <p className="solver-root-path">根节点，没有先前行动。</p>
-              : node.history.map((step, index) => (
-                <div key={`${step.id}-${index}`}>
-                  <i>{index + 1}</i><b>{step.street} · {step.actor}</b><span>{step.id}</span>
-                </div>
-              ))}
-          </div>
-        </div>
+        </details>
       </section>
     </section>
   );
@@ -308,6 +390,7 @@ export function SolverWorkbench() {
   const [rangeEditorTarget, setRangeEditorTarget] = useState(null);
   const [form, setForm] = useState({
     boardCards: ['As', 'Kh', '9c'],
+    runoutCards: [null, null],
     potBb: 17.5,
     effectiveStackBb: 92,
     oopRange: { format: 'text', value: rangeMapToSolverText(DEFAULT_OOP_RANGE), map: DEFAULT_OOP_RANGE },
@@ -316,8 +399,9 @@ export function SolverWorkbench() {
     ...ECONOMIC_PRESETS['gg-rnc-rb40'],
     maxIterations: 64,
     targetExploitabilityPotFraction: 0,
-    exportStreets: 'flop',
-    turnCardLimit: 1
+    exportStreets: 'flop-turn-river',
+    turnCardLimit: 1,
+    riverCardLimit: 1
   });
   const activeJobId = activeJob?.id;
   const activeJobStatus = activeJob?.status;
@@ -350,8 +434,11 @@ export function SolverWorkbench() {
     },
     export: {
       streets: form.exportStreets,
-      nodeLimit: 256,
-      turnCardLimit: Number(form.turnCardLimit)
+      nodeLimit: 512,
+      turnCardLimit: Number(form.turnCardLimit),
+      riverCardLimit: Number(form.riverCardLimit),
+      turnCard: form.exportStreets === 'flop' ? null : form.runoutCards[0],
+      riverCard: form.exportStreets === 'flop-turn-river' ? form.runoutCards[1] : null
     }
   }), [form]);
 
@@ -459,15 +546,23 @@ export function SolverWorkbench() {
     }
   };
 
-  const takenBoardCards = useMemo(() => new Set(form.boardCards.filter(Boolean)), [form.boardCards]);
+  const takenBoardCards = useMemo(
+    () => new Set([...form.boardCards, ...form.runoutCards].filter(Boolean)),
+    [form.boardCards, form.runoutCards]
+  );
   const currentRange = rangeEditorTarget ? form[rangeEditorTarget.field] : null;
 
   const pickBoardCard = (card) => {
     if (!pickerTarget) return;
-    setForm((current) => ({
-      ...current,
-      boardCards: current.boardCards.map((value, index) => (index === pickerTarget.index ? card : value))
-    }));
+    setForm((current) => pickerTarget.kind === 'runout'
+      ? {
+          ...current,
+          runoutCards: current.runoutCards.map((value, index) => (index === pickerTarget.index ? card : value))
+        }
+      : {
+          ...current,
+          boardCards: current.boardCards.map((value, index) => (index === pickerTarget.index ? card : value))
+        });
     setPickerTarget(null);
   };
 
@@ -475,6 +570,15 @@ export function SolverWorkbench() {
     setForm((current) => ({
       ...current,
       boardCards: current.boardCards.map((value, cardIndex) => (cardIndex === index ? null : value))
+    }));
+  };
+
+  const clearRunoutCard = (index) => {
+    setForm((current) => ({
+      ...current,
+      runoutCards: current.runoutCards.map((value, cardIndex) => (
+        cardIndex === index || (index === 0 && cardIndex === 1) ? null : value
+      ))
     }));
   };
 
@@ -532,7 +636,7 @@ export function SolverWorkbench() {
                       key={`solver-board-${index}`}
                       type="button"
                       className={classes.join(' ')}
-                      onClick={() => setPickerTarget({ index, currentValue: card })}
+                      onClick={() => setPickerTarget({ kind: 'flop', index, currentValue: card })}
                     >
                       <span className="card-face">
                         <span className="card-rank">{card?.[0] ?? '--'}</span>
@@ -549,6 +653,33 @@ export function SolverWorkbench() {
             <label><span>底池（bb）</span><input type="number" step="0.01" min="0.01" value={form.potBb} onChange={(event) => updateForm('potBb', event.target.value)} /></label>
             <label><span>有效筹码（bb）</span><input type="number" step="0.01" min="0.01" value={form.effectiveStackBb} onChange={(event) => updateForm('effectiveStackBb', event.target.value)} /></label>
           </div>
+          {form.exportStreets !== 'flop' && (
+            <div className="solver-runout-field">
+              <span>指定出牌预览 <small>留空则自动选一张可用牌</small></span>
+              <div className="solver-runout-slots">
+                {form.runoutCards.map((card, index) => {
+                  const disabled = index === 1 && (
+                    form.exportStreets !== 'flop-turn-river' || !form.runoutCards[0]
+                  );
+                  const classes = ['solver-runout-slot'];
+                  if (card) classes.push('filled', `suit-${card[1]}`);
+                  return (
+                    <button
+                      key={`solver-runout-${index}`}
+                      type="button"
+                      className={classes.join(' ')}
+                      disabled={disabled}
+                      onClick={() => setPickerTarget({ kind: 'runout', index, currentValue: card })}
+                    >
+                      <small>{index === 0 ? 'TURN' : 'RIVER'}</small>
+                      <b>{card ? boardCardLabel(card) : '选择牌'}</b>
+                      {card && <span onClick={(event) => { event.stopPropagation(); clearRunoutCard(index); }}>×</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="solver-ranges">
             <SolverRangeSelector label="OOP 范围" value={form.oopRange} onChange={(value) => updateForm('oopRange', value)} onEdit={() => openRangeEditor('oopRange')} onError={setError} />
             <SolverRangeSelector label="IP 范围" value={form.ipRange} onChange={(value) => updateForm('ipRange', value)} onEdit={() => openRangeEditor('ipRange')} onError={setError} />
@@ -571,8 +702,9 @@ export function SolverWorkbench() {
           <div className="solver-solve-fields">
             <label><span>最大迭代</span><input type="number" min="1" max="100000" value={form.maxIterations} onChange={(event) => updateForm('maxIterations', event.target.value)} /></label>
             <label><span>目标 exploitability / pot</span><input type="number" step="0.0001" min="0" max="1" value={form.targetExploitabilityPotFraction} onChange={(event) => updateForm('targetExploitabilityPotFraction', event.target.value)} /></label>
-            <label><span>导出街道</span><select value={form.exportStreets} onChange={(event) => updateForm('exportStreets', event.target.value)}><option value="flop">翻牌节点（推荐）</option><option value="flop-turn">翻牌 + 转牌预览</option></select></label>
-            {form.exportStreets === 'flop-turn' && <label><span>转牌样本数 / 边界</span><input type="number" min="1" max="49" value={form.turnCardLimit} onChange={(event) => updateForm('turnCardLimit', event.target.value)} /></label>}
+            <label><span>查看街道</span><select value={form.exportStreets} onChange={(event) => updateForm('exportStreets', event.target.value)}><option value="flop">只看 Flop</option><option value="flop-turn">Flop + Turn</option><option value="flop-turn-river">Flop + Turn + River（推荐）</option></select></label>
+            {form.exportStreets !== 'flop' && !form.runoutCards[0] && <label><span>Turn 自动出牌数</span><input type="number" min="1" max="49" value={form.turnCardLimit} onChange={(event) => updateForm('turnCardLimit', event.target.value)} /></label>}
+            {form.exportStreets === 'flop-turn-river' && !form.runoutCards[1] && <label><span>每个 Turn 的 River 自动出牌数</span><input type="number" min="1" max="48" value={form.riverCardLimit} onChange={(event) => updateForm('riverCardLimit', event.target.value)} /></label>}
           </div>
           <div className="solver-run-actions">
             <button type="button" className="solver-run" disabled={health?.status !== 'ready' || !form.boardCards.every(Boolean) || ACTIVE_STATUSES.has(activeJob?.status)} onClick={start}>启动求解</button>
@@ -604,7 +736,7 @@ export function SolverWorkbench() {
         takenCards={takenBoardCards}
         onClose={() => setPickerTarget(null)}
         onSelect={pickBoardCard}
-        title="选择翻牌"
+        title={pickerTarget?.kind === 'runout' ? `选择${pickerTarget.index === 0 ? '转牌' : '河牌'}` : '选择翻牌'}
       />
 
       <RangeEditor

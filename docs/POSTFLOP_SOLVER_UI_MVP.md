@@ -102,7 +102,8 @@ solver 自身 manifest 继续记录 tree/range/model hash、binary/source proven
 
 ## MVP 限制
 
-- solver 始终内部求解 flop/turn/river；界面默认只导出完整翻牌决策节点，以避免一次交互生成巨大结果。
-- 可选择 `flop-turn` 做有限转牌样本预览；当前 exporter 不发布河牌逐组合行，但河牌尺寸已参与反向求解。
+- solver 始终内部求解 flop/turn/river；界面可按行动顺序查看三个街道的策略。
+- Turn 与 River 使用用户指定的出牌，或按边界导出有限样本，避免一次生成数十 GB 的完整逐组合结果；未导出的分支仍参与反向求解。
+- 每个已导出节点保留 1326 个具体花色组合的 reach、总 EV、行动频率和行动 EV，网页同时提供 13×13 聚合矩阵与组合明细。
 - 低迭代结果是研发预览。现有验收已证明不同拓扑需要分层精度，不能仅凭进程成功或自报 exploitability 升级为正式解。
 - 本地 API 只应监听 loopback；它不是公网多租户服务。
