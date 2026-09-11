@@ -21,10 +21,34 @@ import './SolverWorkbench.css';
 
 const TREE_POLICY_ID =
   'flop25-75-turn75-150-river33-75-150-raise75-ai50-floor-v1';
-const COMPANION_DOWNLOAD_URL = '/downloads/kishpoker-solver-companion-win-x64-0.1.1.zip';
+const COMPANION_DOWNLOAD_URL = '/downloads/kishpoker-solver-companion-win-x64-0.1.2.zip';
+const PRODUCTION_PREVIEW_BASE_URL = '/data/gto/gg-rnc-rb40-s000-production-preview-v1';
+const PRODUCTION_PREVIEW_MANIFEST_URL = `${PRODUCTION_PREVIEW_BASE_URL}/manifest.json`;
 const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
 const SUIT_ICON = { s: '♠', h: '♥', d: '♦', c: '♣' };
-const ACTION_COLORS = ['#2dd4bf', '#f59e0b', '#fb7185', '#818cf8', '#38bdf8', '#c084fc'];
+const ACTION_COLORS = Object.freeze({
+  check: '#2dd4bf',
+  call: '#38bdf8',
+  fold: '#64748b',
+  allin: '#ef4444',
+  aggressive: ['#facc15', '#fb923c', '#f43f5e', '#a855f7']
+});
+const TREE_SIZE_OPTIONS = Object.freeze({
+  flop: [0.2, 0.25, 0.33, 0.5, 0.66, 0.75, 1, 1.25, 1.5],
+  turn: [0.25, 0.33, 0.5, 0.66, 0.75, 1, 1.25, 1.5, 2],
+  river: [0.25, 0.33, 0.5, 0.66, 0.75, 1, 1.25, 1.5, 2]
+});
+const TREE_PRESETS = Object.freeze({
+  fast: { flop: [0.33], turn: [0.75], river: [0.75] },
+  standard: { flop: [0.25, 0.75], turn: [0.75, 1.5], river: [0.33, 0.75, 1.5] },
+  detailed: { flop: [0.25, 0.5, 0.75], turn: [0.5, 0.75, 1.5], river: [0.33, 0.75, 1.25, 2] }
+});
+const ACCURACY_PRESETS = Object.freeze([
+  { id: 'preview', label: '快速预览', iterations: 32, target: 0 },
+  { id: 'standard', label: '标准', iterations: 64, target: 0 },
+  { id: 'fine', label: '精细', iterations: 128, target: 0.002 },
+  { id: 'high', label: '高精度', iterations: 256, target: 0.001 }
+]);
 const ACTIVE_STATUSES = new Set(['queued', 'running', 'stopping']);
 const STATUS_LABELS = {
   queued: '排队中',
@@ -76,19 +100,50 @@ function dateLabel(value) {
   }).format(new Date(value));
 }
 
-function actionColor(index) {
-  return ACTION_COLORS[index % ACTION_COLORS.length];
+function actionColor(action, index, actions = []) {
+  const kind = action?.kind === 'all-in' ? 'allin' : action?.kind;
+  if (ACTION_COLORS[kind]) return ACTION_COLORS[kind];
+  if (kind === 'bet' || kind === 'raise') {
+    const aggressive = actions
+      .filter((candidate) => ['bet', 'raise'].includes(candidate.kind))
+      .sort((left, right) => left.amountBb - right.amountBb);
+    const sizeIndex = Math.max(0, aggressive.findIndex((candidate) => candidate.id === action.id));
+    return ACTION_COLORS.aggressive[Math.min(sizeIndex, ACTION_COLORS.aggressive.length - 1)];
+  }
+  return ACTION_COLORS.aggressive[index % ACTION_COLORS.aggressive.length];
 }
 
-function actionName(action) {
+function actionPotFraction(action, node) {
+  if (!action || !node || !Number.isFinite(action.amountBb) || action.amountBb <= 0) return null;
+  const kind = action.kind === 'all-in' ? 'allin' : action.kind;
+  if (kind === 'bet' || (kind === 'allin' && !(node.state.toCallBb > 0))) {
+    return node.state.potBb > 0 ? action.amountBb / node.state.potBb : null;
+  }
+  if (kind === 'raise' || (kind === 'allin' && node.state.toCallBb > 0)) {
+    const raiseAmount = action.amountBb - node.state.toCallBb;
+    const potAfterCall = node.state.potBb + node.state.toCallBb;
+    return raiseAmount > 0 && potAfterCall > 0 ? raiseAmount / potAfterCall : null;
+  }
+  return null;
+}
+
+function potFractionLabel(value) {
+  if (!Number.isFinite(value)) return '';
+  const percent = value * 100;
+  return `${Number.isInteger(Math.round(percent * 10) / 10) ? percent.toFixed(0) : percent.toFixed(1)}% pot`;
+}
+
+function actionName(action, node = null) {
   if (!action) return '未知行动';
-  if (action.kind === 'check') return '过牌';
-  if (action.kind === 'fold') return '弃牌';
-  if (action.kind === 'call') return `跟注 ${action.amountBb.toFixed(2)}bb`;
-  if (action.kind === 'all-in') return `All-in ${action.amountBb.toFixed(2)}bb`;
-  if (action.kind === 'bet') return `下注 ${action.amountBb.toFixed(2)}bb`;
-  if (action.kind === 'raise') return `加注 ${action.amountBb.toFixed(2)}bb`;
-  return action.id;
+  let label = action.id;
+  if (action.kind === 'check') label = '过牌';
+  else if (action.kind === 'fold') label = '弃牌';
+  else if (action.kind === 'call') label = `跟注 ${action.amountBb.toFixed(2)}bb`;
+  else if (action.kind === 'all-in' || action.kind === 'allin') label = `All-in ${action.amountBb.toFixed(2)}bb`;
+  else if (action.kind === 'bet') label = `下注 ${action.amountBb.toFixed(2)}bb`;
+  else if (action.kind === 'raise') label = `加注 ${action.amountBb.toFixed(2)}bb`;
+  const potLabel = potFractionLabel(actionPotFraction(action, node));
+  return potLabel ? `${label}（${potLabel}）` : label;
 }
 
 function matrixGradient(hand, actions) {
@@ -98,7 +153,7 @@ function matrixGradient(hand, actions) {
     const frequency = Math.max(0, Math.min(1, hand.actions[action.id] ?? 0));
     if (frequency <= 0) return;
     const next = Math.min(100, cursor + frequency * 100);
-    stops.push(`${actionColor(index)} ${cursor}% ${next}%`);
+    stops.push(`${actionColor(action, index, actions)} ${cursor}% ${next}%`);
     cursor = next;
   });
   if (cursor < 100) stops.push(`#1b2433 ${cursor}% 100%`);
@@ -115,6 +170,11 @@ function ComboCards({ cards }) {
 
 function boardCardLabel(card) {
   return card ? `${card[0]}${SUIT_ICON[card[1]]}` : '下一街';
+}
+
+function handRetention(hand) {
+  if (Number.isFinite(hand.retention)) return Math.max(0, Math.min(1, hand.retention));
+  return hand.combinations > 0 ? Math.max(0, Math.min(1, hand.reach / hand.combinations)) : 0;
 }
 
 async function fileToRange(file) {
@@ -211,7 +271,7 @@ function StatusPanel({ job }) {
   );
 }
 
-function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode }) {
+function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode, eyebrow = '已验证输出' }) {
   const node = result.selectedNode;
   const actions = node.actions;
   const chosen = selectedHand || node.matrix.find((hand) => hand.reach > 0) || node.matrix[0];
@@ -243,20 +303,24 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode }) {
     <section className="solver-result-shell">
       <header className="solver-result-heading">
         <div>
-          <span>已验证输出 · {node.currentBoardText.map(boardCardLabel).join(' ')}</span>
+          <span>{eyebrow} · {node.currentBoardText.map(boardCardLabel).join(' ')}</span>
           <h2>{node.street.toUpperCase()} · {node.actor} 决策</h2>
           <p>范围 EV {evLabel(node.aggregate.totalEv)} · 节点 reach {node.aggregate.reach.toFixed(2)}</p>
         </div>
         <div className="solver-result-actions">
           {actions.map((action, index) => (
-            <span key={action.id} style={{ '--action-color': actionColor(index) }}>
-              <i />{actionName(action)} <b>{percentage(node.aggregate.actions[action.id])}</b>
+            <span key={action.id} style={{ '--action-color': actionColor(action, index, actions) }}>
+              <i />{actionName(action, node)} <b>{percentage(node.aggregate.actions[action.id])}</b>
             </span>
           ))}
         </div>
       </header>
       <div className="solver-result-grid">
         <section className="solver-matrix-panel">
+          <header className="solver-matrix-legend">
+            <span>格子填充高度 = 从翻后起点保留到当前节点的比例</span>
+            <b>根节点 100%</b>
+          </header>
           <div className="solver-matrix" role="grid" aria-label="13 乘 13 手牌矩阵">
             <span className="solver-matrix-corner" />
             {RANKS.map((rank) => <b className="solver-matrix-axis" key={`c-${rank}`}>{rank}</b>)}
@@ -269,12 +333,18 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode }) {
                     role="gridcell"
                     key={hand.label}
                     className={`${chosen?.label === hand.label ? 'active' : ''}${hand.reach <= 0 ? ' empty' : ''}`}
-                    title={`${hand.label} · EV ${evLabel(hand.totalEv)}`}
+                    title={`${hand.label} · EV ${evLabel(hand.totalEv)} · 保留 ${percentage(handRetention(hand))}`}
                     onClick={() => onSelectHand(hand)}
                   >
                     <strong>{hand.label}</strong>
                     <small>{hand.reach > 0 ? evLabel(hand.totalEv) : '—'}</small>
-                    <i className="solver-matrix-mix" style={{ background: matrixGradient(hand, actions) }} />
+                    <i
+                      className="solver-matrix-fill"
+                      style={{
+                        height: `${handRetention(hand) * 100}%`,
+                        background: matrixGradient(hand, actions)
+                      }}
+                    />
                   </button>
                 ))}
               </div>
@@ -286,14 +356,15 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode }) {
           <h3>{chosen.label}</h3>
           <dl>
             <div><dt>范围权重</dt><dd>{chosen.reach.toFixed(3)}</dd></div>
+            <div><dt>从起点保留</dt><dd>{percentage(handRetention(chosen))}</dd></div>
             <div><dt>总 EV</dt><dd>{evLabel(chosen.totalEv)}</dd></div>
             <div><dt>可用组合</dt><dd>{chosen.combinations}</dd></div>
           </dl>
           <div className="solver-hand-actions">
             {actions.map((action, index) => (
               <div key={action.id}>
-                <header><span><i style={{ background: actionColor(index) }} />{actionName(action)}</span><b>{percentage(chosen.actions[action.id])}</b></header>
-                <div><i style={{ width: `${Math.max(0, Math.min(100, (chosen.actions[action.id] ?? 0) * 100))}%`, background: actionColor(index) }} /></div>
+                <header><span><i style={{ background: actionColor(action, index, actions) }} />{actionName(action, node)}</span><b>{percentage(chosen.actions[action.id])}</b></header>
+                <div><i style={{ width: `${Math.max(0, Math.min(100, (chosen.actions[action.id] ?? 0) * 100))}%`, background: actionColor(action, index, actions) }} /></div>
                 <small>行动 EV {evLabel(chosen.actionEvs[action.id])}</small>
               </div>
             ))}
@@ -313,8 +384,8 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode }) {
                   {combo.reach > 0 && (
                     <div className="solver-combo-actions">
                       {actions.map((action, index) => (
-                        <span key={action.id} title={`${actionName(action)} · 行动 EV ${evLabel(combo.actionEvs[action.id])}`}>
-                          <i style={{ background: actionColor(index) }} />
+                        <span key={action.id} title={`${actionName(action, node)} · 行动 EV ${evLabel(combo.actionEvs[action.id])}`}>
+                          <i style={{ background: actionColor(action, index, actions) }} />
                           {percentage(combo.actions[action.id])}
                         </span>
                       ))}
@@ -339,9 +410,9 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode }) {
           {actions.map((action, index) => {
             const children = childNodesForAction(result.nodes, node, action);
             return (
-              <button type="button" key={action.id} onClick={() => followAction(action)} style={{ '--action-color': actionColor(index) }}>
+              <button type="button" key={action.id} onClick={() => followAction(action)} style={{ '--action-color': actionColor(action, index, actions) }}>
                 <i />
-                <span><b>{node.actor} · {actionName(action)}</b><small>点击查看后续策略</small></span>
+                <span><b>{node.actor} · {actionName(action, node)}</b><small>点击查看后续策略</small></span>
                 <strong>{percentage(node.aggregate.actions[action.id])}</strong>
                 {children.length > 1 && <em>{children.length} 张出牌</em>}
               </button>
@@ -350,7 +421,7 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode }) {
         </div>
         {pendingAction && (
           <div className="solver-runout-choices">
-            <header><span>{actionName(pendingAction)}之后</span><b>{pendingChildren.length > 0 ? '选择下一张公共牌' : '这条行动已结束牌局'}</b></header>
+            <header><span>{actionName(pendingAction, node)}之后</span><b>{pendingChildren.length > 0 ? '选择下一张公共牌' : '这条行动已结束牌局'}</b></header>
             {pendingChildren.map((candidate) => {
               const nextCard = candidate.currentBoardText[node.currentBoardText.length];
               return (
@@ -388,6 +459,13 @@ export function SolverWorkbench() {
   const [error, setError] = useState('');
   const [pickerTarget, setPickerTarget] = useState(null);
   const [rangeEditorTarget, setRangeEditorTarget] = useState(null);
+  const [previewManifest, setPreviewManifest] = useState(null);
+  const [previewSampleId, setPreviewSampleId] = useState('');
+  const [previewPayload, setPreviewPayload] = useState(null);
+  const [previewNodeId, setPreviewNodeId] = useState(null);
+  const [previewSelectedHand, setPreviewSelectedHand] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(true);
+  const [previewError, setPreviewError] = useState('');
   const [form, setForm] = useState({
     boardCards: ['As', 'Kh', '9c'],
     runoutCards: [null, null],
@@ -399,12 +477,37 @@ export function SolverWorkbench() {
     ...ECONOMIC_PRESETS['gg-rnc-rb40'],
     maxIterations: 64,
     targetExploitabilityPotFraction: 0,
+    treeBetSizes: TREE_PRESETS.standard,
+    raisePotAfterCallFraction: 0.75,
+    allInRemainingStackFraction: 0.5,
     exportStreets: 'flop-turn-river',
     turnCardLimit: 1,
     riverCardLimit: 1
   });
   const activeJobId = activeJob?.id;
   const activeJobStatus = activeJob?.status;
+  const activePreviewSample = useMemo(
+    () => previewManifest?.samples?.find((sample) => sample.id === previewSampleId) ?? null,
+    [previewManifest, previewSampleId]
+  );
+  const previewResult = useMemo(() => {
+    if (!previewPayload || previewNodeId == null) return null;
+    const selectedNode = previewPayload.nodes.find((node) => node.id === previewNodeId);
+    if (!selectedNode) return null;
+    return {
+      schemaVersion: 1,
+      manifest: {
+        board: previewPayload.board,
+        boardText: previewPayload.boardText,
+        solve: previewPayload.solve,
+        economics: previewPayload.economics,
+        coverage: previewPayload.coverage,
+        releaseStatus: previewPayload.preview?.releaseStatus
+      },
+      nodes: previewPayload.nodes,
+      selectedNode
+    };
+  }, [previewNodeId, previewPayload]);
 
   const updateForm = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const requestBody = useMemo(() => ({
@@ -428,6 +531,11 @@ export function SolverWorkbench() {
       flatDropAmountBb: Number(form.flatDropAmountBb)
     },
     treePolicyId: TREE_POLICY_ID,
+    tree: {
+      betsPotFraction: form.treeBetSizes,
+      raisePotAfterCallFraction: Number(form.raisePotAfterCallFraction),
+      allInRemainingStackFraction: Number(form.allInRemainingStackFraction)
+    },
     solve: {
       maxIterations: Number(form.maxIterations),
       targetExploitabilityPotFraction: Number(form.targetExploitabilityPotFraction)
@@ -441,6 +549,38 @@ export function SolverWorkbench() {
       riverCard: form.exportStreets === 'flop-turn-river' ? form.runoutCards[1] : null
     }
   }), [form]);
+
+  const selectTreePreset = (preset) => {
+    setForm((current) => ({ ...current, treeBetSizes: TREE_PRESETS[preset] }));
+  };
+
+  const toggleTreeSize = (street, size) => {
+    const selected = form.treeBetSizes[street];
+    if (selected.includes(size) && selected.length === 1) {
+      setError('每条街至少保留一个下注尺寸');
+      return;
+    }
+    if (!selected.includes(size) && selected.length >= 4) {
+      setError('每条街最多选择四个下注尺寸，避免动作树过大');
+      return;
+    }
+    setError('');
+    const next = selected.includes(size)
+      ? selected.filter((value) => value !== size)
+      : [...selected, size].sort((left, right) => left - right);
+    setForm((current) => ({
+      ...current,
+      treeBetSizes: { ...current.treeBetSizes, [street]: next }
+    }));
+  };
+
+  const selectAccuracyPreset = (preset) => {
+    setForm((current) => ({
+      ...current,
+      maxIterations: preset.iterations,
+      targetExploitabilityPotFraction: preset.target
+    }));
+  };
 
   const refreshJobs = async () => {
     const payload = await listSolverJobs();
@@ -465,6 +605,66 @@ export function SolverWorkbench() {
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(PRODUCTION_PREVIEW_MANIFEST_URL, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`样本目录读取失败（HTTP ${response.status}）`);
+        return response.json();
+      })
+      .then((payload) => {
+        if (
+          payload?.schemaVersion !== 1 ||
+          payload?.releaseStatus !== 'candidate-preview' ||
+          payload?.releaseEligible !== false ||
+          !Array.isArray(payload?.samples) ||
+          payload.samples.length === 0
+        ) {
+          throw new Error('生产样本目录格式不符合预览约束');
+        }
+        setPreviewManifest(payload);
+        setPreviewSampleId(payload.samples[0].id);
+      })
+      .catch((cause) => {
+        if (cause.name !== 'AbortError') {
+          setPreviewError(cause.message);
+          setPreviewLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!activePreviewSample) return undefined;
+    const controller = new AbortController();
+    fetch(`${PRODUCTION_PREVIEW_BASE_URL}/${activePreviewSample.asset}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`牌面数据读取失败（HTTP ${response.status}）`);
+        return response.json();
+      })
+      .then((payload) => {
+        if (
+          payload?.format !== 'kishpoker-postflop-solver-website-export-v1' ||
+          payload?.preview?.releaseStatus !== 'candidate-preview' ||
+          !Array.isArray(payload?.nodes) ||
+          payload.nodes.length !== activePreviewSample.decisionNodes
+        ) {
+          throw new Error('牌面样本格式或节点覆盖不完整');
+        }
+        setPreviewPayload(payload);
+        setPreviewNodeId(payload.nodes[0].id);
+        setPreviewSelectedHand(null);
+        setPreviewLoading(false);
+      })
+      .catch((cause) => {
+        if (cause.name !== 'AbortError') {
+          setPreviewError(cause.message);
+          setPreviewLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [activePreviewSample]);
 
   useEffect(() => {
     if (!activeJobId) return undefined;
@@ -586,6 +786,16 @@ export function SolverWorkbench() {
     setRangeEditorTarget({ field, sessionId: Date.now() });
   };
 
+  const choosePreviewSample = (sampleId) => {
+    if (sampleId === previewSampleId) return;
+    setPreviewSampleId(sampleId);
+    setPreviewPayload(null);
+    setPreviewNodeId(null);
+    setPreviewSelectedHand(null);
+    setPreviewError('');
+    setPreviewLoading(true);
+  };
+
   return (
     <main className="solver-workbench">
       <section className="solver-intro">
@@ -597,6 +807,65 @@ export function SolverWorkbench() {
           <a href={COMPANION_DOWNLOAD_URL} download>下载 / 更新本地助手 · 33.3 MB</a>
         </aside>
       </section>
+
+      <section id="production-preview" className="solver-production-preview">
+        <header>
+          <div>
+            <span>PRODUCTION SAMPLE · 384 ITERATIONS</span>
+            <h2>全量生产任务 · 首批牌面预览</h2>
+            <p>BTN 开池 2bb，BB 跟注后的单次加注底池；起始底池 4.5bb，有效后手 98bb。</p>
+          </div>
+          <b>候选预览 · 暂非正式发布</b>
+        </header>
+        <div className="solver-preview-facts">
+          <div><span>抽水</span><strong>3% · 1.8bb CAP</strong><small>普通抽水已计入 40% rakeback</small></div>
+          <div><span>JP 抽水</span><strong>30bb 起 · 1.5bb</strong><small>JP 不参与 rakeback</small></div>
+          <div><span>完整动作树</span><strong>Flop 25% / 75%</strong><small>Turn 75% / 150% · River 33% / 75% / 150%</small></div>
+          <div><span>当前可查看</span><strong>每个牌面 20 节点</strong><small>转牌、河牌参与回溯求解，预览仅导出翻牌节点</small></div>
+        </div>
+        {previewManifest && (
+          <nav className="solver-preview-samples" aria-label="生产样本牌面">
+            {previewManifest.samples.map((sample) => (
+              <button
+                type="button"
+                key={sample.id}
+                className={sample.id === previewSampleId ? 'active' : ''}
+                aria-current={sample.id === previewSampleId ? 'true' : undefined}
+                onClick={() => choosePreviewSample(sample.id)}
+              >
+                <span className="solver-preview-board">
+                  {sample.boardText.map((card) => <i key={card} className={`suit-${card[1]}`}>{boardCardLabel(card)}</i>)}
+                </span>
+                <b>{sample.texture}</b>
+                <small>{sample.description} · Exploitability {percentage(sample.finalExploitabilityPotFraction, 3)}</small>
+              </button>
+            ))}
+          </nav>
+        )}
+        {previewLoading && <div className="solver-preview-loading"><i /><span>正在载入生产样本策略…</span></div>}
+        {previewError && <div className="solver-preview-error" role="alert"><b>样本暂时无法载入</b><span>{previewError}</span></div>}
+        {activePreviewSample && !previewLoading && !previewError && (
+          <footer>
+            <span>{activePreviewSample.board} · {activePreviewSample.decisionNodes} 个翻牌决策节点</span>
+            <small>固定 384 轮 · SHA-256 {activePreviewSample.sha256.slice(0, 12)}… · 请重点核对范围、频率、EV 和行动线是否符合预期。</small>
+          </footer>
+        )}
+      </section>
+
+      {previewResult && (
+        <div className="solver-production-preview-result">
+          <ResultWorkspace
+            result={previewResult}
+            selectedHand={previewSelectedHand}
+            onSelectHand={setPreviewSelectedHand}
+            onSelectNode={(nodeId) => {
+              setPreviewNodeId(nodeId);
+              setPreviewSelectedHand(null);
+            }}
+            eyebrow="生产样本预览 · 384轮"
+          />
+        </div>
+      )}
 
       {!loading && health?.status !== 'ready' && (
         <section className="solver-companion-setup">
@@ -694,10 +963,44 @@ export function SolverWorkbench() {
           </div>
           <div className="solver-section-label"><span>03 · TREE & SOLVE</span><h3>动作树与精度</h3></div>
           <div className="solver-tree-policy">
-            <div><span>FLOP</span><b>25%</b><b>75%</b></div>
-            <div><span>TURN</span><b>75%</b><b>150%</b></div>
-            <div><span>RIVER</span><b>33%</b><b>75%</b><b>150%</b></div>
-            <p>三条街加注均为跟注后底池的 75%；行动后剩余筹码不超过行动前的 50% 时合并为 All-in。</p>
+            <header>
+              <span>下注尺寸（可多选，每街最多 4 个）</span>
+              <div className="solver-tree-presets">
+                <button type="button" onClick={() => selectTreePreset('fast')}>轻量</button>
+                <button type="button" onClick={() => selectTreePreset('standard')}>标准</button>
+                <button type="button" onClick={() => selectTreePreset('detailed')}>细分</button>
+              </div>
+            </header>
+            {Object.entries(TREE_SIZE_OPTIONS).map(([street, options]) => (
+              <div className="solver-tree-street" key={street}>
+                <span>{street.toUpperCase()}</span>
+                <div>
+                  {options.map((size) => {
+                    const selected = form.treeBetSizes[street].includes(size);
+                    return (
+                      <button
+                        type="button"
+                        key={size}
+                        className={selected ? 'active' : ''}
+                        aria-pressed={selected}
+                        onClick={() => toggleTreeSize(street, size)}
+                      >
+                        {Math.round(size * 100)}%
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div className="solver-tree-advanced">
+              <label><span>加注尺寸（跟注后底池）</span><select value={form.raisePotAfterCallFraction} onChange={(event) => updateForm('raisePotAfterCallFraction', event.target.value)}><option value="0.5">50%</option><option value="0.66">66%</option><option value="0.75">75%</option><option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option></select></label>
+              <label><span>转 All-in 阈值（剩余筹码）</span><select value={form.allInRemainingStackFraction} onChange={(event) => updateForm('allInRemainingStackFraction', event.target.value)}><option value="0.25">25%</option><option value="0.33">33%</option><option value="0.5">50%</option><option value="0.67">67%</option><option value="0.75">75%</option></select></label>
+            </div>
+            <p>尺寸越多，树越大、耗时和内存越高。加注百分比按“先跟注后的底池”计算；行动后剩余筹码低于所选阈值时合并为 All-in。</p>
+          </div>
+          <div className="solver-accuracy-presets">
+            <span>精度快捷选项</span>
+            <div>{ACCURACY_PRESETS.map((preset) => <button type="button" key={preset.id} onClick={() => selectAccuracyPreset(preset)}>{preset.label}<small>{preset.iterations} 轮{preset.target > 0 ? ` · ≤ ${(preset.target * 100).toFixed(1)}% pot` : ''}</small></button>)}</div>
           </div>
           <div className="solver-solve-fields">
             <label><span>最大迭代</span><input type="number" min="1" max="100000" value={form.maxIterations} onChange={(event) => updateForm('maxIterations', event.target.value)} /></label>

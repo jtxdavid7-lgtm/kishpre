@@ -22,6 +22,16 @@ export const SOLVER_TREE_POLICY = Object.freeze({
   })
 });
 
+export const DEFAULT_SOLVER_TREE = Object.freeze({
+  betsPotFraction: Object.freeze({
+    flop: Object.freeze([0.25, 0.75]),
+    turn: Object.freeze([0.75, 1.5]),
+    river: Object.freeze([0.33, 0.75, 1.5])
+  }),
+  raisePotAfterCallFraction: 0.75,
+  allInRemainingStackFraction: 0.5
+});
+
 export const DEFAULT_SOLVER_JOB_INPUT = Object.freeze({
   schemaVersion: SOLVER_API_SCHEMA_VERSION,
   board: 'AsKh9c',
@@ -39,6 +49,7 @@ export const DEFAULT_SOLVER_JOB_INPUT = Object.freeze({
     flatDropAmountBb: 1.5
   }),
   treePolicyId: SOLVER_TREE_POLICY_ID,
+  tree: DEFAULT_SOLVER_TREE,
   solve: Object.freeze({
     maxIterations: 64,
     targetExploitabilityPotFraction: 0
@@ -82,6 +93,42 @@ function integer(value, field, minimum, maximum) {
     fail(`${field} 必须是 ${minimum} 到 ${maximum} 之间的整数`, field);
   }
   return number;
+}
+
+function normalizeBetSizes(value, field, fallback) {
+  const source = value == null ? fallback : value;
+  if (!Array.isArray(source) || source.length < 1 || source.length > 4) {
+    fail(`${field} 必须选择 1 到 4 个下注尺寸`, field);
+  }
+  const normalized = source.map((item, index) => finiteNumber(item, `${field}[${index}]`, {
+    minimum: 0.05,
+    maximum: 5
+  }));
+  const unique = [...new Set(normalized.map((item) => Number(item.toFixed(4))))]
+    .sort((left, right) => left - right);
+  if (unique.length !== normalized.length) fail(`${field} 不能包含重复尺寸`, field);
+  return unique;
+}
+
+function normalizeTree(value = {}) {
+  const bets = value.betsPotFraction ?? {};
+  return {
+    betsPotFraction: {
+      flop: normalizeBetSizes(bets.flop, 'tree.betsPotFraction.flop', DEFAULT_SOLVER_TREE.betsPotFraction.flop),
+      turn: normalizeBetSizes(bets.turn, 'tree.betsPotFraction.turn', DEFAULT_SOLVER_TREE.betsPotFraction.turn),
+      river: normalizeBetSizes(bets.river, 'tree.betsPotFraction.river', DEFAULT_SOLVER_TREE.betsPotFraction.river)
+    },
+    raisePotAfterCallFraction: finiteNumber(
+      value.raisePotAfterCallFraction ?? DEFAULT_SOLVER_TREE.raisePotAfterCallFraction,
+      'tree.raisePotAfterCallFraction',
+      { minimum: 0.05, maximum: 5 }
+    ),
+    allInRemainingStackFraction: finiteNumber(
+      value.allInRemainingStackFraction ?? DEFAULT_SOLVER_TREE.allInRemainingStackFraction,
+      'tree.allInRemainingStackFraction',
+      { minimum: 0.05, maximum: 0.95 }
+    )
+  };
 }
 
 export function normalizeBoard(value) {
@@ -193,6 +240,7 @@ export function normalizeSolverJobInput(raw = {}) {
           })
     },
     treePolicyId: String(raw.treePolicyId ?? SOLVER_TREE_POLICY_ID),
+    tree: normalizeTree(raw.tree),
     solve: {
       maxIterations: integer(solveRaw.maxIterations, 'solve.maxIterations', 1, 100_000),
       targetExploitabilityPotFraction: finiteNumber(

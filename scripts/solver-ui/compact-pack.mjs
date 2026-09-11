@@ -99,10 +99,20 @@ export async function decodeCompactPackNode(packPath, nodeId = 0) {
   const layout = node.exactComboLayout;
   assert(layout.valuesPerRow === valuesPerRow, `节点 ${node.id} 行布局无效`);
   assert(layout.byteLength === 1326 * valuesPerRow * 4, `节点 ${node.id} 字节长度无效`);
+  const baselineNode = [...manifest.nodes]
+    .filter((candidate) => candidate.actor === node.actor)
+    .sort((left, right) => left.history.length - right.history.length)[0];
+  assert(baselineNode, `找不到 ${node.actor} 的起始范围节点`);
+  const baselineBuffer = baselineNode.id === node.id
+    ? buffer
+    : await readNodeBuffer(packPath, manifest, baselineNode);
+  const baselineLayout = baselineNode.exactComboLayout;
+  const baselineValuesPerRow = baselineLayout.valuesPerRow;
   const buckets = new Map(
     solverMatrixLabels().map((label) => [label, {
       combinations: 0,
       reach: 0,
+      initialReach: 0,
       totalEvWeighted: 0,
       totalEvReach: 0,
       actionReach: Array(actions.length).fill(0),
@@ -113,6 +123,7 @@ export async function decodeCompactPackNode(packPath, nodeId = 0) {
   );
   const aggregate = {
     reach: 0,
+    initialReach: 0,
     totalEvWeighted: 0,
     totalEvReach: 0,
     actionReach: Array(actions.length).fill(0),
@@ -126,6 +137,14 @@ export async function decodeCompactPackNode(packPath, nodeId = 0) {
     const cards = comboCards(comboIndex);
     const bucket = buckets.get(handLabel(cards));
     bucket.combinations += 1;
+    const initialReach = baselineBuffer.readFloatLE(
+      baselineLayout.byteOffset + comboIndex * baselineValuesPerRow * 4
+    );
+    const normalizedInitialReach = Number.isFinite(initialReach) && initialReach > 0
+      ? initialReach
+      : 0;
+    bucket.initialReach += normalizedInitialReach;
+    aggregate.initialReach += normalizedInitialReach;
     const totalEv = buffer.readFloatLE(offset + 4);
     const comboActions = {};
     const comboActionEvs = {};
@@ -140,6 +159,10 @@ export async function decodeCompactPackNode(packPath, nodeId = 0) {
       index: comboIndex,
       cards: cards.map(cardText),
       reach,
+      initialReach: normalizedInitialReach,
+      retention: normalizedInitialReach > 0
+        ? Math.max(0, Math.min(1, reach / normalizedInitialReach))
+        : 0,
       totalEv: Number.isFinite(totalEv) ? totalEv : null,
       actions: comboActions,
       actionEvs: comboActionEvs
@@ -177,6 +200,10 @@ export async function decodeCompactPackNode(packPath, nodeId = 0) {
       column: index % 13,
       combinations: bucket.combinations,
       reach: bucket.reach,
+      initialReach: bucket.initialReach,
+      retention: bucket.initialReach > 0
+        ? Math.max(0, Math.min(1, bucket.reach / bucket.initialReach))
+        : 0,
       totalEv: bucket.totalEvReach > 0 ? bucket.totalEvWeighted / bucket.totalEvReach : null,
       actions: Object.fromEntries(actions.map((action, actionIndex) => [
         action.id,
@@ -212,6 +239,10 @@ export async function decodeCompactPackNode(packPath, nodeId = 0) {
       matrix,
       aggregate: {
         reach: aggregate.reach,
+        initialReach: aggregate.initialReach,
+        retention: aggregate.initialReach > 0
+          ? Math.max(0, Math.min(1, aggregate.reach / aggregate.initialReach))
+          : 0,
         totalEv: aggregate.totalEvReach > 0
           ? aggregate.totalEvWeighted / aggregate.totalEvReach
           : null,

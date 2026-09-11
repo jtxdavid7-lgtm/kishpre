@@ -33,19 +33,22 @@ async function compactFixture() {
   temporaryDirectories.push(directory);
   await fs.mkdir(path.join(directory, 'groups'));
   const valuesPerRow = 6;
-  const buffer = Buffer.alloc(1326 * valuesPerRow * 4);
-  for (let index = 0; index < 1326; index += 1) {
-    const offset = index * valuesPerRow * 4;
-    if (fixtureComboCards(index).includes(50)) {
-      buffer.writeFloatLE(Number.NaN, offset);
-      continue;
+  const nodeBytes = 1326 * valuesPerRow * 4;
+  const buffer = Buffer.alloc(nodeBytes * 2);
+  for (let nodeIndex = 0; nodeIndex < 2; nodeIndex += 1) {
+    for (let index = 0; index < 1326; index += 1) {
+      const offset = nodeIndex * nodeBytes + index * valuesPerRow * 4;
+      if (fixtureComboCards(index).includes(50)) {
+        buffer.writeFloatLE(Number.NaN, offset);
+        continue;
+      }
+      buffer.writeFloatLE(nodeIndex === 0 ? 1 : 0.5, offset);
+      buffer.writeFloatLE(index === 0 ? 3 : 2, offset + 4);
+      buffer.writeFloatLE(0.25, offset + 8);
+      buffer.writeFloatLE(1.5, offset + 12);
+      buffer.writeFloatLE(0.75, offset + 16);
+      buffer.writeFloatLE(2.25, offset + 20);
     }
-    buffer.writeFloatLE(1, offset);
-    buffer.writeFloatLE(index === 0 ? 3 : 2, offset + 4);
-    buffer.writeFloatLE(0.25, offset + 8);
-    buffer.writeFloatLE(1.5, offset + 12);
-    buffer.writeFloatLE(0.75, offset + 16);
-    buffer.writeFloatLE(2.25, offset + 20);
   }
   const asset = 'groups/flop.f32le';
   await fs.writeFile(path.join(directory, asset), buffer);
@@ -62,7 +65,7 @@ async function compactFixture() {
     rangeHash: 'range',
     modelHash: 'model',
     provenance: { inputSha256: 'input' },
-    coverage: { exportedDecisionNodes: 1 },
+    coverage: { exportedDecisionNodes: 2 },
     groups: [{
       id: 'flop',
       asset,
@@ -85,7 +88,26 @@ async function compactFixture() {
       exactComboLayout: {
         groupId: 'flop',
         byteOffset: 0,
-        byteLength: buffer.length,
+        byteLength: nodeBytes,
+        valuesPerRow
+      }
+    }, {
+      id: 1,
+      key: 'after-bet-call',
+      actor: 'OOP',
+      street: 'flop',
+      currentBoard: [28, 45, 50],
+      currentBoardText: ['9h', 'Ks', 'Ad'],
+      history: [{ actor: 'OOP', action: { id: 'Bet 4.37', kind: 'bet', amountBb: 4.37 } }],
+      state: { potBb: 21.87 },
+      actions: [
+        { id: 'Check', kind: 'check', amountBb: 0 },
+        { id: 'Bet 4.37', kind: 'bet', amountBb: 4.37 }
+      ],
+      exactComboLayout: {
+        groupId: 'flop',
+        byteOffset: nodeBytes,
+        byteLength: nodeBytes,
         valuesPerRow
       }
     }]
@@ -106,7 +128,7 @@ describe('solver compact pack web adapter', () => {
   it('decodes exact combos into weighted matrix frequencies and EV', async () => {
     const directory = await compactFixture();
     const result = await decodeCompactPackNode(directory, 0);
-    expect(result.nodes).toHaveLength(1);
+    expect(result.nodes).toHaveLength(2);
     expect(result.selectedNode.matrix).toHaveLength(169);
     expect(result.selectedNode.aggregate.actions.Check).toBeCloseTo(0.25);
     expect(result.selectedNode.aggregate.totalEv).toBeCloseTo(2);
@@ -114,6 +136,7 @@ describe('solver compact pack web adapter', () => {
       .toBeCloseTo(0.25);
     const aces = result.selectedNode.matrix.find((hand) => hand.label === 'AA');
     expect(aces.combinations).toBe(3);
+    expect(aces.retention).toBe(1);
     expect(aces.combos).toHaveLength(3);
     expect(aces.combos.every((combo) => !combo.cards.includes('Ad'))).toBe(true);
     const deuces = result.selectedNode.matrix.find((hand) => hand.label === '22');
@@ -124,6 +147,16 @@ describe('solver compact pack web adapter', () => {
       actions: { Check: 0.25, 'Bet 4.37': 0.75 },
       actionEvs: { Check: 1.5, 'Bet 4.37': 2.25 }
     });
+  });
+
+  it('measures retained range weight from the actor starting node', async () => {
+    const directory = await compactFixture();
+    const result = await decodeCompactPackNode(directory, 1);
+    const aces = result.selectedNode.matrix.find((hand) => hand.label === 'AA');
+    expect(aces.initialReach).toBe(3);
+    expect(aces.reach).toBe(1.5);
+    expect(aces.retention).toBeCloseTo(0.5);
+    expect(result.selectedNode.aggregate.retention).toBeCloseTo(0.5);
   });
 
   it('builds a self-contained website-readable export', async () => {

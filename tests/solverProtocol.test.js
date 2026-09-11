@@ -13,6 +13,15 @@ describe('solver UI protocol', () => {
     const input = normalizeSolverJobInput(DEFAULT_SOLVER_JOB_INPUT);
     expect(input.board).toBe('AsKh9c');
     expect(input.treePolicyId).toBe(SOLVER_TREE_POLICY_ID);
+    expect(input.tree).toEqual({
+      betsPotFraction: {
+        flop: [0.25, 0.75],
+        turn: [0.75, 1.5],
+        river: [0.33, 0.75, 1.5]
+      },
+      raisePotAfterCallFraction: 0.75,
+      allInRemainingStackFraction: 0.5
+    });
     expect(input.export).toMatchObject({
       streets: 'flop-turn-river',
       turnCardLimit: 1,
@@ -69,6 +78,40 @@ describe('solver UI protocol', () => {
     })).toThrow('必须先选择 Turn');
   });
 
+  it('accepts custom action-tree sizes and bounds the tree width', () => {
+    const input = normalizeSolverJobInput({
+      ...DEFAULT_SOLVER_JOB_INPUT,
+      tree: {
+        betsPotFraction: {
+          flop: [0.75, 0.2, 0.33],
+          turn: [0.5],
+          river: [0.33, 1.25, 2]
+        },
+        raisePotAfterCallFraction: 1,
+        allInRemainingStackFraction: 0.33
+      }
+    });
+    expect(input.tree).toEqual({
+      betsPotFraction: {
+        flop: [0.2, 0.33, 0.75],
+        turn: [0.5],
+        river: [0.33, 1.25, 2]
+      },
+      raisePotAfterCallFraction: 1,
+      allInRemainingStackFraction: 0.33
+    });
+    expect(() => normalizeSolverJobInput({
+      ...DEFAULT_SOLVER_JOB_INPUT,
+      tree: {
+        ...DEFAULT_SOLVER_JOB_INPUT.tree,
+        betsPotFraction: {
+          ...DEFAULT_SOLVER_JOB_INPUT.tree.betsPotFraction,
+          flop: [0.2, 0.25, 0.33, 0.5, 0.75]
+        }
+      }
+    })).toThrow('1 到 4');
+  });
+
   it('uses a stable input hash independent of object key order', () => {
     const input = normalizeSolverJobInput(DEFAULT_SOLVER_JOB_INPUT);
     expect(solverInputSha256(input)).toBe(solverInputSha256({
@@ -76,6 +119,7 @@ describe('solver UI protocol', () => {
       ranges: input.ranges,
       schemaVersion: input.schemaVersion,
       treePolicyId: input.treePolicyId,
+      tree: input.tree,
       economics: input.economics,
       effectiveStackBb: input.effectiveStackBb,
       potBb: input.potBb,

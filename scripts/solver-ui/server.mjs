@@ -148,6 +148,7 @@ function parseProgress(job, text) {
 
 function commandArguments(job) {
   const input = job.input;
+  const percentSizes = (values) => values.map((value) => `${value * 100}%`).join(',');
   const args = [
     '--mode',
     'smoke',
@@ -156,6 +157,16 @@ function commandArguments(job) {
     '--emit-progress',
     '--tree-policy',
     input.treePolicyId,
+    '--flop-bet-sizes',
+    percentSizes(input.tree.betsPotFraction.flop),
+    '--turn-bet-sizes',
+    percentSizes(input.tree.betsPotFraction.turn),
+    '--river-bet-sizes',
+    percentSizes(input.tree.betsPotFraction.river),
+    '--raise-size',
+    `${input.tree.raisePotAfterCallFraction * 100}%`,
+    '--allin-remaining-stack-fraction',
+    String(input.tree.allInRemainingStackFraction),
     '--flop',
     input.board,
     '--pot-bb',

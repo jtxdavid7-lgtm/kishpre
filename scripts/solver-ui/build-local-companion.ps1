@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.1.1',
+    [string]$Version = '0.1.2',
     [string]$SolverBinary = 'F:\kish-gto\solver-engines\postflop-solver-gg\target\release\examples\gg_fulltree_direct_pack.exe'
 )
 
