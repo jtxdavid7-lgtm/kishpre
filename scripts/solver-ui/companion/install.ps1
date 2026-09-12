@@ -54,7 +54,7 @@ $shortcut.Save()
 Start-Process -FilePath $wscript -ArgumentList ('"{0}"' -f $launcher)
 Start-Sleep -Seconds 2
 if ($env:KISH_SOLVER_INSTALL_NO_BROWSER -ne '1') {
-    Start-Process 'https://kishpoker.cn/?tool=solver'
+    Start-Process 'https://www.kishpoker.cn/?tool=solver'
 }
 
 Write-Host ''

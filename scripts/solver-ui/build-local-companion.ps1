@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.1.3',
+    [string]$Version = '0.1.5',
     [string]$SolverBinary = 'F:\kish-gto\solver-engines\postflop-solver-gg\target\release\examples\gg_fulltree_direct_pack.exe'
 )
 
@@ -42,6 +42,13 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'protocol.mjs') -Destination (Jo
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'compact-pack.mjs') -Destination (Join-Path $runtimeRoot 'app')
 Set-Content -LiteralPath (Join-Path $runtimeRoot 'VERSION') -Value $Version -Encoding ASCII
 
+$stagedLauncher = Join-Path $runtimeRoot 'launch-hidden.vbs'
+$cscript = Join-Path $env:WINDIR 'System32\cscript.exe'
+& $cscript '//nologo' $stagedLauncher '--validate-only'
+if ($LASTEXITCODE -ne 0) {
+    throw "launch-hidden.vbs validation failed (exit $LASTEXITCODE)."
+}
+
 $sourceDestination = Join-Path $stageRoot 'source\postflop-solver'
 New-Item -ItemType Directory -Force -Path $sourceDestination | Out-Null
 Get-ChildItem -LiteralPath $solverSourceRoot -Force |
@@ -75,7 +82,31 @@ if (Test-Path -LiteralPath $installerBuildRoot) {
     Remove-Item -LiteralPath $installerBuildRoot -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $installerPayloadRoot | Out-Null
-Compress-Archive -Path (Join-Path $stageRoot '*') -DestinationPath $installerPayloadZip -CompressionLevel Optimal
+[System.IO.Compression.ZipFile]::CreateFromDirectory(
+    $stageRoot,
+    $installerPayloadZip,
+    [System.IO.Compression.CompressionLevel]::Optimal,
+    $false
+)
+$payloadArchive = [System.IO.Compression.ZipFile]::OpenRead($installerPayloadZip)
+try {
+    $payloadEntries = @($payloadArchive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
+    foreach ($requiredEntry in @(
+        'install.ps1',
+        'runtime/node.exe',
+        'runtime/launch-hidden.vbs',
+        'runtime/start.cmd',
+        'runtime/app/server.mjs',
+        'runtime/engine/gg_fulltree_direct_pack.exe'
+    )) {
+        if ($payloadEntries -notcontains $requiredEntry) {
+            throw "Installer payload is missing required entry: $requiredEntry"
+        }
+    }
+} finally {
+    $payloadArchive.Dispose()
+}
+$payloadHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installerPayloadZip).Hash
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'companion\one-click-install.cmd') -Destination $installerBootstrap
 
 $installerOutputForSed = $installerOutput
@@ -116,6 +147,21 @@ Set-Content -LiteralPath $installerSed -Value $sedContent -Encoding ASCII
 $iexpressProcess = Start-Process -FilePath $iexpress -ArgumentList @('/N', '/Q', $installerSed) -Wait -PassThru -WindowStyle Hidden
 if ($iexpressProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $installerOutput -PathType Leaf)) {
     throw "IExpress failed to build the one-click installer (exit $($iexpressProcess.ExitCode))."
+}
+$installerVerificationRoot = Join-Path $installerBuildRoot 'verify'
+New-Item -ItemType Directory -Path $installerVerificationRoot | Out-Null
+$tar = (Get-Command tar.exe -ErrorAction Stop).Source
+& $tar '-xf' $installerOutput '-C' $installerVerificationRoot 'payload.zip'
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to extract the installer payload for verification (exit $LASTEXITCODE)."
+}
+$embeddedPayloadZip = Join-Path $installerVerificationRoot 'payload.zip'
+if (-not (Test-Path -LiteralPath $embeddedPayloadZip -PathType Leaf)) {
+    throw 'The generated installer does not contain payload.zip.'
+}
+$embeddedPayloadHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $embeddedPayloadZip).Hash
+if ($embeddedPayloadHash -ne $payloadHash) {
+    throw 'The generated installer payload does not match the validated source payload.'
 }
 Copy-Item -LiteralPath $installerOutput -Destination $installerPath -Force
 Remove-Item -LiteralPath $installerBuildRoot -Recurse -Force

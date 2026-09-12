@@ -23,7 +23,7 @@ const TREE_POLICY_ID =
   'flop25-75-turn75-150-river33-75-150-raise75-ai50-floor-v1';
 const COMPANION_CDN_BASE_URL =
   'https://kish2note-d6ggxsz7b384cb278-1301236168.tcloudbaseapp.com/downloads';
-const COMPANION_DOWNLOAD_URL = `${COMPANION_CDN_BASE_URL}/kishpoker-solver-companion-win-x64-0.1.3-setup.exe`;
+const COMPANION_DOWNLOAD_URL = `${COMPANION_CDN_BASE_URL}/kishpoker-solver-companion-win-x64-0.1.5-setup.exe`;
 const INSTALL_CONNECTION_TIMEOUT_MS = 3 * 60 * 1000;
 const FIRST_VISIT_PREVIEW = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('solverPreview') === 'first-visit';
@@ -988,7 +988,7 @@ export function SolverWorkbench() {
             <a href={COMPANION_DOWNLOAD_URL} download onClick={beginInstallerSetup}>
               <span aria-hidden="true">↓</span>
               <b>一键下载引擎</b>
-              <small>Windows x64 · 33 MB</small>
+              <small>Windows x64 · 34 MB</small>
             </a>
             <button type="button" onClick={() => setTutorialOpen(true)}>使用教程</button>
           </div>
