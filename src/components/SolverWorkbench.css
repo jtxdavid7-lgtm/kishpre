@@ -89,8 +89,6 @@
 .solver-intro aside i.ready { background: var(--solver-accent); box-shadow: 0 0 16px #2dd4bf88; }
 .solver-intro aside span { color: #e5eaf1; font-size: 13px; font-weight: 750; }
 .solver-intro aside small { color: var(--solver-muted); font-size: 11px; }
-.solver-intro aside > a { grid-column: 1 / -1; margin-top: 8px; padding-top: 8px; color: #5eead4; border-top: 1px solid #203044; font-size: 9px; font-weight: 750; text-decoration: none; }
-.solver-intro aside > a:hover { color: #99f6e4; }
 
 .solver-production-preview {
   scroll-margin-top: 92px;
@@ -150,29 +148,64 @@
 
 .solver-companion-setup {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.8fr);
-  gap: 22px 34px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px 36px;
   margin: 0 0 20px;
-  padding: 22px 24px;
+  padding: 26px 28px;
   background: linear-gradient(135deg, #10221f, #0e141f 62%);
   border: 1px solid #245e53;
   border-radius: 14px;
 }
-.solver-companion-setup > div:first-child > span { color: #5eead4; font-size: 10px; font-weight: 850; letter-spacing: 0.14em; }
-.solver-companion-setup h2 { margin: 6px 0 8px; font-size: 20px; }
-.solver-companion-setup p { max-width: 720px; margin: 0; color: #91a0b2; font-size: 12px; line-height: 1.65; }
-.solver-companion-setup p b { color: #d7e2eb; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
-.solver-companion-setup ol { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
-.solver-companion-setup li { display: grid; grid-template-columns: 24px 1fr; align-items: center; gap: 9px; padding: 8px 10px; background: #09110f99; border: 1px solid #223d38; border-radius: 8px; }
-.solver-companion-setup li > b { display: grid; place-items: center; width: 22px; height: 22px; color: #08201b; background: #5eead4; border-radius: 50%; font-size: 10px; }
-.solver-companion-setup li span { color: #d6e1ea; font-size: 11px; font-weight: 750; }
-.solver-companion-setup li small { display: block; margin-top: 2px; color: #718296; font-size: 9px; font-weight: 500; }
-.solver-companion-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+.solver-companion-setup > div:first-child > span { color: #5eead4; font-size: 12px; font-weight: 850; letter-spacing: 0.12em; }
+.solver-companion-setup h2 { margin: 8px 0 10px; color: #f8fafc; font-size: 24px; }
+.solver-companion-setup p { max-width: 720px; margin: 0; color: #9cabbc; font-size: 15px; line-height: 1.7; }
+.solver-companion-actions { display: flex; align-items: stretch; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .solver-companion-actions a,
-.solver-companion-actions button { display: inline-flex; align-items: center; min-height: 38px; padding: 0 14px; border-radius: 7px; font-size: 11px; font-weight: 800; text-decoration: none; cursor: pointer; }
-.solver-companion-actions a { color: #06201b; background: #5eead4; border: 1px solid #5eead4; }
-.solver-companion-actions a.secondary,
-.solver-companion-actions button { color: #b9c6d4; background: #111b27; border: 1px solid #334155; }
+.solver-companion-actions button { min-height: 58px; box-sizing: border-box; border-radius: 10px; font: inherit; font-weight: 850; text-decoration: none; cursor: pointer; }
+.solver-companion-actions a { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; align-items: center; column-gap: 10px; min-width: 200px; padding: 9px 18px; color: #06201b; background: #5eead4; border: 1px solid #5eead4; }
+.solver-companion-actions a > span { grid-row: 1 / 3; font-size: 23px; font-weight: 900; }
+.solver-companion-actions a > b { align-self: end; font-size: 15px; }
+.solver-companion-actions a > small { align-self: start; color: #155e54; font-size: 11px; font-weight: 750; }
+.solver-companion-actions a:hover { background: #99f6e4; border-color: #99f6e4; }
+.solver-companion-actions button { padding: 0 20px; color: #d8e3ed; background: #111b27; border: 1px solid #3a4a60; font-size: 14px; }
+.solver-companion-actions button:hover { color: #f8fafc; background: #172435; border-color: #64748b; }
+.solver-companion-actions a:focus-visible,
+.solver-companion-actions button:focus-visible,
+.solver-tutorial-dialog button:focus-visible,
+.solver-tutorial-dialog a:focus-visible { outline: 3px solid #5eead466; outline-offset: 3px; }
+
+.solver-install-waiting { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 12px 14px; color: #ccfbf1; background: #07171299; border: 1px solid #246458; border-radius: 9px; }
+.solver-install-waiting > i { flex: 0 0 auto; width: 16px; height: 16px; border: 2px solid #245e53; border-top-color: #5eead4; border-radius: 50%; animation: solver-preview-spin 700ms linear infinite; }
+.solver-install-waiting > span { font-size: 14px; font-weight: 800; }
+.solver-install-waiting small { display: block; margin-top: 3px; color: #82a9a2; font-size: 12px; font-weight: 550; }
+
+.solver-tutorial-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; box-sizing: border-box; padding: 24px; background: rgba(1, 5, 12, 0.82); backdrop-filter: blur(12px); }
+.solver-tutorial-dialog { width: min(920px, 100%); max-height: calc(100vh - 48px); overflow: auto; box-sizing: border-box; padding: 28px; color: #e8edf5; background: #0d1520; border: 1px solid #355267; border-radius: 20px; box-shadow: 0 36px 100px rgba(0, 0, 0, 0.58); }
+.solver-tutorial-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.solver-tutorial-dialog > header span { color: #5eead4; font-size: 12px; font-weight: 900; letter-spacing: 0.14em; }
+.solver-tutorial-dialog > header h2 { margin: 7px 0 0; color: #f8fafc; font-size: clamp(25px, 4vw, 36px); letter-spacing: -0.03em; }
+.solver-tutorial-dialog > header > button { flex: 0 0 auto; width: 42px; height: 42px; color: #aab8c8; background: #131f2d; border: 1px solid #334155; border-radius: 50%; font-size: 24px; cursor: pointer; }
+.solver-tutorial-visual { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
+.solver-tutorial-visual article { position: relative; min-width: 0; padding: 18px; background: #09111b; border: 1px solid #243449; border-radius: 14px; }
+.solver-tutorial-visual article > b { position: absolute; z-index: 1; top: 10px; left: 10px; display: grid; place-items: center; width: 29px; height: 29px; color: #06201b; background: #5eead4; border-radius: 50%; font-size: 13px; }
+.solver-tutorial-visual article h3 { margin: 15px 0 7px; color: #f8fafc; font-size: 18px; }
+.solver-tutorial-visual article p { margin: 0; color: #92a2b5; font-size: 14px; line-height: 1.65; }
+.solver-tutorial-scene { height: 118px; display: grid; place-items: center; box-sizing: border-box; padding: 18px; background: linear-gradient(145deg, #111e2c, #0a111b); border: 1px solid #283b50; border-radius: 11px; }
+.solver-tutorial-download { grid-template-columns: auto 1fr; gap: 12px; }
+.solver-tutorial-download i { display: grid; place-items: center; width: 48px; height: 48px; color: #05201b; background: #5eead4; border-radius: 12px; font-size: 28px; font-style: normal; font-weight: 900; }
+.solver-tutorial-download span { overflow: hidden; color: #c9d6e5; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.55; text-overflow: ellipsis; }
+.solver-tutorial-run { align-content: center; gap: 8px; }
+.solver-tutorial-run span { display: grid; place-items: center; width: 64px; height: 50px; color: #dbeafe; background: #1d4ed8; border: 1px solid #60a5fa; border-radius: 8px; font-size: 15px; font-weight: 900; box-shadow: 8px 8px 0 #172033; }
+.solver-tutorial-run i { color: #93c5fd; font-size: 13px; font-style: normal; font-weight: 850; }
+.solver-tutorial-ready { align-content: center; gap: 13px; }
+.solver-tutorial-ready i { width: 16px; height: 16px; background: #2dd4bf; border-radius: 50%; box-shadow: 0 0 0 8px #2dd4bf18, 0 0 24px #2dd4bf88; }
+.solver-tutorial-ready span { color: #ccfbf1; font-size: 14px; font-weight: 850; }
+.solver-tutorial-dialog > footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #233246; }
+.solver-tutorial-dialog > footer a,
+.solver-tutorial-dialog > footer button { min-height: 46px; box-sizing: border-box; padding: 0 19px; border-radius: 9px; font: inherit; font-size: 14px; font-weight: 850; text-decoration: none; cursor: pointer; }
+.solver-tutorial-dialog > footer a { display: inline-flex; align-items: center; color: #06201b; background: #5eead4; border: 1px solid #5eead4; }
+.solver-tutorial-dialog > footer button { color: #c7d3df; background: #111b27; border: 1px solid #334155; }
 
 .solver-builder-grid {
   display: grid;
@@ -532,7 +565,7 @@
   .solver-preview-facts,
   .solver-preview-samples { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .solver-companion-setup { grid-template-columns: 1fr; }
-  .solver-companion-actions { grid-column: auto; }
+  .solver-companion-actions { justify-content: flex-start; }
   .solver-builder-grid { grid-template-columns: 1fr; }
   .solver-side-column { position: static; grid-template-columns: 1fr 1fr; }
   .solver-side-column > .solver-export,
@@ -544,6 +577,16 @@
 @media (max-width: 720px) {
   .solver-workbench { width: min(100% - 24px, 1540px); padding-top: 24px; }
   .solver-intro { display: grid; }
+  .solver-companion-setup { padding: 20px; }
+  .solver-companion-actions { display: grid; }
+  .solver-companion-actions a { min-width: 0; }
+  .solver-tutorial-backdrop { padding: 10px; }
+  .solver-tutorial-dialog { max-height: calc(100vh - 20px); padding: 20px; border-radius: 15px; }
+  .solver-tutorial-visual { grid-template-columns: 1fr; }
+  .solver-tutorial-scene { height: 100px; }
+  .solver-tutorial-dialog > footer { display: grid; }
+  .solver-tutorial-dialog > footer a,
+  .solver-tutorial-dialog > footer button { justify-content: center; width: 100%; }
   .solver-production-preview { padding: 18px; }
   .solver-production-preview > header,
   .solver-production-preview > footer { display: grid; }

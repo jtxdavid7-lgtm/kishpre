@@ -24,7 +24,7 @@ const TREE_POLICY_ID =
 const COMPANION_CDN_BASE_URL =
   'https://kish2note-d6ggxsz7b384cb278-1301236168.tcloudbaseapp.com/downloads';
 const COMPANION_DOWNLOAD_URL = `${COMPANION_CDN_BASE_URL}/kishpoker-solver-companion-win-x64-0.1.3-setup.exe`;
-const COMPANION_FALLBACK_URL = `${COMPANION_CDN_BASE_URL}/kishpoker-solver-companion-win-x64-0.1.3.zip`;
+const INSTALL_CONNECTION_TIMEOUT_MS = 3 * 60 * 1000;
 const FIRST_VISIT_PREVIEW = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('solverPreview') === 'first-visit';
 const PRODUCTION_PREVIEW_BASE_URL = '/data/gto/gg-rnc-rb40-s000-production-preview-v1';
@@ -469,16 +469,19 @@ function ResultWorkspace({ result, selectedHand, onSelectHand, onSelectNode, onC
 }
 
 export function SolverWorkbench() {
-  const [health, setHealth] = useState(null);
+  const [health, setHealth] = useState(() => (FIRST_VISIT_PREVIEW ? { status: 'offline' } : null));
   const [jobs, setJobs] = useState([]);
   const [activeJob, setActiveJob] = useState(null);
   const [result, setResult] = useState(null);
   const [selectedHand, setSelectedHand] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !FIRST_VISIT_PREVIEW);
   const [error, setError] = useState('');
   const [pickerTarget, setPickerTarget] = useState(null);
   const [pendingRunoutNavigation, setPendingRunoutNavigation] = useState(null);
   const [rangeEditorTarget, setRangeEditorTarget] = useState(null);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [installWatching, setInstallWatching] = useState(false);
+  const installStartedAtRef = useRef(0);
   const [previewManifest, setPreviewManifest] = useState(null);
   const [previewSampleId, setPreviewSampleId] = useState('');
   const [previewPayload, setPreviewPayload] = useState(null);
@@ -609,13 +612,7 @@ export function SolverWorkbench() {
   };
 
   useEffect(() => {
-    if (FIRST_VISIT_PREVIEW) {
-      setHealth({ status: 'offline' });
-      setJobs([]);
-      setActiveJob(null);
-      setLoading(false);
-      return undefined;
-    }
+    if (FIRST_VISIT_PREVIEW) return undefined;
     let cancelled = false;
     Promise.allSettled([getSolverHealth(), listSolverJobs()])
       .then(([healthResult, jobsResult]) => {
@@ -727,6 +724,50 @@ export function SolverWorkbench() {
     return () => { cancelled = true; clearInterval(timer); };
   }, [activeJobId, activeJobStatus, pendingRunoutNavigation, result]);
 
+  useEffect(() => {
+    if (!tutorialOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setTutorialOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [tutorialOpen]);
+
+  useEffect(() => {
+    if (!installWatching || health?.status === 'ready') return undefined;
+    let cancelled = false;
+
+    const detectInstalledEngine = async () => {
+      try {
+        const [nextHealth, payload] = await Promise.all([getSolverHealth(), listSolverJobs()]);
+        if (cancelled) return;
+        setHealth(nextHealth);
+        setJobs(payload.jobs);
+        const candidate = payload.jobs.find((job) => ACTIVE_STATUSES.has(job.status)) || payload.jobs[0];
+        if (candidate) setActiveJob(candidate);
+        if (nextHealth?.status === 'ready') {
+          setInstallWatching(false);
+          setError('');
+        }
+      } catch {
+        if (cancelled) return;
+        setHealth({ status: 'offline' });
+        if (Date.now() - installStartedAtRef.current >= INSTALL_CONNECTION_TIMEOUT_MS) {
+          setInstallWatching(false);
+          setError('仍未检测到本地引擎。请确认已经双击下载的 EXE 并完成安装；如果 Windows 阻止运行，请打开“使用教程”查看处理方法。');
+        }
+      }
+    };
+
+    const firstCheck = window.setTimeout(() => void detectInstalledEngine(), 2200);
+    const timer = window.setInterval(() => void detectInstalledEngine(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(firstCheck);
+      window.clearInterval(timer);
+    };
+  }, [health?.status, installWatching]);
+
   const submitSolverRequest = async (body, navigation = null) => {
     setError('');
     setResult(null);
@@ -768,21 +809,10 @@ export function SolverWorkbench() {
     setForm((current) => ({ ...current, economicModel: model, ...(ECONOMIC_PRESETS[model] ?? {}) }));
   };
 
-  const reconnectLocalSolver = async () => {
-    setLoading(true);
+  const beginInstallerSetup = () => {
+    installStartedAtRef.current = Date.now();
+    setInstallWatching(true);
     setError('');
-    try {
-      const [nextHealth, payload] = await Promise.all([getSolverHealth(), listSolverJobs()]);
-      setHealth(nextHealth);
-      setJobs(payload.jobs);
-      const candidate = payload.jobs.find((job) => ACTIVE_STATUSES.has(job.status)) || payload.jobs[0];
-      if (candidate) setActiveJob(candidate);
-    } catch (cause) {
-      setHealth({ status: cause?.payload?.status ?? 'offline' });
-      setError('本地 Solver 还没有响应，请先安装或启动助手。');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const takenBoardCards = useMemo(
@@ -883,13 +913,12 @@ export function SolverWorkbench() {
         <div><span>KioSolver · LOCAL ENGINE</span><h1>在线 KioSolver 工具</h1><p>在网页中配置牌面、范围和动作树，求解过程使用你电脑的 CPU 和内存，数据保留在本机。</p></div>
         <aside>
           <i className={health?.status === 'ready' ? 'ready' : ''} />
-          <span>{loading ? '正在连接本地服务' : health?.status === 'ready' ? '本地引擎就绪' : '本地引擎未连接'}</span>
+          <span>{loading ? '正在连接本地服务' : health?.status === 'ready' ? '本地引擎就绪' : installWatching ? '等待引擎启动' : '本地引擎未连接'}</span>
           <small>API v1 · 仅监听本机</small>
-          <a href={COMPANION_DOWNLOAD_URL} download>下载 / 更新本地助手 · 一键安装</a>
         </aside>
       </section>
 
-      <section id="production-preview" className="solver-production-preview">
+      {health?.status === 'ready' && <section id="production-preview" className="solver-production-preview">
         <header>
           <div>
             <span>PRODUCTION SAMPLE · 384 ITERATIONS</span>
@@ -931,9 +960,9 @@ export function SolverWorkbench() {
             <small>固定 384 轮 · SHA-256 {activePreviewSample.sha256.slice(0, 12)}… · 请重点核对范围、频率、EV 和行动线是否符合预期。</small>
           </footer>
         )}
-      </section>
+      </section>}
 
-      {previewResult && (
+      {health?.status === 'ready' && previewResult && (
         <div className="solver-production-preview-result">
           <ResultWorkspace
             result={previewResult}
@@ -951,25 +980,68 @@ export function SolverWorkbench() {
       {!loading && health?.status !== 'ready' && (
         <section className="solver-companion-setup">
           <div>
-            <span>WINDOWS LOCAL COMPANION</span>
-            <h2>双击一次，连接本地 Solver</h2>
-            <p>网站只负责界面，牌树计算和结果都留在你的电脑。首次下载后双击安装器，以后网页可直接唤起，不需要重复安装。</p>
+            <span>首次使用 · 只需安装一次</span>
+            <h2>下载，然后双击 EXE</h2>
+            <p>安装器会自动装好并启动引擎。完成后会回到这个网页并自动连接，不需要设置路径，也不需要手动关联。</p>
           </div>
-          <ol>
-            <li><b>1</b><span>下载安装器<small>Windows x64 · 33.0 MB</small></span></li>
-            <li><b>2</b><span>双击完成安装<small>无需管理员权限 · 首版可能显示“未知发布者”</small></span></li>
-            <li><b>3</b><span>回到这里重新检测<small>以后网页会自动关联本地引擎</small></span></li>
-          </ol>
           <div className="solver-companion-actions">
-            <a href={COMPANION_DOWNLOAD_URL} download>一键安装本地 Solver</a>
-            <a className="secondary" href="kishsolver://start">已安装，启动助手</a>
-            <button type="button" onClick={() => void reconnectLocalSolver()}>重新检测</button>
-            <a className="secondary" href={COMPANION_FALLBACK_URL} download>ZIP 备用下载</a>
+            <a href={COMPANION_DOWNLOAD_URL} download onClick={beginInstallerSetup}>
+              <span aria-hidden="true">↓</span>
+              <b>一键下载引擎</b>
+              <small>Windows x64 · 33 MB</small>
+            </a>
+            <button type="button" onClick={() => setTutorialOpen(true)}>使用教程</button>
           </div>
+          {installWatching && (
+            <div className="solver-install-waiting" role="status">
+              <i aria-hidden="true" />
+              <span>正在等待引擎启动<small>下载完成后双击 EXE，安装成功会自动连接</small></span>
+            </div>
+          )}
         </section>
       )}
 
-      {error && <div className="solver-global-error" role="alert"><b>无法完成操作</b><span>{error}</span><button type="button" onClick={() => setError('')}>关闭</button></div>}
+      {tutorialOpen && (
+        <div className="solver-tutorial-backdrop" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setTutorialOpen(false);
+        }}>
+          <section className="solver-tutorial-dialog" role="dialog" aria-modal="true" aria-labelledby="solver-tutorial-title">
+            <header>
+              <div><span>一分钟完成</span><h2 id="solver-tutorial-title">下载后，只做这三步</h2></div>
+              <button type="button" aria-label="关闭使用教程" onClick={() => setTutorialOpen(false)}>×</button>
+            </header>
+            <div className="solver-tutorial-visual">
+              <article>
+                <b>1</b>
+                <div className="solver-tutorial-scene solver-tutorial-download" aria-hidden="true"><i>↓</i><span>kishpoker-solver<br />-setup.exe</span></div>
+                <h3>下载 EXE</h3>
+                <p>点击“一键下载引擎”，等浏览器下载完成。</p>
+              </article>
+              <article>
+                <b>2</b>
+                <div className="solver-tutorial-scene solver-tutorial-run" aria-hidden="true"><span>EXE</span><i>双击</i></div>
+                <h3>双击运行</h3>
+                <p>打开下载的 EXE。若 Windows 拦截，点“更多信息”后选择“仍要运行”。</p>
+              </article>
+              <article>
+                <b>3</b>
+                <div className="solver-tutorial-scene solver-tutorial-ready" aria-hidden="true"><i /><span>本地引擎已连接</span></div>
+                <h3>回到网页</h3>
+                <p>安装完成会自动打开本页；看到“本地引擎就绪”即可开始。</p>
+              </article>
+            </div>
+            <footer>
+              <a href={COMPANION_DOWNLOAD_URL} download onClick={() => {
+                beginInstallerSetup();
+                setTutorialOpen(false);
+              }}>一键下载引擎</a>
+              <button type="button" onClick={() => setTutorialOpen(false)}>我知道了</button>
+            </footer>
+          </section>
+        </div>
+      )}
+
+      {error && <div className="solver-global-error" role="alert"><b>出现问题</b><span>{error}</span><button type="button" onClick={() => setError('')}>关闭</button></div>}
 
       <div className="solver-builder-grid">
         <section className="solver-config-panel">
