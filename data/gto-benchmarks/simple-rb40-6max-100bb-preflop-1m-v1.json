@@ -1,0 +1,568 @@
+{
+  "schemaVersion": 1,
+  "datasetType": "kish-gto-preflop-web-benchmark",
+  "datasetId": "simple-rb40-6max-100bb-preflop-1m-v1",
+  "benchmarkVersion": "kish-preflop-gto-benchmark-v1",
+  "generatedAt": "2026-09-24T22:22:30.149Z",
+  "provenance": {
+    "sourceBenchmark": {
+      "filename": "output/gto-preflop-benchmark/simple-rb40-6max-100bb-preflop-1000000-v1/benchmark.json",
+      "bytes": 4724013,
+      "sha256": "9c0120d4e6e77b334c6fa7e1882e17de7598000cbcc844efba80af117be3e8ef"
+    },
+    "corpusManifests": [
+      {
+        "runId": "gg-rnc-6max-100bb-simple-rb40-drop-1p5bb-v1-1000000-seed-1bdfddf21fd5",
+        "hands": 1000000,
+        "shards": 20,
+        "seed": "kish-simple-rb40-1m-20260925-v1",
+        "bytes": 22668,
+        "sha256": "5e4282ae600cebdeea83993f88f1997fd3e2e339ca338604bb4f472ae5987dc8"
+      }
+    ],
+    "solverSourceSha256": "a74ca35ef0c4168375be04fe09e476c3faec0233408e8adbead4c1d2ce61e6c5",
+    "solutionFiles": [
+      {
+        "filename": "index.json",
+        "bytes": 311404,
+        "sha256": "c39822bae85cb9ed7ca27daeba7a3708fd2fcbd453c8c55397b98c26616d6a95"
+      },
+      {
+        "filename": "mini-index-v2.json",
+        "bytes": 21826,
+        "sha256": "daf95a514a578a6684939182b738a4cd72e77ca401b4acde7def38917c6c8986"
+      },
+      {
+        "filename": "strategy-000.bin",
+        "bytes": 570544,
+        "sha256": "a3ac3ad4ed4db6bd6c7d0aa02a6b9ebac29ee461da65a3727e270d2f207220fe"
+      },
+      {
+        "filename": "strategy-001.bin",
+        "bytes": 588120,
+        "sha256": "4e6c99f2402b6045948fefed30106e60618b060907572f2f1071def1638b0b06"
+      },
+      {
+        "filename": "strategy-002.bin",
+        "bytes": 519168,
+        "sha256": "d63cd3826b199b2cd26511eb6d092abbfef86ac1f7d923b72ef535db5cd7d9ef"
+      },
+      {
+        "filename": "strategy-003.bin",
+        "bytes": 109512,
+        "sha256": "2a6400a1f9def2930f3fac54c170f904bfb1653ad0025a9edbda12c94abce0a7"
+      }
+    ],
+    "benchmarkImplementation": {
+      "builder": {
+        "filename": "scripts/gto/build-preflop-gto-benchmark.mjs",
+        "bytes": 42777,
+        "sha256": "acdbd550e8f88468c07a41ff89d51dba0899ac1028f7d53e7241e756538ab552"
+      },
+      "aggregator": {
+        "filename": "scripts/gto/lib/preflop-benchmark-stats.mjs",
+        "bytes": 17858,
+        "sha256": "04ae3f72561c5f9546ee994d0d991c85d95325397c1f289ed467ee77cea3c024"
+      },
+      "shardVerifier": {
+        "filename": "scripts/gto/lib/preflop-shard-verifier.mjs",
+        "bytes": 3931,
+        "sha256": "b5530f825f0563b86841c248ee13dabb0ffcb1d0c12aa5a7bf516a67f7b9077f"
+      },
+      "selfplayCore": {
+        "filename": "scripts/gto/lib/preflop-selfplay-core.mjs",
+        "bytes": 11927,
+        "sha256": "c36cf56b926d9833167ed2a7b7b8989fe08815b522739d96ddb7b2f164b3ef70"
+      }
+    },
+    "exporter": {
+      "filename": "scripts/gto/export-preflop-benchmark-web.mjs",
+      "bytes": 21464,
+      "sha256": "76a4317fd32728b940dca0fabd20922cf02e65b0cfcf802c5c8ff34cc54a4ee9"
+    }
+  },
+  "solution": {
+    "solutionId": "gg-rnc-6max-100bb-simple-rb40-drop-1p5bb-v1",
+    "label": "简化尺寸 · 40% Rakeback · 6-max · 100bb",
+    "schemaVersion": 3,
+    "nativeNodeCount": 40386,
+    "preflopDecisionNodes": 411,
+    "platform": "GGPoker",
+    "tableType": "rush_cash",
+    "simulation": {
+      "tableSize": 6,
+      "stackBB": 100,
+      "blindsBB": {
+        "small": 0.5,
+        "big": 1
+      },
+      "anteBB": 0,
+      "straddleBB": 0
+    },
+    "rakeModel": {
+      "grossRakePercentage": 0.05,
+      "grossCapBB": 3,
+      "normalRakebackRate": 0.4,
+      "effectiveRakePercentageUsedBySolver": 0.03,
+      "effectiveCapBBUsedBySolver": 1.8,
+      "jackpotDropThresholdPotBB": 30,
+      "jackpotDropBB": 1.5,
+      "jackpotDropRakeback": false,
+      "note": "40% RB is already built into the solver policy; do not apply it again."
+    },
+    "solver": {
+      "name": "RocketSolver",
+      "file": "gg-rnc-6max-100bb-simple-rb40-drop-1p5bb-e1-final.rsl",
+      "iterations": 7712726288,
+      "solveSeconds": 3061.02
+    },
+    "actionAbstraction": {
+      "rfi": "EP/HJ/CO/BTN 2bb; SB 3bb",
+      "threeBet": "IP 3.25x; OOP 4.5x",
+      "fourBet": "IP 50% pot; OOP 75% pot",
+      "fiveBet": "all-in only",
+      "coldCalls": "BB defend only"
+    }
+  },
+  "sample": {
+    "tableHands": 1000000,
+    "playerHands": 6000000,
+    "decisions": 6157655
+  },
+  "metricOrder": [
+    "vpip",
+    "pfr",
+    "threeBet",
+    "squeeze",
+    "fourBet",
+    "foldToThreeBet"
+  ],
+  "metricDefinitions": {
+    "vpip": {
+      "label": "VPIP",
+      "opportunity": "所有手牌"
+    },
+    "pfr": {
+      "label": "PFR",
+      "opportunity": "所有手牌"
+    },
+    "threeBet": {
+      "label": "3Bet",
+      "opportunity": "首次行动面对一次开池加注"
+    },
+    "squeeze": {
+      "label": "Squeeze",
+      "opportunity": "首次行动面对开池加注且已有跟注者"
+    },
+    "fourBet": {
+      "label": "4Bet",
+      "opportunity": "开池者面对 3Bet 再次行动"
+    },
+    "foldToThreeBet": {
+      "label": "Fold to 3Bet",
+      "opportunity": "开池者面对 3Bet 再次行动"
+    }
+  },
+  "overall": {
+    "hands": 6000000,
+    "metrics": {
+      "vpip": {
+        "numerator": 1488216,
+        "opportunities": 6000000,
+        "percent": 24.8036,
+        "ci95LowPercent": 24.769059750440466,
+        "ci95HighPercent": 24.838172513183224,
+        "ci95HalfWidthPercentagePoints": 0.0345563813713784
+      },
+      "pfr": {
+        "numerator": 1116922,
+        "opportunities": 6000000,
+        "percent": 18.615366666666667,
+        "ci95LowPercent": 18.584242399771377,
+        "ci95HighPercent": 18.64653112112841,
+        "ci95HalfWidthPercentagePoints": 0.031144360678517224
+      },
+      "threeBet": {
+        "numerator": 228954,
+        "opportunities": 2411829,
+        "percent": 9.492961565683139,
+        "ci95LowPercent": 9.456033284909212,
+        "ci95HighPercent": 9.530018882033179,
+        "ci95HalfWidthPercentagePoints": 0.03699279856198279
+      },
+      "squeeze": {
+        "numerator": 0,
+        "opportunities": 0,
+        "percent": null,
+        "ci95LowPercent": null,
+        "ci95HighPercent": null,
+        "ci95HalfWidthPercentagePoints": null
+      },
+      "fourBet": {
+        "numerator": 33107,
+        "opportunities": 216938,
+        "percent": 15.261042325457044,
+        "ci95LowPercent": 15.110331416546998,
+        "ci95HighPercent": 15.4129835021152,
+        "ci95HalfWidthPercentagePoints": 0.1513260427841001
+      },
+      "foldToThreeBet": {
+        "numerator": 132338,
+        "opportunities": 216938,
+        "percent": 61.00268279416239,
+        "ci95LowPercent": 60.79724491671998,
+        "ci95HighPercent": 61.20773101553305,
+        "ci95HalfWidthPercentagePoints": 0.20524304940653382
+      }
+    }
+  },
+  "byPosition": {
+    "UTG": {
+      "hands": 1000000,
+      "metrics": {
+        "vpip": {
+          "numerator": 192910,
+          "opportunities": 1000000,
+          "percent": 19.291,
+          "ci95LowPercent": 19.213781181563476,
+          "ci95HighPercent": 19.368454752248052,
+          "ci95HalfWidthPercentagePoints": 0.0773367853422885
+        },
+        "pfr": {
+          "numerator": 192910,
+          "opportunities": 1000000,
+          "percent": 19.291,
+          "ci95LowPercent": 19.213781181563476,
+          "ci95HighPercent": 19.368454752248052,
+          "ci95HalfWidthPercentagePoints": 0.0773367853422885
+        },
+        "threeBet": {
+          "numerator": 0,
+          "opportunities": 0,
+          "percent": null,
+          "ci95LowPercent": null,
+          "ci95HighPercent": null,
+          "ci95HalfWidthPercentagePoints": null
+        },
+        "squeeze": {
+          "numerator": 0,
+          "opportunities": 0,
+          "percent": null,
+          "ci95LowPercent": null,
+          "ci95HighPercent": null,
+          "ci95HalfWidthPercentagePoints": null
+        },
+        "fourBet": {
+          "numerator": 8766,
+          "opportunities": 57927,
+          "percent": 15.132839608472734,
+          "ci95LowPercent": 14.843317040331721,
+          "ci95HighPercent": 15.426986337335935,
+          "ci95HalfWidthPercentagePoints": 0.2918346485021067
+        },
+        "foldToThreeBet": {
+          "numerator": 34071,
+          "opportunities": 57927,
+          "percent": 58.8171319074007,
+          "ci95LowPercent": 58.41576925463724,
+          "ci95HighPercent": 59.217325212428605,
+          "ci95HalfWidthPercentagePoints": 0.40077797889568334
+        }
+      }
+    },
+    "HJ": {
+      "hands": 1000000,
+      "metrics": {
+        "vpip": {
+          "numerator": 204289,
+          "opportunities": 1000000,
+          "percent": 20.4289,
+          "ci95LowPercent": 20.349991621098024,
+          "ci95HighPercent": 20.508035570355098,
+          "ci95HalfWidthPercentagePoints": 0.07902197462853755
+        },
+        "pfr": {
+          "numerator": 204289,
+          "opportunities": 1000000,
+          "percent": 20.4289,
+          "ci95LowPercent": 20.349991621098024,
+          "ci95HighPercent": 20.508035570355098,
+          "ci95HalfWidthPercentagePoints": 0.07902197462853755
+        },
+        "threeBet": {
+          "numerator": 15647,
+          "opportunities": 192910,
+          "percent": 8.111036234513504,
+          "ci95LowPercent": 7.990042555706968,
+          "ci95HighPercent": 8.233698168206569,
+          "ci95HalfWidthPercentagePoints": 0.121827806249801
+        },
+        "squeeze": {
+          "numerator": 0,
+          "opportunities": 0,
+          "percent": null,
+          "ci95LowPercent": null,
+          "ci95HighPercent": null,
+          "ci95HalfWidthPercentagePoints": null
+        },
+        "fourBet": {
+          "numerator": 7120,
+          "opportunities": 50896,
+          "percent": 13.989311537252435,
+          "ci95LowPercent": 13.69067185576526,
+          "ci95HighPercent": 14.293386739671297,
+          "ci95HalfWidthPercentagePoints": 0.30135744195301795
+        },
+        "foldToThreeBet": {
+          "numerator": 31144,
+          "opportunities": 50896,
+          "percent": 61.191449229801954,
+          "ci95LowPercent": 60.76725434863018,
+          "ci95HighPercent": 61.61395485261346,
+          "ci95HalfWidthPercentagePoints": 0.4233502519916388
+        }
+      }
+    },
+    "CO": {
+      "hands": 1000000,
+      "metrics": {
+        "vpip": {
+          "numerator": 215368,
+          "opportunities": 1000000,
+          "percent": 21.5368,
+          "ci95LowPercent": 21.456339731470024,
+          "ci95HighPercent": 21.61747894811134,
+          "ci95HalfWidthPercentagePoints": 0.08056960832065752
+        },
+        "pfr": {
+          "numerator": 215368,
+          "opportunities": 1000000,
+          "percent": 21.5368,
+          "ci95LowPercent": 21.456339731470024,
+          "ci95HighPercent": 21.61747894811134,
+          "ci95HalfWidthPercentagePoints": 0.08056960832065752
+        },
+        "threeBet": {
+          "numerator": 34196,
+          "opportunities": 365905,
+          "percent": 9.345595168144737,
+          "ci95LowPercent": 9.251710610891397,
+          "ci95HighPercent": 9.440333338125328,
+          "ci95HalfWidthPercentagePoints": 0.0943113636169654
+        },
+        "squeeze": {
+          "numerator": 0,
+          "opportunities": 0,
+          "percent": null,
+          "ci95LowPercent": null,
+          "ci95HighPercent": null,
+          "ci95HalfWidthPercentagePoints": null
+        },
+        "fourBet": {
+          "numerator": 7897,
+          "opportunities": 46198,
+          "percent": 17.09381358500368,
+          "ci95LowPercent": 16.753272189153165,
+          "ci95HighPercent": 17.43982696015494,
+          "ci95HalfWidthPercentagePoints": 0.34327738550088693
+        },
+        "foldToThreeBet": {
+          "numerator": 28973,
+          "opportunities": 46198,
+          "percent": 62.71483614009264,
+          "ci95LowPercent": 62.27284569181101,
+          "ci95HighPercent": 63.1547122345779,
+          "ci95HalfWidthPercentagePoints": 0.44093327138344796
+        }
+      }
+    },
+    "BTN": {
+      "hands": 1000000,
+      "metrics": {
+        "vpip": {
+          "numerator": 240521,
+          "opportunities": 1000000,
+          "percent": 24.052100000000003,
+          "ci95LowPercent": 23.96843094385253,
+          "ci95HighPercent": 24.13596841096033,
+          "ci95HalfWidthPercentagePoints": 0.08376873355390169
+        },
+        "pfr": {
+          "numerator": 240521,
+          "opportunities": 1000000,
+          "percent": 24.052100000000003,
+          "ci95LowPercent": 23.96843094385253,
+          "ci95HighPercent": 24.13596841096033,
+          "ci95HalfWidthPercentagePoints": 0.08376873355390169
+        },
+        "threeBet": {
+          "numerator": 57592,
+          "opportunities": 512455,
+          "percent": 11.238450205383888,
+          "ci95LowPercent": 11.152266538055114,
+          "ci95HighPercent": 11.325214996054934,
+          "ci95HalfWidthPercentagePoints": 0.08647422899990959
+        },
+        "squeeze": {
+          "numerator": 0,
+          "opportunities": 0,
+          "percent": null,
+          "ci95LowPercent": null,
+          "ci95HighPercent": null,
+          "ci95HalfWidthPercentagePoints": null
+        },
+        "fourBet": {
+          "numerator": 6545,
+          "opportunities": 38699,
+          "percent": 16.912581720457894,
+          "ci95LowPercent": 16.542386943581015,
+          "ci95HighPercent": 17.289344694914746,
+          "ci95HalfWidthPercentagePoints": 0.3734788756668661
+        },
+        "foldToThreeBet": {
+          "numerator": 24928,
+          "opportunities": 38699,
+          "percent": 64.41510116540479,
+          "ci95LowPercent": 63.93668471932189,
+          "ci95HighPercent": 64.89065606357876,
+          "ci95HalfWidthPercentagePoints": 0.47698567212843823
+        }
+      }
+    },
+    "SB": {
+      "hands": 1000000,
+      "metrics": {
+        "vpip": {
+          "numerator": 199723,
+          "opportunities": 1000000,
+          "percent": 19.9723,
+          "ci95LowPercent": 19.894057603588674,
+          "ci95HighPercent": 20.05077309587117,
+          "ci95HalfWidthPercentagePoints": 0.07835774614124713
+        },
+        "pfr": {
+          "numerator": 199723,
+          "opportunities": 1000000,
+          "percent": 19.9723,
+          "ci95LowPercent": 19.894057603588674,
+          "ci95HighPercent": 20.05077309587117,
+          "ci95HalfWidthPercentagePoints": 0.07835774614124713
+        },
+        "threeBet": {
+          "numerator": 63934,
+          "opportunities": 636062,
+          "percent": 10.05153585656744,
+          "ci95LowPercent": 9.9778825630427,
+          "ci95HighPercent": 10.1256716799498,
+          "ci95HalfWidthPercentagePoints": 0.07389455845355081
+        },
+        "squeeze": {
+          "numerator": 0,
+          "opportunities": 0,
+          "percent": null,
+          "ci95LowPercent": null,
+          "ci95HighPercent": null,
+          "ci95HalfWidthPercentagePoints": null
+        },
+        "fourBet": {
+          "numerator": 2779,
+          "opportunities": 23218,
+          "percent": 11.969161857179774,
+          "ci95LowPercent": 11.557912827349663,
+          "ci95HighPercent": 12.39299334296207,
+          "ci95HalfWidthPercentagePoints": 0.41754025780620374
+        },
+        "foldToThreeBet": {
+          "numerator": 13222,
+          "opportunities": 23218,
+          "percent": 56.94719614092515,
+          "ci95LowPercent": 56.30919659670269,
+          "ci95HighPercent": 57.582897213862104,
+          "ci95HalfWidthPercentagePoints": 0.6368503085797061
+        }
+      }
+    },
+    "BB": {
+      "hands": 1000000,
+      "metrics": {
+        "vpip": {
+          "numerator": 435405,
+          "opportunities": 1000000,
+          "percent": 43.5405,
+          "ci95LowPercent": 43.443348036832894,
+          "ci95HighPercent": 43.637701590782974,
+          "ci95HalfWidthPercentagePoints": 0.09717677697503868
+        },
+        "pfr": {
+          "numerator": 64111,
+          "opportunities": 1000000,
+          "percent": 6.4111,
+          "ci95LowPercent": 6.363257815839985,
+          "ci95HighPercent": 6.459277072802333,
+          "ci95HalfWidthPercentagePoints": 0.048009628481174293
+        },
+        "threeBet": {
+          "numerator": 57585,
+          "opportunities": 704497,
+          "percent": 8.17391699325902,
+          "ci95LowPercent": 8.110170363517199,
+          "ci95HighPercent": 8.238119756382227,
+          "ci95HalfWidthPercentagePoints": 0.06397469643251441
+        },
+        "squeeze": {
+          "numerator": 0,
+          "opportunities": 0,
+          "percent": null,
+          "ci95LowPercent": null,
+          "ci95HighPercent": null,
+          "ci95HalfWidthPercentagePoints": null
+        },
+        "fourBet": {
+          "numerator": 0,
+          "opportunities": 0,
+          "percent": null,
+          "ci95LowPercent": null,
+          "ci95HighPercent": null,
+          "ci95HalfWidthPercentagePoints": null
+        },
+        "foldToThreeBet": {
+          "numerator": 0,
+          "opportunities": 0,
+          "percent": null,
+          "ci95LowPercent": null,
+          "ci95HighPercent": null,
+          "ci95HalfWidthPercentagePoints": null
+        }
+      }
+    }
+  },
+  "sampleSize": {
+    "overallHeadline": {
+      "label": "总体",
+      "status": "adequate",
+      "criteria": "Each applicable metric needs at least 1,000 opportunities and a Wilson 95% CI half-width no greater than 2 percentage points.",
+      "applicableMetrics": 8,
+      "minimumOpportunities": 1312653,
+      "maximumCiHalfWidthPercentagePoints": 0.08288781158833358,
+      "insufficient": [],
+      "conclusion": "总体的常用指标机会数和 95% 置信区间已足够用于稳定基准。"
+    },
+    "positionHeadline": {
+      "label": "分位置",
+      "status": "adequate",
+      "criteria": "Each applicable metric needs at least 1,000 opportunities and a Wilson 95% CI half-width no greater than 2 percentage points.",
+      "applicableMetrics": 38,
+      "minimumOpportunities": 192910,
+      "maximumCiHalfWidthPercentagePoints": 0.1933947534142333,
+      "insufficient": [],
+      "conclusion": "分位置的常用指标机会数和 95% 置信区间已足够用于稳定基准。"
+    }
+  },
+  "display": {
+    "zeroOpportunity": "N/A",
+    "zeroOpportunityReasonByMetric": {
+      "squeeze": "该求解树只允许 BB 平跟开池，而 BB 已是翻前最后行动者，因此不存在 Squeeze 机会。"
+    },
+    "comparisonBoundary": "仅适用于 GGPoker Rush & Cash、6-max、100bb、相同盲注、抽水、Rakeback、Jackpot Drop 与行动抽象；不用于盈利或翻后指标比较。"
+  }
+}
