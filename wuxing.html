@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="今日五行 Windows 桌面小窗：本地计算黄历、干支与个人化每日提醒。" />
+  <title>今日五行 · KishPoker</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Microsoft YaHei UI", system-ui, sans-serif; color: #f2f4ee; background: #0b1513; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(circle at 86% 4%, #214039 0, transparent 35%), #0b1513; }
+    a { color: inherit; }
+    .wrap { width: min(1060px, calc(100% - 36px)); margin: auto; }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 26px 0; border-bottom: 1px solid #ffffff24; }
+    .brand { font-weight: 800; letter-spacing: .13em; text-decoration: none; }
+    .back { color: #b4c7bc; font-size: 14px; text-decoration: none; }
+    .back:hover { color: #f4d59d; }
+    main { padding: 64px 0 88px; }
+    .eyebrow { color: #d7aa6d; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
+    h1 { margin: 15px 0 18px; font: 600 clamp(52px, 8vw, 92px)/1.08 "SimSun", Georgia, serif; letter-spacing: .04em; }
+    .lead { max-width: 690px; margin: 0; color: #cbd8cf; font-size: clamp(17px, 2vw, 21px); line-height: 1.75; }
+    .chips { display: flex; gap: 9px; flex-wrap: wrap; margin: 28px 0 35px; }
+    .chips span { border: 1px solid #ffffff2a; border-radius: 999px; padding: 7px 12px; color: #bcd0c1; font-size: 13px; }
+    .download { display: inline-block; padding: 14px 24px; border-radius: 11px; background: #d8b681; color: #17251f; font-size: 16px; font-weight: 800; text-decoration: none; }
+    .download:hover, .download:focus-visible { background: #f2d39b; outline: 2px solid #fff; outline-offset: 3px; }
+    .download-meta { margin: 14px 0 0; color: #a5b8a9; font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 70px; }
+    .card { border: 1px solid #ffffff1b; border-radius: 14px; padding: 25px; background: #13231e; }
+    .card em { display: block; color: #d6a467; font: normal 700 12px/1.5 system-ui, sans-serif; letter-spacing: .1em; }
+    .card h2 { margin: 12px 0 9px; font-size: 19px; }
+    .card p { margin: 0; color: #b8c8bb; font-size: 14px; line-height: 1.75; }
+    .details { display: grid; grid-template-columns: 1.35fr 1fr; gap: 28px; margin-top: 40px; }
+    .panel { padding: 26px; border: 1px solid #ffffff1b; border-radius: 14px; background: #101c19; }
+    .panel h2 { margin: 0 0 15px; color: #eed9ae; font-size: 18px; }
+    .panel p, .panel li { color: #b8c8bb; font-size: 14px; line-height: 1.8; }
+    .panel p { margin: 8px 0; }
+    .panel ol { padding-left: 21px; margin: 0; }
+    .panel li + li { margin-top: 8px; }
+    .notice { margin-top: 28px; padding: 20px 24px; border-left: 3px solid #d8aa70; background: #291e19; }
+    .notice strong { color: #f3d2a6; }
+    .notice p { margin: 7px 0 0; color: #d7c2ac; font-size: 13px; line-height: 1.75; }
+    .checksum { margin-top: 25px; color: #9fb5a5; font-size: 12px; line-height: 1.7; }
+    .checksum code { display: block; overflow-wrap: anywhere; margin-top: 5px; color: #dae5d5; font-size: 12px; }
+    footer { padding: 26px 0 42px; border-top: 1px solid #ffffff24; color: #93aa99; font-size: 12px; line-height: 1.7; }
+    footer a { color: #cdbb95; }
+    @media (max-width: 720px) { main { padding-top: 42px; } .grid, .details { grid-template-columns: 1fr; } .grid { margin-top: 50px; } .card { padding: 21px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header><a class="brand" href="/">KISHPOKER</a><a class="back" href="/">返回主站 ↗</a></header>
+    <main>
+      <div class="eyebrow">WINDOWS DESKTOP · 1.0.5</div>
+      <h1>今日五行</h1>
+      <p class="lead">一个常驻桌面的每日小窗。查看北京时间的黄历与五行，输入自己的出生资料后，得到当天的具体提醒和推导依据。</p>
+      <div class="chips"><span>可离线使用</span><span>出生资料只存本机</span><span>每天自动更新</span><span>托盘常驻</span></div>
+      <a class="download" href="https://github.com/jtxdavid7-lgtm/kishpre/releases/download/jinri-wuxing-v1.0.5/jinri-wuxing-win-x64-1.0.5-setup.exe">下载 Windows 安装包 ↗</a>
+      <p class="download-meta">Windows x64 · 约 106 MiB · 免费下载 · 无需 KishPoker 账号</p>
+
+      <div class="grid">
+        <section class="card"><em>01 / TODAY</em><h2>每天看一眼</h2><p>公历、农历、日柱、五行与传统黄历宜忌，按中国时间跨日更新。</p></section>
+        <section class="card"><em>02 / PERSONAL</em><h2>只讲今天</h2><p>结合你的日主、月令与当天干支关系，给出做事、留意和节奏方面的提醒，显示依据。</p></section>
+        <section class="card"><em>03 / PRIVATE</em><h2>资料留在电脑</h2><p>首次打开自行填写公历生日、24 小时制出生时间和城市；当前版本的计算不向网站上传这些资料。</p></section>
+      </div>
+
+      <div class="details">
+        <section class="panel"><h2>如何使用</h2><ol><li>下载并安装，首次打开输入你自己的公历出生资料。</li><li>查看当天的黄历与个人化详解；小窗可展开、置顶或收进通知区域。</li><li>需要开机启动时，在设置里主动开启。网络断开也能继续使用。</li></ol></section>
+        <section class="panel"><h2>关于 AI 解读</h2><p>目前发布的是离线详解版，<strong>尚未接入联网 AI</strong>。将来若开放 AI，只会分析当天；同一天再次查看只读取已生成内容，不会反复调用模型。届时会先说明数据去向并由使用者主动开启。</p><p>现有提示来自固定规则，不是 AI 对话，也不是专业命理师服务。</p></section>
+      </div>
+
+      <aside class="notice"><strong>安装前请知悉</strong><p>安装包目前没有代码签名，Windows 可能显示“未知发布者”或安全提示。请核对下方 SHA-256；若设备安全策略阻止安装，不要关闭系统保护来强行安装。传统命理解读仅供文化参考，不可据此判断吉凶、健康、投资或牌局结果。</p></aside>
+      <div class="checksum">安装包 SHA-256<code>2C30740884E2281718C8C82176958E715513DA48FA03F413198C7820B155839E</code></div>
+    </main>
+    <footer>© 2026 KishPoker · 今日五行。日历计算使用 <a href="https://github.com/6tail/lunar-javascript">lunar-javascript</a>（MIT 许可，许可证随安装包附带）。</footer>
+  </div>
+</body>
+</html>
