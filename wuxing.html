@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="今日五行 Windows 桌面小窗：本地计算黄历、干支与个人化每日提醒。" />
+  <meta name="description" content="今日五行 Windows 桌面小窗：本地计算黄历和每日提醒，可选择每天一次的 DeepSeek 联网解读。" />
   <title>今日五行 · KishPoker</title>
   <style>
     :root { color-scheme: dark; font-family: "Microsoft YaHei UI", system-ui, sans-serif; color: #f2f4ee; background: #0b1513; }
@@ -50,26 +50,26 @@
   <div class="wrap">
     <header><a class="brand" href="/">KISHPOKER</a><a class="back" href="/">返回主站 ↗</a></header>
     <main>
-      <div class="eyebrow">WINDOWS DESKTOP · 1.0.5</div>
+      <div class="eyebrow">WINDOWS DESKTOP · 1.0.7</div>
       <h1>今日五行</h1>
       <p class="lead">一个常驻桌面的每日小窗。查看北京时间的黄历与五行，输入自己的出生资料后，得到当天的具体提醒和推导依据。</p>
-      <div class="chips"><span>可离线使用</span><span>出生资料只存本机</span><span>每天自动更新</span><span>托盘常驻</span></div>
-      <a class="download" href="https://github.com/jtxdavid7-lgtm/kishpre/releases/download/jinri-wuxing-v1.0.5/jinri-wuxing-win-x64-1.0.5-setup.exe">下载 Windows 安装包 ↗</a>
+      <div class="chips"><span>可离线使用</span><span>原始生日只存本机</span><span>可选每日一次 AI 解读</span><span>托盘常驻</span></div>
+      <a class="download" href="https://github.com/jtxdavid7-lgtm/kishpre/releases/download/jinri-wuxing-v1.0.7/jinri-wuxing-win-x64-1.0.7-setup.exe">下载 Windows 安装包 ↗</a>
       <p class="download-meta">Windows x64 · 约 106 MiB · 免费下载 · 无需 KishPoker 账号</p>
 
       <div class="grid">
         <section class="card"><em>01 / TODAY</em><h2>每天看一眼</h2><p>公历、农历、日柱、五行与传统黄历宜忌，按中国时间跨日更新。</p></section>
         <section class="card"><em>02 / PERSONAL</em><h2>只讲今天</h2><p>结合你的日主、月令与当天干支关系，给出做事、留意和节奏方面的提醒，显示依据。</p></section>
-        <section class="card"><em>03 / PRIVATE</em><h2>资料留在电脑</h2><p>首次打开自行填写公历生日、24 小时制出生时间和城市；当前版本的计算不向网站上传这些资料。</p></section>
+        <section class="card"><em>03 / PRIVATE</em><h2>原始资料留在电脑</h2><p>首次打开自行填写公历生日、24 小时制出生时间和城市；本机保存原始资料与固定八字摘要，联网功能默认关闭。</p></section>
       </div>
 
       <div class="details">
-        <section class="panel"><h2>如何使用</h2><ol><li>下载并安装，首次打开输入你自己的公历出生资料。</li><li>查看当天的黄历与个人化详解；小窗可展开、置顶或收进通知区域。</li><li>需要开机启动时，在设置里主动开启。网络断开也能继续使用。</li></ol></section>
-        <section class="panel"><h2>关于 AI 解读</h2><p>目前发布的是离线详解版，<strong>尚未接入联网 AI</strong>。将来若开放 AI，只会分析当天；同一天再次查看只读取已生成内容，不会反复调用模型。届时会先说明数据去向并由使用者主动开启。</p><p>现有提示来自固定规则，不是 AI 对话，也不是专业命理师服务。</p></section>
+        <section class="panel"><h2>如何使用</h2><ol><li>下载并安装，首次打开输入你自己的公历出生资料。</li><li>查看当天的黄历与离线提醒；如果想试 AI，到设置里主动开启「联网 DeepSeek 今日解读」。</li><li>小窗可置顶、收进通知区域，也可主动开启开机启动。断网时仍可看离线内容。</li></ol></section>
+        <section class="panel"><h2>关于 AI 解读</h2><p>联网版只分析北京时间当天：每个安装每天最多生成一次，重复查看读取缓存，不反复调用模型。试用阶段全站每天最多生成 20 份，额度用尽或生成失败后当天不自动重试。</p><p>开启后仅发送匿名安装标识、本机推算出的日主和出生地支摘要、今日干支关系，经 Cloudflare 代理交给腾讯云 TokenHub 的 DeepSeek；<strong>不发送原始出生日期、时间或城市</strong>。不愿联网时保持关闭即可；手动 ChatGPT 备选入口也仍在插件中。</p></section>
       </div>
 
       <aside class="notice"><strong>安装前请知悉</strong><p>安装包目前没有代码签名，Windows 可能显示“未知发布者”或安全提示。请核对下方 SHA-256；若设备安全策略阻止安装，不要关闭系统保护来强行安装。传统命理解读仅供文化参考，不可据此判断吉凶、健康、投资或牌局结果。</p></aside>
-      <div class="checksum">安装包 SHA-256<code>2C30740884E2281718C8C82176958E715513DA48FA03F413198C7820B155839E</code></div>
+      <div class="checksum">安装包 SHA-256<code>A1E548C416F13959F152CD1208756FD6D7103BE3B98AFCE2AC9064C85786FECD</code></div>
     </main>
     <footer>© 2026 KishPoker · 今日五行。日历计算使用 <a href="https://github.com/6tail/lunar-javascript">lunar-javascript</a>（MIT 许可，许可证随安装包附带）。</footer>
   </div>
