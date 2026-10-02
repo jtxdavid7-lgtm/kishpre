@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">今日五行</title>
+  <desc id="desc">仿古铜印中的木火土金水五色花瓣，中央为五字篆意。</desc>
+  <circle cx="256" cy="256" r="242" fill="#10251f" stroke="#c5a36b" stroke-width="14"/>
+  <circle cx="256" cy="256" r="219" fill="none" stroke="#725d3c" stroke-width="3"/>
+  <g stroke="#182922" stroke-width="9" stroke-linejoin="round">
+    <path d="M256 157 C211 134 218 80 256 52 C294 80 301 134 256 157Z" fill="#4e946b"/>
+    <path d="M256 157 C211 134 218 80 256 52 C294 80 301 134 256 157Z" fill="#c45c45" transform="rotate(72 256 256)"/>
+    <path d="M256 157 C211 134 218 80 256 52 C294 80 301 134 256 157Z" fill="#d5ad65" transform="rotate(144 256 256)"/>
+    <path d="M256 157 C211 134 218 80 256 52 C294 80 301 134 256 157Z" fill="#d9d4bc" transform="rotate(216 256 256)"/>
+    <path d="M256 157 C211 134 218 80 256 52 C294 80 301 134 256 157Z" fill="#5986a4" transform="rotate(288 256 256)"/>
+  </g>
+  <circle cx="256" cy="256" r="102" fill="#122923" stroke="#c5a36b" stroke-width="10"/>
+  <circle cx="256" cy="256" r="90" fill="none" stroke="#735e3d" stroke-width="3"/>
+  <text x="256" y="303" text-anchor="middle" fill="#e9d6a7" font-family="KaiTi, STKaiti, SimSun, serif" font-weight="700" font-size="126">五</text>
+</svg>
