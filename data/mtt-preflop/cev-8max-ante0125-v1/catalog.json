@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "cev-8max-ante0125-v1",
   "batchId": "hrc-cev-preflop-20261008-run-54c5a9cf6e544abe8a02b511c91c69da",
-  "updatedAtUtc": "2026-10-08T04:56:34.512Z",
+  "updatedAtUtc": "2026-10-08T20:23:04.302Z",
   "model": {
     "seats": 8,
     "equalStacks": true,
@@ -139,50 +139,82 @@
     {
       "depthBB": 11,
       "profile": "normal",
-      "status": "pending",
+      "status": "done",
       "machine": "A1",
-      "verified": false,
+      "verified": true,
       "sizing": {
         "threeBetIP": "2.5x + 1.0x, all-in",
         "threeBetOOP": "3.3x + 1.0x, all-in",
         "threeBetBBvsSB": "2.5x, all-in"
-      }
+      },
+      "index": "11bb-f29618cc702f/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-08T06:47:50.905Z",
+      "nodeCount": 2638,
+      "sourceSHA256": "aa37da188cc5f73ac47992954efda2977fedac0486c5bd3797008e04080ada2d"
     },
     {
       "depthBB": 12,
       "profile": "normal",
-      "status": "pending",
+      "status": "done",
       "machine": "A2",
-      "verified": false,
+      "verified": true,
       "sizing": {
         "threeBetIP": "2.5x + 1.0x, all-in",
         "threeBetOOP": "3.3x + 1.0x, all-in",
         "threeBetBBvsSB": "2.5x, all-in"
-      }
+      },
+      "index": "12bb-6bc0ea7bf85e/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-08T06:48:54.174Z",
+      "nodeCount": 2369,
+      "sourceSHA256": "6fabe1f4f78026acba1d4640f08eebbc1c90e7f8cbb1a61493a059c0a99347ea"
     },
     {
       "depthBB": 13,
       "profile": "normal",
-      "status": "pending",
+      "status": "done",
       "machine": "A1",
-      "verified": false,
+      "verified": true,
       "sizing": {
         "threeBetIP": "2.5x + 1.0x, all-in",
         "threeBetOOP": "3.3x + 1.0x, all-in",
         "threeBetBBvsSB": "2.5x, all-in"
-      }
+      },
+      "index": "13bb-9a9b91e1811b/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-08T20:18:06.527Z",
+      "nodeCount": 2203,
+      "sourceSHA256": "5650c9eb961972494fcb6c1a355f9f3762ca9437e90d8fb3092d9ee098ce1086"
     },
     {
       "depthBB": 14,
       "profile": "normal",
-      "status": "pending",
+      "status": "done",
       "machine": "A2",
-      "verified": false,
+      "verified": true,
       "sizing": {
         "threeBetIP": "2.5x + 1.0x, all-in",
         "threeBetOOP": "3.3x + 1.0x, all-in",
         "threeBetBBvsSB": "2.5x, all-in"
-      }
+      },
+      "index": "14bb-6fead40b1786/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-08T09:10:31.573Z",
+      "nodeCount": 2163,
+      "sourceSHA256": "6afaab54b82d5138e3c9eb389629233a2697ecc3c24d51cf2cae9ee96ee7fded"
     },
     {
       "depthBB": 15,
@@ -199,14 +231,22 @@
     {
       "depthBB": 17,
       "profile": "normal",
-      "status": "pending",
+      "status": "done",
       "machine": "A2",
-      "verified": false,
+      "verified": true,
       "sizing": {
         "threeBetIP": "2.5x + 1.0x, all-in",
         "threeBetOOP": "3.3x + 1.0x, all-in",
         "threeBetBBvsSB": "2.5x, all-in"
-      }
+      },
+      "index": "17bb-365666cac167/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-08T12:17:56.766Z",
+      "nodeCount": 2010,
+      "sourceSHA256": "de44f9dd3582218dce8e02e34bc629f27c6dedf91a4eaaa29d716bf22c16f569"
     },
     {
       "depthBB": 19,
@@ -223,14 +263,22 @@
     {
       "depthBB": 21,
       "profile": "normal",
-      "status": "pending",
+      "status": "done",
       "machine": "A2",
-      "verified": false,
+      "verified": true,
       "sizing": {
         "threeBetIP": "2.5x + 1.0x, all-in",
         "threeBetOOP": "3.3x + 1.0x, all-in",
         "threeBetBBvsSB": "2.5x, all-in"
-      }
+      },
+      "index": "21bb-60b3edc05198/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-08T17:31:09.771Z",
+      "nodeCount": 3127,
+      "sourceSHA256": "725dcfb7f5a1402d1df1805a4d14eb9fb178e9771ded42ac8e0d380e041cee0d"
     },
     {
       "depthBB": 23,
