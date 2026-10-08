@@ -1,0 +1,368 @@
+{
+  "schemaVersion": 1,
+  "id": "cev-8max-ante0125-v1",
+  "batchId": "hrc-cev-preflop-20261008-run-54c5a9cf6e544abe8a02b511c91c69da",
+  "updatedAtUtc": "2026-10-08T04:56:34.512Z",
+  "model": {
+    "seats": 8,
+    "equalStacks": true,
+    "stackBeforeForcedBets": true,
+    "utility": "ChipEV",
+    "smallBlindBB": 0.5,
+    "bigBlindBB": 1,
+    "antePerPlayerBB": 0.125,
+    "bigBlindAnte": false,
+    "maxActive": 4,
+    "raked": false
+  },
+  "depths": [
+    {
+      "depthBB": 5,
+      "profile": "push-fold",
+      "status": "done",
+      "machine": "A1",
+      "verified": true,
+      "sizing": {
+        "threeBetIP": "all-in",
+        "threeBetOOP": "all-in",
+        "threeBetBBvsSB": "all-in"
+      },
+      "index": "5bb-4cf39660bc4b/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-07T21:40:57.971Z",
+      "nodeCount": 161,
+      "sourceSHA256": "fd92d906c0e201aae22e066e24fd127a1e558df84bf8c6842a991824eab44fad"
+    },
+    {
+      "depthBB": 6,
+      "profile": "push-fold",
+      "status": "done",
+      "machine": "A2",
+      "verified": true,
+      "sizing": {
+        "threeBetIP": "all-in",
+        "threeBetOOP": "all-in",
+        "threeBetBBvsSB": "all-in"
+      },
+      "index": "6bb-85edb9c308f1/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-07T21:47:19.810Z",
+      "nodeCount": 161,
+      "sourceSHA256": "15847911e2138206deec647fc976b90c2385154dc18a2cd90e0d2f7b34cff31c"
+    },
+    {
+      "depthBB": 7,
+      "profile": "push-fold",
+      "status": "done",
+      "machine": "A1",
+      "verified": true,
+      "sizing": {
+        "threeBetIP": "all-in",
+        "threeBetOOP": "all-in",
+        "threeBetBBvsSB": "all-in"
+      },
+      "index": "7bb-80406dd74c43/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-07T21:58:00.418Z",
+      "nodeCount": 161,
+      "sourceSHA256": "4de10567ee5c820d3d0c1522f6207f8531492ae8f22e92c7ef75d0202d32e902"
+    },
+    {
+      "depthBB": 8,
+      "profile": "push-fold",
+      "status": "done",
+      "machine": "A2",
+      "verified": true,
+      "sizing": {
+        "threeBetIP": "all-in",
+        "threeBetOOP": "all-in",
+        "threeBetBBvsSB": "all-in"
+      },
+      "index": "8bb-9fc9b4e42022/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-07T21:53:27.245Z",
+      "nodeCount": 161,
+      "sourceSHA256": "bbaf4e6446b8a3736b90f5c1bbb719f6ddad4cbc7a5fed4be5faa6155622a709"
+    },
+    {
+      "depthBB": 9,
+      "profile": "push-fold",
+      "status": "done",
+      "machine": "A1",
+      "verified": true,
+      "sizing": {
+        "threeBetIP": "all-in",
+        "threeBetOOP": "all-in",
+        "threeBetBBvsSB": "all-in"
+      },
+      "index": "9bb-2a407d5d7b66/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-07T22:03:41.144Z",
+      "nodeCount": 161,
+      "sourceSHA256": "2093560dc64a776f9de1911a2f9d480fefb871789cd9590f70d774b1900dfe65"
+    },
+    {
+      "depthBB": 10,
+      "profile": "push-fold",
+      "status": "done",
+      "machine": "A2",
+      "verified": true,
+      "sizing": {
+        "threeBetIP": "all-in",
+        "threeBetOOP": "all-in",
+        "threeBetBBvsSB": "all-in"
+      },
+      "index": "10bb-23aa212c8abb/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-07T22:06:26.581Z",
+      "nodeCount": 161,
+      "sourceSHA256": "84b6d73d86c13df27435390d68c6df92547a1ba0a4f117533970b9385ecacc5e"
+    },
+    {
+      "depthBB": 11,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A1",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "2.5x + 1.0x, all-in",
+        "threeBetOOP": "3.3x + 1.0x, all-in",
+        "threeBetBBvsSB": "2.5x, all-in"
+      }
+    },
+    {
+      "depthBB": 12,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A2",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "2.5x + 1.0x, all-in",
+        "threeBetOOP": "3.3x + 1.0x, all-in",
+        "threeBetBBvsSB": "2.5x, all-in"
+      }
+    },
+    {
+      "depthBB": 13,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A1",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "2.5x + 1.0x, all-in",
+        "threeBetOOP": "3.3x + 1.0x, all-in",
+        "threeBetBBvsSB": "2.5x, all-in"
+      }
+    },
+    {
+      "depthBB": 14,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A2",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "2.5x + 1.0x, all-in",
+        "threeBetOOP": "3.3x + 1.0x, all-in",
+        "threeBetBBvsSB": "2.5x, all-in"
+      }
+    },
+    {
+      "depthBB": 15,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A1",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "2.5x + 1.0x, all-in",
+        "threeBetOOP": "3.3x + 1.0x, all-in",
+        "threeBetBBvsSB": "2.5x, all-in"
+      }
+    },
+    {
+      "depthBB": 17,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A2",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "2.5x + 1.0x, all-in",
+        "threeBetOOP": "3.3x + 1.0x, all-in",
+        "threeBetBBvsSB": "2.5x, all-in"
+      }
+    },
+    {
+      "depthBB": 19,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A1",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "2.5x + 1.0x, all-in",
+        "threeBetOOP": "3.3x + 1.0x, all-in",
+        "threeBetBBvsSB": "2.5x, all-in"
+      }
+    },
+    {
+      "depthBB": 21,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A2",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "2.5x + 1.0x, all-in",
+        "threeBetOOP": "3.3x + 1.0x, all-in",
+        "threeBetBBvsSB": "2.5x, all-in"
+      }
+    },
+    {
+      "depthBB": 23,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A1",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "2.5x + 1.0x, all-in",
+        "threeBetOOP": "3.3x + 1.0x, all-in",
+        "threeBetBBvsSB": "2.5x, all-in"
+      }
+    },
+    {
+      "depthBB": 25,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A2",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "2.5x + 1.0x, all-in",
+        "threeBetOOP": "3.3x + 1.0x, all-in",
+        "threeBetBBvsSB": "2.5x, all-in"
+      }
+    },
+    {
+      "depthBB": 30,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A1",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "3.0x + 1.0x, all-in",
+        "threeBetOOP": "4.0x + 1.0x, all-in",
+        "threeBetBBvsSB": "3.0x, all-in"
+      }
+    },
+    {
+      "depthBB": 35,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A2",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "3.0x + 1.0x",
+        "threeBetOOP": "4.0x + 1.0x",
+        "threeBetBBvsSB": "3.0x"
+      }
+    },
+    {
+      "depthBB": 40,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A1",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "3.0x + 1.0x",
+        "threeBetOOP": "4.0x + 1.0x",
+        "threeBetBBvsSB": "3.0x"
+      }
+    },
+    {
+      "depthBB": 50,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A2",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "3.5x + 1.0x",
+        "threeBetOOP": "4.5x + 1.0x",
+        "threeBetBBvsSB": "3.5x"
+      }
+    },
+    {
+      "depthBB": 60,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A1",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "3.5x + 1.0x",
+        "threeBetOOP": "4.5x + 1.0x",
+        "threeBetBBvsSB": "3.5x"
+      }
+    },
+    {
+      "depthBB": 70,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A2",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "3.5x + 1.0x",
+        "threeBetOOP": "4.5x + 1.0x",
+        "threeBetBBvsSB": "3.5x"
+      }
+    },
+    {
+      "depthBB": 80,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A1",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "3.5x + 1.0x",
+        "threeBetOOP": "4.5x + 1.0x",
+        "threeBetBBvsSB": "3.5x"
+      }
+    },
+    {
+      "depthBB": 90,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A2",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "3.5x + 1.0x",
+        "threeBetOOP": "4.5x + 1.0x",
+        "threeBetBBvsSB": "3.5x"
+      }
+    },
+    {
+      "depthBB": 100,
+      "profile": "normal",
+      "status": "pending",
+      "machine": "A1",
+      "verified": false,
+      "sizing": {
+        "threeBetIP": "3.5x + 1.0x",
+        "threeBetOOP": "4.5x + 1.0x",
+        "threeBetBBvsSB": "3.5x"
+      }
+    }
+  ]
+}
