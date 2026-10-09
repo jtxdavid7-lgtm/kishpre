@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "cev-8max-ante0125-v1",
   "batchId": "hrc-cev-preflop-20261008-run-54c5a9cf6e544abe8a02b511c91c69da",
-  "updatedAtUtc": "2026-10-08T23:27:15.386Z",
+  "updatedAtUtc": "2026-10-09T01:28:10.494Z",
   "model": {
     "seats": 8,
     "equalStacks": true,
@@ -303,14 +303,22 @@
     {
       "depthBB": 25,
       "profile": "normal",
-      "status": "pending",
+      "status": "done",
       "machine": "A2",
-      "verified": false,
+      "verified": true,
       "sizing": {
         "threeBetIP": "2.5x + 1.0x, all-in",
         "threeBetOOP": "3.3x + 1.0x, all-in",
         "threeBetBBvsSB": "2.5x, all-in"
-      }
+      },
+      "index": "25bb-aae317f44bf4/index.json",
+      "finalCI": null,
+      "targetCI": 3,
+      "ciVerification": "automatic-target-stop",
+      "automaticStopVerified": true,
+      "completedAtUtc": "2026-10-09T01:02:29.424Z",
+      "nodeCount": 3600,
+      "sourceSHA256": "4a61ae8600d87f1a0185a0053c01b252c12f6ecdf598dae34c0207443a1fa6e0"
     },
     {
       "depthBB": 30,
