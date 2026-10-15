@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "cev-8max-ante0125-v1",
   "batchId": "hrc-cev-preflop-20261008-run-54c5a9cf6e544abe8a02b511c91c69da",
-  "updatedAtUtc": "2026-10-13T17:58:52.139Z",
+  "updatedAtUtc": "2026-10-15T05:08:03.352Z",
   "model": {
     "seats": 8,
     "equalStacks": true,
@@ -327,7 +327,7 @@
         "threeBetOOP": "3.3x + 1.0x, all-in",
         "threeBetBBvsSB": "2.5x, all-in"
       },
-      "index": "25bb-aae317f44bf4/index.json",
+      "index": "25bb-f2359a50c210/index.json",
       "finalCI": null,
       "targetCI": 3,
       "ciVerification": "automatic-target-stop",
@@ -339,14 +339,22 @@
     {
       "depthBB": 30,
       "profile": "normal",
-      "status": "pending",
+      "status": "done",
       "machine": "A1",
-      "verified": false,
+      "verified": true,
       "sizing": {
         "threeBetIP": "3.0x + 1.0x, all-in",
         "threeBetOOP": "4.0x + 1.0x, all-in",
         "threeBetBBvsSB": "3.0x, all-in"
-      }
+      },
+      "index": "30bb-884ecdd99aec/index.json",
+      "finalCI": 2.98,
+      "targetCI": 3,
+      "ciVerification": "observed-final-ci",
+      "automaticStopVerified": false,
+      "completedAtUtc": "2026-10-15T03:39:25.067Z",
+      "nodeCount": 3330,
+      "sourceSHA256": "b1c428cb73192802d1b2231785939c9cc589ab227104adc57469945092478c7c"
     },
     {
       "depthBB": 35,
@@ -371,14 +379,22 @@
     {
       "depthBB": 40,
       "profile": "normal",
-      "status": "pending",
+      "status": "done",
       "machine": "A1",
-      "verified": false,
+      "verified": true,
       "sizing": {
         "threeBetIP": "3.0x + 1.0x",
         "threeBetOOP": "4.0x + 1.0x",
         "threeBetBBvsSB": "3.0x"
-      }
+      },
+      "index": "40bb-bfb43b10dbe4/index.json",
+      "finalCI": 2.99,
+      "targetCI": 3,
+      "ciVerification": "observed-final-ci",
+      "automaticStopVerified": false,
+      "completedAtUtc": "2026-10-15T03:31:56.398Z",
+      "nodeCount": 5659,
+      "sourceSHA256": "6a0add418e0b9c122599133891875c11f36bf5a9a2fb5a6804de598be49cda13"
     },
     {
       "depthBB": 50,
