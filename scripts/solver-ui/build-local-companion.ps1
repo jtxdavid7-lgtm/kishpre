@@ -1,21 +1,66 @@
 param(
-    [string]$Version = '0.1.5',
-    [string]$SolverBinary = 'F:\kish-gto\solver-engines\postflop-solver-gg\target\release\examples\gg_fulltree_direct_pack.exe'
+    [ValidatePattern('^[0-9A-Za-z][0-9A-Za-z._-]*$')]
+    [string]$Version = '0.1.8',
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$SolverBinary
 )
 
 $ErrorActionPreference = 'Stop'
 $siteRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
-$solverSourceRoot = (Resolve-Path -LiteralPath (Join-Path (Split-Path -Parent $SolverBinary) '..\..\..')).Path
 $outputRoot = Join-Path $siteRoot 'output\solver-companion'
 $stageRoot = Join-Path $outputRoot "kishpoker-solver-companion-win-x64-$Version"
 $runtimeRoot = Join-Path $stageRoot 'runtime'
 $downloadRoot = Join-Path $siteRoot 'public\downloads'
 $zipPath = Join-Path $downloadRoot "kishpoker-solver-companion-win-x64-$Version.zip"
 $installerPath = Join-Path $downloadRoot "kishpoker-solver-companion-win-x64-$Version-setup.exe"
+$nodeBinary = (Get-Command node.exe -ErrorAction Stop).Source
 
-foreach ($required in @($SolverBinary, (Get-Command node.exe).Source)) {
+foreach ($required in @($SolverBinary, $nodeBinary)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Required runtime file is missing: $required"
+    }
+}
+$SolverBinary = (Resolve-Path -LiteralPath $SolverBinary).Path
+$nodeBinary = (Resolve-Path -LiteralPath $nodeBinary).Path
+$solverSourceRoot = (Resolve-Path -LiteralPath (Join-Path (Split-Path -Parent $SolverBinary) '..\..\..')).Path
+
+$solverHelpStartInfo = New-Object System.Diagnostics.ProcessStartInfo
+$solverHelpStartInfo.FileName = $SolverBinary
+$solverHelpStartInfo.Arguments = '--help'
+$solverHelpStartInfo.UseShellExecute = $false
+$solverHelpStartInfo.CreateNoWindow = $true
+$solverHelpStartInfo.RedirectStandardOutput = $true
+$solverHelpStartInfo.RedirectStandardError = $true
+$solverHelpProcess = New-Object System.Diagnostics.Process
+$solverHelpProcess.StartInfo = $solverHelpStartInfo
+try {
+    if (-not $solverHelpProcess.Start()) {
+        throw 'Unable to start the solver binary for compatibility validation.'
+    }
+    $solverHelpStdout = $solverHelpProcess.StandardOutput.ReadToEndAsync()
+    $solverHelpStderr = $solverHelpProcess.StandardError.ReadToEndAsync()
+    $solverHelpProcess.WaitForExit()
+    $solverHelp = $solverHelpStdout.Result + [Environment]::NewLine + $solverHelpStderr.Result
+    $solverHelpExitCode = $solverHelpProcess.ExitCode
+} finally {
+    $solverHelpProcess.Dispose()
+}
+if ($solverHelpExitCode -ne 0) {
+    throw "Solver capability check failed (exit $solverHelpExitCode)."
+}
+foreach ($requiredOption in @(
+    '--emit-progress',
+    '--tree-policy',
+    '--flop-bet-sizes',
+    '--allin-remaining-stack-fraction',
+    '--rake-rate',
+    '--export-streets',
+    '--river-card-limit',
+    'compact-binary-v1'
+)) {
+    if ($solverHelp.IndexOf($requiredOption, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        throw "Solver binary is incompatible with companion $Version; missing option: $requiredOption"
     }
 }
 
@@ -35,7 +80,7 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'companion\README.txt') -Destina
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'companion\THIRD_PARTY_NOTICES.txt') -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'companion\start.cmd') -Destination $runtimeRoot
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'companion\launch-hidden.vbs') -Destination $runtimeRoot
-Copy-Item -LiteralPath (Get-Command node.exe).Source -Destination (Join-Path $runtimeRoot 'node.exe')
+Copy-Item -LiteralPath $nodeBinary -Destination (Join-Path $runtimeRoot 'node.exe')
 Copy-Item -LiteralPath $SolverBinary -Destination (Join-Path $runtimeRoot 'engine\gg_fulltree_direct_pack.exe')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'server.mjs') -Destination (Join-Path $runtimeRoot 'app')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'protocol.mjs') -Destination (Join-Path $runtimeRoot 'app')
@@ -70,6 +115,7 @@ $installerBuildRoot = Join-Path ([IO.Path]::GetTempPath()) "kishpoker-solver-ins
 $installerPayloadRoot = Join-Path $installerBuildRoot 'payload'
 $installerPayloadZip = Join-Path $installerPayloadRoot 'payload.zip'
 $installerBootstrap = Join-Path $installerPayloadRoot 'setup.cmd'
+$installerBootstrapScript = Join-Path $installerPayloadRoot 'one-click-install.ps1'
 $installerSed = Join-Path $installerBuildRoot 'installer.sed'
 $installerOutput = Join-Path $installerBuildRoot "kishpoker-solver-companion-win-x64-$Version-setup.exe"
 
@@ -108,6 +154,7 @@ try {
 }
 $payloadHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installerPayloadZip).Hash
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'companion\one-click-install.cmd') -Destination $installerBootstrap
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'companion\one-click-install.ps1') -Destination $installerBootstrapScript
 
 $installerOutputForSed = $installerOutput
 $installerPayloadForSed = $installerPayloadRoot.TrimEnd('\') + '\'
@@ -137,27 +184,38 @@ SourceFiles=SourceFiles
 [Strings]
 FILE0="payload.zip"
 FILE1="setup.cmd"
+FILE2="one-click-install.ps1"
 [SourceFiles]
 SourceFiles0=$installerPayloadForSed
 [SourceFiles0]
 %FILE0%=
 %FILE1%=
+%FILE2%=
 "@
-Set-Content -LiteralPath $installerSed -Value $sedContent -Encoding ASCII
+Set-Content -LiteralPath $installerSed -Value $sedContent -Encoding Default
 $iexpressProcess = Start-Process -FilePath $iexpress -ArgumentList @('/N', '/Q', $installerSed) -Wait -PassThru -WindowStyle Hidden
 if ($iexpressProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $installerOutput -PathType Leaf)) {
     throw "IExpress failed to build the one-click installer (exit $($iexpressProcess.ExitCode))."
 }
 $installerVerificationRoot = Join-Path $installerBuildRoot 'verify'
 New-Item -ItemType Directory -Path $installerVerificationRoot | Out-Null
-$tar = (Get-Command tar.exe -ErrorAction Stop).Source
-& $tar '-xf' $installerOutput '-C' $installerVerificationRoot 'payload.zip'
-if ($LASTEXITCODE -ne 0) {
-    throw "Unable to extract the installer payload for verification (exit $LASTEXITCODE)."
+$installerExtractionArgument = '/T:"{0}"' -f $installerVerificationRoot
+$installerExtractionProcess = Start-Process `
+    -FilePath $installerOutput `
+    -ArgumentList @('/Q', $installerExtractionArgument, '/C') `
+    -Wait `
+    -PassThru `
+    -WindowStyle Hidden
+if ($installerExtractionProcess.ExitCode -ne 0) {
+    throw "Unable to extract the installer payload for verification (exit $($installerExtractionProcess.ExitCode))."
 }
 $embeddedPayloadZip = Join-Path $installerVerificationRoot 'payload.zip'
 if (-not (Test-Path -LiteralPath $embeddedPayloadZip -PathType Leaf)) {
     throw 'The generated installer does not contain payload.zip.'
+}
+$embeddedBootstrapScript = Join-Path $installerVerificationRoot 'one-click-install.ps1'
+if (-not (Test-Path -LiteralPath $embeddedBootstrapScript -PathType Leaf)) {
+    throw 'The generated installer does not contain one-click-install.ps1.'
 }
 $embeddedPayloadHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $embeddedPayloadZip).Hash
 if ($embeddedPayloadHash -ne $payloadHash) {
@@ -180,6 +238,6 @@ $installerHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installerPath).Ha
     installerMiB = [Math]::Round($installer.Length / 1MB, 2)
     installerSha256 = $installerHash
     solverBytes = (Get-Item -LiteralPath $SolverBinary).Length
-    nodeBytes = (Get-Item -LiteralPath (Get-Command node.exe).Source).Length
+    nodeBytes = (Get-Item -LiteralPath $nodeBinary).Length
     sha256 = $hash
 } | ConvertTo-Json
